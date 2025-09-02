@@ -1,5 +1,76 @@
 // Canvas Manager - Handles canvas rendering and interactions
 class CanvasManager {
+    // Render only the selection box overlay
+    renderSelectionBox(selection) {
+        this.clearOverlay();
+        if (!selection) return;
+        const startX = selection.left * this.zoomLevel;
+        const startY = selection.top * this.zoomLevel;
+        const width = (selection.right - selection.left + 1) * this.zoomLevel;
+        const height = (selection.bottom - selection.top + 1) * this.zoomLevel;
+        this.overlayCtx.strokeStyle = '#00d4ff';
+        this.overlayCtx.lineWidth = 2;
+        this.overlayCtx.setLineDash([5, 5]);
+        this.overlayCtx.strokeRect(startX, startY, width, height);
+        this.overlayCtx.fillStyle = 'rgba(0, 212, 255, 0.1)';
+        this.overlayCtx.fillRect(startX, startY, width, height);
+    }
+    
+    // Show dragged selection overlay with shadow effect
+    showDraggedSelection(selection, clipboard) {
+        this.clearOverlay();
+        if (!selection || !clipboard) return;
+        const { left, top } = selection;
+        
+        // First, render the shadow (darker, slightly transparent version)
+        this.overlayCtx.globalAlpha = 0.4;
+        for (let y = 0; y < clipboard.height; y++) {
+            for (let x = 0; x < clipboard.width; x++) {
+                const pixel = clipboard.pixels[y][x];
+                if (pixel[3] > 0) {
+                    // Create shadow effect by darkening the pixel
+                    const shadowR = Math.max(0, pixel[0] * 0.3);
+                    const shadowG = Math.max(0, pixel[1] * 0.3);
+                    const shadowB = Math.max(0, pixel[2] * 0.3);
+                    this.overlayCtx.fillStyle = `rgba(${shadowR},${shadowG},${shadowB},${pixel[3]/255})`;
+                    // Offset shadow slightly down and right
+                    this.overlayCtx.fillRect(
+                        (left + x) * this.zoomLevel + 2, 
+                        (top + y) * this.zoomLevel + 2, 
+                        this.zoomLevel, 
+                        this.zoomLevel
+                    );
+                }
+            }
+        }
+        
+        // Reset alpha and render the actual dragged content
+        this.overlayCtx.globalAlpha = 0.8; // Slightly transparent so you can see through
+        for (let y = 0; y < clipboard.height; y++) {
+            for (let x = 0; x < clipboard.width; x++) {
+                const pixel = clipboard.pixels[y][x];
+                if (pixel[3] > 0) {
+                    this.overlayCtx.fillStyle = `rgba(${pixel[0]},${pixel[1]},${pixel[2]},${pixel[3]/255})`;
+                    this.overlayCtx.fillRect((left + x) * this.zoomLevel, (top + y) * this.zoomLevel, this.zoomLevel, this.zoomLevel);
+                }
+            }
+        }
+        
+        // Reset alpha for border
+        this.overlayCtx.globalAlpha = 1.0;
+        
+        // Draw selection border
+        this.overlayCtx.strokeStyle = '#00d4ff';
+        this.overlayCtx.lineWidth = 2;
+        this.overlayCtx.setLineDash([5, 5]);
+        this.overlayCtx.strokeRect(left * this.zoomLevel, top * this.zoomLevel, clipboard.width * this.zoomLevel, clipboard.height * this.zoomLevel);
+    }
+
+    // Clear dragged selection overlay
+    clearDraggedSelection() {
+        this.clearOverlay();
+    }
+    
     constructor(mainCanvasId, overlayCanvasId) {
         this.mainCanvas = document.getElementById(mainCanvasId);
         this.overlayCanvas = document.getElementById(overlayCanvasId);
@@ -23,7 +94,8 @@ class CanvasManager {
             endX: 0,
             endY: 0
         };
-        
+        // Hovered pixel
+        this.hoveredPixel = null;
         this.setupCanvas();
         this.setupEventListeners();
     }
@@ -288,6 +360,9 @@ class CanvasManager {
      */
     clearOverlay() {
         this.overlayCtx.clearRect(0, 0, this.overlayCanvas.width, this.overlayCanvas.height);
+        // Reset any transform/alpha settings
+        this.overlayCtx.globalAlpha = 1.0;
+        this.overlayCtx.setLineDash([]);
     }
 
     /**
@@ -369,7 +444,6 @@ class CanvasManager {
 
         this.mainCanvas.addEventListener('mousemove', (e) => {
             const pos = this.screenToSprite(e.clientX, e.clientY);
-            
             if (window.editor && window.editor.currentTool) {
                 if (this.isDrawing) {
                     window.editor.currentTool.onMouseDrag(pos.x, pos.y, this.lastPos.x, this.lastPos.y, e);
@@ -377,8 +451,28 @@ class CanvasManager {
                     window.editor.currentTool.onMouseMove(pos.x, pos.y, e);
                 }
             }
-            
             this.lastPos = pos;
+            // Hover outline logic
+            if (
+                this.currentSprite &&
+                pos.x >= 0 && pos.x < this.currentSprite.width &&
+                pos.y >= 0 && pos.y < this.currentSprite.height
+            ) {
+                if (!this.hoveredPixel || this.hoveredPixel.x !== pos.x || this.hoveredPixel.y !== pos.y) {
+                    this.hoveredPixel = { x: pos.x, y: pos.y };
+                    this.renderHoverOutline();
+                }
+            } else {
+                if (this.hoveredPixel) {
+                    this.hoveredPixel = null;
+                    // Only clear hover outline, not selection overlay
+                    if (this.selection.active) {
+                        this.renderSelection();
+                    } else {
+                        this.clearOverlay();
+                    }
+                }
+            }
         });
 
         this.mainCanvas.addEventListener('mouseup', (e) => {
@@ -392,9 +486,16 @@ class CanvasManager {
 
         this.mainCanvas.addEventListener('mouseleave', (e) => {
             this.isDrawing = false;
-            
             if (window.editor && window.editor.currentTool) {
                 window.editor.currentTool.onMouseLeave(e);
+            }
+            // Clear hover outline
+            this.hoveredPixel = null;
+            // Only clear hover outline, not selection overlay
+            if (this.selection.active) {
+                this.renderSelection();
+            } else {
+                this.clearOverlay();
             }
         });
 
@@ -428,6 +529,16 @@ class CanvasManager {
                     break;
             }
         });
+
+        // Scroll to zoom
+        this.mainCanvas.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            if (e.deltaY < 0) {
+                this.zoomIn();
+            } else {
+                this.zoomOut();
+            }
+        }, { passive: false });
     }
 
     /**
@@ -483,5 +594,61 @@ class CanvasManager {
         }
         
         return thumbnailCanvas;
+    }
+
+    /**
+     * Render hover outline for pixel
+     */
+    renderHoverOutline() {
+        // Only clear hover outline, not selection overlay
+        if (!this.hoveredPixel || !this.currentSprite) {
+            // If selection is active, re-render selection overlay
+            if (this.selection.active) {
+                this.renderSelection();
+            } else {
+                this.clearOverlay();
+            }
+            return;
+        }
+        // If selection is active, render selection first, then hover outline
+        if (this.selection.active) {
+            this.renderSelection();
+        } else {
+            this.clearOverlay();
+        }
+        const { x, y } = this.hoveredPixel;
+        this.overlayCtx.save();
+        // Get tool color
+        let color = '#ff9800';
+        if (window.editor && window.editor.currentTool) {
+            switch (window.editor.currentTool.name) {
+                case 'brush':
+                    color = '#222';
+                    break;
+                case 'eraser':
+                    color = '#e53935';
+                    break;
+                case 'bucket':
+                    color = '#1976d2';
+                    break;
+                case 'eyedropper':
+                    color = '#43a047';
+                    break;
+                case 'select':
+                    color = '#00d4ff';
+                    break;
+                default:
+                    color = '#ff9800';
+            }
+        }
+        this.overlayCtx.strokeStyle = color;
+        this.overlayCtx.lineWidth = 2;
+        this.overlayCtx.strokeRect(
+            x * this.zoomLevel + 1,
+            y * this.zoomLevel + 1,
+            this.zoomLevel - 2,
+            this.zoomLevel - 2
+        );
+        this.overlayCtx.restore();
     }
 }
