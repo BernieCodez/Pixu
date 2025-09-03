@@ -4,6 +4,7 @@ class UIController {
         this.editor = editor;
         this.colorPicker = null;
         this.recentSpritesManager = null;
+        this.colorMode = 'hex';
         this.colorPalette = [
             '#000000', '#ffffff', '#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00ffff',
             '#800000', '#008000', '#000080', '#808000', '#800080', '#008080', '#c0c0c0', '#808080',
@@ -15,6 +16,9 @@ class UIController {
         this.initializeColorWheel();
         this.initializeRecentSprites();
         this.initializeLayers();
+        this.setupColorInputListeners();
+        this.setupColorModeToggle();
+        this.setupSpriteNameInputListener();
     }
 
     initializeColorWheel() {
@@ -35,8 +39,7 @@ class UIController {
                 // Convert hex to RGBA format that the editor expects
                 const rgba = this.hexToRgba(hex);
                 this.editor.setPrimaryColor(rgba);
-                
-                // Deselect any selected color palette item
+                this.updateColorInputs(hex, rgba);
                 this.deselectColorPalette();
             });
         }
@@ -722,8 +725,7 @@ class UIController {
                 // Add selection to clicked swatch
                 swatch.classList.add('selected');
                 // Convert hex to RGBA and set primary color
-                const rgba = this.hexToRgba(color);
-                this.editor.setPrimaryColor(rgba);
+                this.updateSelectedColor(color, 'hex');
             });
             paletteContainer.appendChild(swatch);
         });
@@ -757,16 +759,16 @@ class UIController {
     updateColorDisplay() {
         const primaryColor = document.getElementById('primary-color');
         const colorPicker = document.getElementById('color-picker');
-
         if (primaryColor && this.editor.primaryColor) {
             const hex = this.rgbaToHex(this.editor.primaryColor);
             primaryColor.style.backgroundColor = hex;
             if (colorPicker) colorPicker.value = hex;
-            
             // Update color wheel if it exists
             if (this.colorPicker && this.colorPicker.color) {
                 this.colorPicker.color.hexString = hex;
             }
+            // Update color value inputs
+            this.updateColorInputs(hex, this.editor.primaryColor);
         }
     }
 
@@ -793,6 +795,7 @@ class UIController {
 
             spriteItem.addEventListener('click', () => {
                 this.editor.setCurrentSprite(sprite);
+                this.updateHeaderSpriteName();
             });
 
             // Add right-click context menu
@@ -894,8 +897,16 @@ class UIController {
         // Add tool-specific settings if the tool has them
         if (this.editor.currentTool.getSettingsHTML) {
             const toolSpecificSettings = document.createElement('div');
+            toolSpecificSettings.className = 'tool-settings'; // Ensure flex styling
             toolSpecificSettings.innerHTML = this.editor.currentTool.getSettingsHTML();
             settingsContainer.appendChild(toolSpecificSettings);
+
+            // Optionally, ensure all direct children have 'setting-group' class for flex row
+            Array.from(toolSpecificSettings.children).forEach(child => {
+                if (!child.classList.contains('setting-group')) {
+                    child.classList.add('setting-group');
+                }
+            });
 
             // Initialize tool-specific event listeners
             if (this.editor.currentTool.initializeSettings) {
@@ -1003,6 +1014,47 @@ class UIController {
         this.updateCanvasSizeDisplay();
         this.updateUndoRedoButtons();
         this.updateToolSettings();
+        this.updateSpriteNameInput();
+        this.updateHeaderSpriteName();
+    }
+
+    // Update the sprite name in the header
+    updateHeaderSpriteName() {
+        const nameDisplay = document.getElementById('sprite-name-display');
+        if (nameDisplay && this.editor.currentSprite) {
+            nameDisplay.textContent = this.editor.currentSprite.name || 'Untitled';
+        }
+    }
+
+    updateSpriteNameInput() {
+        const nameInput = document.getElementById('sprite-name');
+        if (nameInput && this.editor.currentSprite) {
+            nameInput.value = this.editor.currentSprite.name;
+        }
+    }
+
+    // Update the name of the active sprite in the sidebar without full re-render
+    updateActiveSpriteNameInSidebar() {
+        const spritesList = document.getElementById('sprites-list');
+        if (!spritesList) return;
+        const activeItem = spritesList.querySelector('.sprite-item.active .sprite-name');
+        if (activeItem && this.editor.currentSprite) {
+            activeItem.textContent = this.editor.currentSprite.name || 'Untitled';
+        }
+    }
+
+    setupSpriteNameInputListener() {
+        const nameInput = document.getElementById('sprite-name');
+        if (nameInput) {
+            nameInput.removeAttribute('readonly');
+            nameInput.addEventListener('change', (e) => {
+                if (this.editor.currentSprite) {
+                    this.editor.currentSprite.name = e.target.value;
+                    this.updateHeaderSpriteName();
+                    this.updateActiveSpriteNameInSidebar();
+                }
+            });
+        }
     }
 
     // Convert hex color to RGBA array
@@ -1266,6 +1318,95 @@ class UIController {
                 handleCancel();
             }
         });
+    }
+
+    // Update selected color from input value (HEX or RGB)
+    updateSelectedColor(value, type = 'hex') {
+        let rgba;
+        if (type === 'hex') {
+            let val = value.trim();
+            if (!val.startsWith('#')) val = '#' + val;
+            if (/^#[0-9A-Fa-f]{6}$/.test(val)) {
+                rgba = this.hexToRgba(val);
+            }
+        } else if (type === 'rgb') {
+            const rgbMatch = value.match(/^rgb\((\d{1,3}),(\d{1,3}),(\d{1,3})\)$/);
+            if (rgbMatch) {
+                const r = Math.min(255, parseInt(rgbMatch[1]));
+                const g = Math.min(255, parseInt(rgbMatch[2]));
+                const b = Math.min(255, parseInt(rgbMatch[3]));
+                rgba = [r, g, b, 255];
+            }
+        }
+        if (rgba) {
+            this.editor.setPrimaryColor(rgba);
+            const hex = this.rgbaToHex(rgba);
+            if (this.colorPicker && this.colorPicker.color) {
+                this.colorPicker.color.hexString = hex;
+            }
+            this.updateColorInputs(hex, rgba);
+        }
+    }
+
+    setupColorModeToggle() {
+        const toggleBtn = document.getElementById('toggle-color-mode');
+        const hexInput = document.getElementById('color-hex');
+        const rgbInput = document.getElementById('color-rgb');
+        const labelHex = document.getElementById('label-hex');
+        const labelRgb = document.getElementById('label-rgb');
+        if (!toggleBtn || !hexInput || !rgbInput || !labelHex || !labelRgb) return;
+        toggleBtn.addEventListener('click', () => {
+            if (this.colorMode === 'hex') {
+                this.colorMode = 'rgb';
+                hexInput.style.display = 'none';
+                labelHex.style.display = 'none';
+                rgbInput.style.display = '';
+                labelRgb.style.display = '';
+                toggleBtn.textContent = 'Show HEX';
+            } else {
+                this.colorMode = 'hex';
+                hexInput.style.display = '';
+                labelHex.style.display = '';
+                rgbInput.style.display = 'none';
+                labelRgb.style.display = 'none';
+                toggleBtn.textContent = 'Show RGB';
+            }
+        });
+    }
+
+    setupColorInputListeners() {
+        const hexInput = document.getElementById('color-hex');
+        const rgbInput = document.getElementById('color-rgb');
+        if (hexInput) {
+            hexInput.addEventListener('input', (e) => {
+                this.updateSelectedColor(e.target.value, 'hex');
+            });
+            hexInput.addEventListener('change', (e) => {
+                this.updateSelectedColor(e.target.value, 'hex');
+            });
+        }
+        if (rgbInput) {
+            rgbInput.addEventListener('input', (e) => {
+                this.updateSelectedColor(e.target.value, 'rgb');
+            });
+            rgbInput.addEventListener('change', (e) => {
+                this.updateSelectedColor(e.target.value, 'rgb');
+            });
+        }
+    }
+
+    // Call this from eyedropper tool when color is picked
+    setColorFromEyedropper(rgba) {
+        // Use updateSelectedColor to ensure full sync
+        this.updateSelectedColor(this.rgbaToHex(rgba), 'hex');
+    }
+
+    // Update color inputs display
+    updateColorInputs(hex, rgba) {
+        const hexInput = document.getElementById('color-hex');
+        const rgbInput = document.getElementById('color-rgb');
+        if (hexInput) hexInput.value = hex;
+        if (rgbInput) rgbInput.value = `rgb(${rgba[0]},${rgba[1]},${rgba[2]})`;
     }
 }
 

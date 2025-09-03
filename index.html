@@ -24,6 +24,10 @@
                     <i class="fas fa-expand-arrows-alt"></i>
                     Resize
                 </button>
+                <span id="sprite-name-display" class="sprite-name-display">Untitled</span>
+                <button class="btn btn-sm" id="edit-sprite-name" title="Edit Sprite Name" style="margin-left:6px;">
+                    <i class="fas fa-edit"></i>
+                </button>
             </div>
             <div class="header-right">
                 <button class="btn btn-primary" id="new-sprite">
@@ -47,7 +51,7 @@
 
         <!-- Main Content -->
         <div class="main-container">
-            <!-- Sidebar -->
+            <!-- Sprite Sidebar (moved to far left) -->
             <aside class="sidebar">
                 <div class="sidebar-section">
                     <h3>Recent Sprites</h3>
@@ -71,30 +75,58 @@
                 </div>
             </aside>
 
+            <!-- Toolbox Sidebar (moved closer to canvas) -->
+            <aside class="toolbox-sidebar">
+                <div class="toolbox-section">
+                    <h3>Tools</h3>
+                    <div class="toolbox-tools">
+                        <button class="tool-btn" data-tool="brush" title="Brush Tool"><i class="fas fa-brush"></i></button>
+                        <button class="tool-btn" data-tool="eraser" title="Eraser Tool"><i class="fas fa-eraser"></i></button>
+                        <button class="tool-btn" data-tool="bucket" title="Bucket Fill"><i class="fas fa-fill-drip"></i></button>
+                        <button class="tool-btn" data-tool="select" title="Select Tool"><i class="fas fa-vector-square"></i></button>
+                        <button class="tool-btn" data-tool="eyedropper" title="Eyedropper"><i class="fas fa-eye-dropper"></i></button>
+                        <button class="tool-btn" data-tool="brightness" title="Brightness Tool"><i class="fas fa-sun"></i></button>
+                    </div>
+                </div>
+            </aside>
+
             <!-- Canvas Area -->
             <main class="canvas-area">
                 <div class="canvas-toolbar">
+                    <!-- Sprite name input removed, now in header -->
                     <div class="toolbar-group">
-                        <button class="tool-btn active" data-tool="brush" title="Brush Tool">
-                            <i class="fas fa-brush"></i>
-                        </button>
-                        <button class="tool-btn" data-tool="eraser" title="Eraser Tool">
-                            <i class="fas fa-eraser"></i>
-                        </button>
-                        <button class="tool-btn" data-tool="bucket" title="Bucket Fill">
-                            <i class="fas fa-fill-drip"></i>
-                        </button>
-                        <button class="tool-btn" data-tool="select" title="Select Tool">
-                            <i class="fas fa-vector-square"></i>
-                        </button>
-                        <button class="tool-btn" data-tool="eyedropper" title="Eyedropper">
-                            <i class="fas fa-eye-dropper"></i>
-                        </button>
-                        <button class="tool-btn" data-tool="brightness" title="Brightness Tool">
-                            <i class="fas fa-sun"></i>
-                        </button>
+                        <!-- Tool Settings (moved from properties panel) -->
+                        <div class="tool-settings" id="tool-settings">
+                            <div class="setting-group brush-settings">
+                                <label for="brush-size">Brush Size:</label>
+                                <div class="slider-container">
+                                    <input type="range" id="brush-size" min="1" max="10" value="1">
+                                    <span class="slider-value">1</span>
+                                </div>
+                            </div>
+                            <div class="setting-group brush-settings">
+                                <label for="brush-opacity">Opacity:</label>
+                                <div class="slider-container">
+                                    <input type="range" id="brush-opacity" min="0" max="100" value="100">
+                                    <span class="slider-value">100%</span>
+                                </div>
+                            </div>
+                            <div class="setting-group bucket-settings" style="display: none;">
+                                <label for="bucket-tolerance">Tolerance:</label>
+                                <div class="slider-container">
+                                    <input type="range" id="bucket-tolerance" min="0" max="100" value="10">
+                                    <span class="slider-value">10</span>
+                                </div>
+                            </div>
+                            <div class="setting-group brightness-settings" style="display: none;">
+                                <label for="brightness-intensity">Intensity:</label>
+                                <div class="slider-container">
+                                    <input type="range" id="brightness-intensity" min="-50" max="50" value="10">
+                                    <span class="slider-value">+10%</span>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                    
                     <div class="toolbar-group">
                         <button class="tool-btn" id="undo-btn" title="Undo">
                             <i class="fas fa-undo"></i>
@@ -103,7 +135,6 @@
                             <i class="fas fa-redo"></i>
                         </button>
                     </div>
-                    
                     <div class="toolbar-group">
                         <button class="tool-btn" id="zoom-in" title="Zoom In">
                             <i class="fas fa-search-plus"></i>
@@ -120,7 +151,7 @@
                 <div class="canvas-container">
                     <canvas id="main-canvas" width="512" height="512"></canvas>
                     <canvas id="overlay-canvas" width="512" height="512"></canvas>
-                    <div id="konva-container" style="position: absolute; top: 0; left: 0; pointer-events: none; opacity: 0.5;"></div>
+                    <div id="konva-container" style="position: absolute; top: 0; left: 0; pointer-events: none; opacity: 0.0;"></div>
                 </div>
             </main>
 
@@ -140,6 +171,14 @@
                         
                         <div class="color-wheel-container">
                             <div id="color-wheel"></div>
+                        </div>
+
+                        <div id="color-value-container" style="margin-top:10px;">
+                            <button id="toggle-color-mode" class="btn btn-secondary" style="font-size:12px; padding:4px 10px; margin-right:8px;">Show RGB</button>
+                            <label for="color-hex" id="label-hex">HEX:</label>
+                            <input type="text" id="color-hex" maxlength="7" size="7" value="#000000" />
+                            <label for="color-rgb" id="label-rgb" style="margin-left:10px; display:none;">RGB:</label>
+                            <input type="text" id="color-rgb" maxlength="16" size="16" value="rgb(0,0,0)" style="display:none;" />
                         </div>
                         
                         <div class="color-palette" id="color-palette">
@@ -166,42 +205,7 @@
                     </div>
                 </div>
 
-                <div class="panel-section">
-                    <h3>Tool Settings</h3>
-                    <div class="tool-settings" id="tool-settings">
-                        <div class="setting-group brush-settings">
-                            <label for="brush-size">Brush Size:</label>
-                            <div class="slider-container">
-                                <input type="range" id="brush-size" min="1" max="10" value="1">
-                                <span class="slider-value">1</span>
-                            </div>
-                        </div>
-                        
-                        <div class="setting-group brush-settings">
-                            <label for="brush-opacity">Opacity:</label>
-                            <div class="slider-container">
-                                <input type="range" id="brush-opacity" min="0" max="100" value="100">
-                                <span class="slider-value">100%</span>
-                            </div>
-                        </div>
-
-                        <div class="setting-group bucket-settings" style="display: none;">
-                            <label for="bucket-tolerance">Tolerance:</label>
-                            <div class="slider-container">
-                                <input type="range" id="bucket-tolerance" min="0" max="100" value="10">
-                                <span class="slider-value">10</span>
-                            </div>
-                        </div>
-
-                        <div class="setting-group brightness-settings" style="display: none;">
-                            <label for="brightness-intensity">Intensity:</label>
-                            <div class="slider-container">
-                                <input type="range" id="brightness-intensity" min="-50" max="50" value="10">
-                                <span class="slider-value">+10%</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                <!-- Tool Settings moved to canvas toolbar -->
             </aside>
         </div>
     </div>
