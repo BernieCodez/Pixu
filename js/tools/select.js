@@ -21,11 +21,15 @@ class SelectTool {
             y >= this.selection.top && y <= this.selection.bottom) {
             this.isDragging = true;
             this.dragOffset = { x, y };
-            this.lastDragPosition = { x, y }; // Initialize last drag position
+            this.lastDragPosition = { x, y };
             // Store original selection bounds and clipboard for drag
             this.originalSelection = { ...this.selection };
             this.dragClipboard = this._copyFromBounds(this.selection);
-            this.editor.canvasManager.showDraggedSelection(this.selection, this.dragClipboard);
+            // Clear the original area immediately to show it's being moved
+            this._deleteBounds(this.originalSelection);
+            this.editor.canvasManager.render();
+            // Show the preview at the current position
+            this.editor.canvasManager.showDraggedSelectionPreview(this.selection, this.dragClipboard);
         } else {
             // Start new selection
             this.isSelecting = true;
@@ -33,10 +37,13 @@ class SelectTool {
         }
     }
 
-    // Handle mouse drag event
+    /// Handle mouse drag event
     onMouseDrag(x, y, lastX, lastY, event) {
         if (!this.editor.currentSprite) return;
+        
         if (this.isDragging && this.selection) {
+            console.log('Dragging at', x, y); // Debug line
+            
             // Only update if position actually changed
             if (!this.lastDragPosition || 
                 this.lastDragPosition.x !== x || 
@@ -52,9 +59,11 @@ class SelectTool {
                 this.selection.top = this.originalSelection.top + dy;
                 this.selection.bottom = this.selection.top + height;
                 
-                // Update drag position and render
+                console.log('New selection position:', this.selection); // Debug line
+                
+                // Update drag position and render preview
                 this.lastDragPosition = { x, y };
-                this.editor.canvasManager.showDraggedSelection(this.selection, this.dragClipboard);
+                this.editor.canvasManager.showDraggedSelectionPreview(this.selection, this.dragClipboard);
             }
         } else if (this.isSelecting) {
             this.editor.canvasManager.updateSelection(x, y);
@@ -64,9 +73,10 @@ class SelectTool {
     // Handle mouse up event
     onMouseUp(x, y, event) {
         if (!this.editor.currentSprite) return;
-        if (this.isDragging && this.selection && this.dragClipboard && this.originalSelection) {
-            // Delete original selection area
-            this._deleteBounds(this.originalSelection);
+        if (this.isDragging && this.selection && this.dragClipboard) {
+            // Clear the preview
+            this.editor.canvasManager.clearOverlay();
+            
             // Paste clipboard at new selection position
             this._pasteClipboardAt(this.dragClipboard, this.selection.left, this.selection.top);
             
@@ -85,7 +95,8 @@ class SelectTool {
                 this.editor.canvasManager.selection.endY = this.selection.bottom;
                 this.editor.canvasManager.selection.active = true;
             }
-            // Redraw main canvas and overlay only at new position
+            
+            // Redraw everything
             this.editor.canvasManager.render();
             this.editor.canvasManager.renderSelectionBox(this.selection);
             this.editor.currentSprite.saveToHistory();
@@ -177,6 +188,7 @@ class SelectTool {
         
         const sprite = this.editor.currentSprite;
         const width = this.selection.right - this.selection.left + 1;
+                this.editor.canvasManager.clearDraggedSelection();
         const height = this.selection.bottom - this.selection.top + 1;
         
         this.clipboard = {

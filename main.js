@@ -346,22 +346,87 @@ if (document.readyState === 'loading') {
     startApp();
 }
 
-// Prevent page unload if there are unsaved changes
-window.addEventListener('beforeunload', (e) => {
-    if (editor && editor.sprites.length > 0) {
-        // Save current state before leaving
-        editor.saveSprites();
-        
-        // Optionally show confirmation dialog
-        // e.preventDefault();
-        // e.returnValue = 'You have unsaved changes. Are you sure you want to leave?';
-    }
-});
+// Sprite name editing logic
+document.addEventListener('DOMContentLoaded', function() {
+    const nameDisplay = document.getElementById('sprite-name-display');
+    const editBtn = document.getElementById('edit-sprite-name');
+    let currentName = nameDisplay ? nameDisplay.textContent : 'Untitled';
 
-// Handle visibility change to save state
-document.addEventListener('visibilitychange', () => {
-    if (document.hidden && editor) {
-        editor.saveSprites();
-        editor.saveSettings();
+    function enableEdit() {
+        if (!nameDisplay) return;
+        // Create input
+        let spriteName = (window.editor && window.editor.currentSprite && window.editor.currentSprite.name) ? window.editor.currentSprite.name : currentName;
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = spriteName;
+        input.className = 'sprite-name-input';
+        input.style.width = (spriteName.length * 10 + 40) + 'px';
+        nameDisplay.replaceWith(input);
+        editBtn.style.display = 'none';
+        input.focus();
+
+        function finishEdit() {
+            let newName = input.value.trim() || 'Untitled';
+            currentName = newName;
+            // Restore display
+            nameDisplay.textContent = newName;
+            input.replaceWith(nameDisplay);
+            editBtn.style.display = '';
+            // Update sprite name in editor if needed
+            if (window.editor && window.editor.currentSprite) {
+                window.editor.currentSprite.name = newName;
+                // Save sprites to persist name change
+                if (window.editor.saveSprites) {
+                    window.editor.saveSprites();
+                }
+                // Ensure current sprite is set to trigger sidebar update
+                if (window.editor.setCurrentSprite) {
+                    window.editor.setCurrentSprite(window.editor.currentSprite);
+                }
+                // Update sidebar and header using UIController
+                if (window.editor.uiController) {
+                    window.editor.uiController.updateHeaderSpriteName();
+                    window.editor.uiController.updateSpritesList(); // Force sidebar rerender
+                }
+            }
+        }
+
+        input.addEventListener('blur', finishEdit);
+        input.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                input.blur();
+            } else if (e.key === 'Escape') {
+                input.value = currentName;
+                input.blur();
+            }
+        });
+    }
+
+    if (editBtn) {
+        editBtn.addEventListener('click', enableEdit);
+    }
+
+    // Listen for sprite change and update name display
+    function updateSpriteNameFromCurrent() {
+        if (window.editor && window.editor.currentSprite) {
+            const sprite = window.editor.currentSprite;
+            currentName = sprite.name || 'Untitled';
+            if (nameDisplay) nameDisplay.textContent = currentName;
+        }
+    }
+
+    // Patch setCurrentSprite to update header name
+    if (window.editor) {
+        const origSetCurrentSprite = window.editor.setCurrentSprite;
+        window.editor.setCurrentSprite = function(sprite) {
+            const result = origSetCurrentSprite.call(this, sprite);
+            updateSpriteNameFromCurrent();
+            return result;
+        };
+        // Initial update
+        updateSpriteNameFromCurrent();
+    } else {
+        // If editor not ready, listen for it
+        document.addEventListener('editor-ready', updateSpriteNameFromCurrent);
     }
 });

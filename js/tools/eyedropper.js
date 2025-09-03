@@ -49,22 +49,87 @@ class EyedropperTool {
         
         const pickedColor = sprite.getPixel(x, y);
         
-        // Determine if this is primary or secondary color pick
-        const isPrimaryPick = !event.shiftKey && !event.button === 2; // Left click without shift
+        // Fix the primary/secondary pick logic
+        const isPrimaryPick = !event.shiftKey && event.button !== 2; // Left click without shift and not right click
         
         if (isPrimaryPick) {
             // Set as primary color
             this.editor.setPrimaryColor(pickedColor);
+            
+            // Update UI through multiple pathways to ensure it works
+            this.updateColorUI(pickedColor);
+            
         } else {
             // Set as secondary color
             this.editor.setSecondaryColor(pickedColor);
         }
         
-        // Update color picker and UI
-        this.editor.updateColorUI();
-        
         // Provide visual feedback
         this.showPickedColorFeedback(x, y, pickedColor, isPrimaryPick);
+    }
+
+    // Comprehensive UI update method
+    updateColorUI(pickedColor) {
+        // Convert to consistent format
+        let rgba = pickedColor;
+        if (!Array.isArray(rgba)) {
+            rgba = [pickedColor.r, pickedColor.g, pickedColor.b, pickedColor.a ?? 255];
+        }
+        
+        // Update through UIController if available
+        if (this.editor.uiManager && typeof this.editor.uiManager.setColorFromEyedropper === 'function') {
+            this.editor.uiManager.setColorFromEyedropper(rgba);
+        }
+        
+        // Direct UI updates as fallback
+        const hex = this.rgbaToHex(rgba);
+        
+        // Update color picker input
+        const colorPicker = document.getElementById('color-picker');
+        if (colorPicker) {
+            colorPicker.value = hex;
+        }
+        
+        // Update primary color display
+        const primaryColor = document.getElementById('primary-color');
+        if (primaryColor) {
+            primaryColor.style.backgroundColor = hex;
+        }
+        
+        // Update color wheel if it exists
+        if (this.editor.uiManager && this.editor.uiManager.colorPicker) {
+            try {
+                this.editor.uiManager.colorPicker.color.hexString = hex;
+            } catch (e) {
+                console.warn('Could not update color wheel:', e);
+            }
+        }
+        
+        // Update color input fields
+        const hexInput = document.getElementById('color-hex');
+        const rgbInput = document.getElementById('color-rgb');
+        if (hexInput) {
+            hexInput.value = hex;
+        }
+        if (rgbInput) {
+            rgbInput.value = `rgb(${rgba[0]},${rgba[1]},${rgba[2]})`;
+        }
+        
+        // Deselect palette swatches
+        const paletteSwatches = document.querySelectorAll('.color-swatch');
+        paletteSwatches.forEach(swatch => {
+            swatch.classList.remove('selected');
+        });
+        
+        // Trigger editor's color update if available
+        if (typeof this.editor.updateColorUI === 'function') {
+            this.editor.updateColorUI();
+        }
+        
+        // Force a UI refresh through UIController if available
+        if (this.editor.uiManager && typeof this.editor.uiManager.updateColorDisplay === 'function') {
+            this.editor.uiManager.updateColorDisplay();
+        }
     }
 
     // Show color preview at cursor position
@@ -91,9 +156,20 @@ class EyedropperTool {
             document.body.appendChild(preview);
         }
         
-        // Position preview near cursor
-        const canvasRect = this.editor.canvasManager.mainCanvas.getBoundingClientRect();
-        const screenPos = this.editor.canvasManager.spriteToScreen(x, y);
+        // Position preview near cursor - fix positioning
+        let screenPos;
+        if (this.editor.canvasManager && this.editor.canvasManager.spriteToScreen) {
+            screenPos = this.editor.canvasManager.spriteToScreen(x, y);
+        } else {
+            // Fallback positioning
+            const canvas = this.editor.canvasManager?.mainCanvas || document.querySelector('canvas');
+            if (canvas) {
+                const rect = canvas.getBoundingClientRect();
+                screenPos = { x: rect.left + x * 10, y: rect.top + y * 10 }; // Assume 10px scale as fallback
+            } else {
+                screenPos = { x: 100, y: 100 };
+            }
+        }
         
         preview.style.left = `${screenPos.x + 20}px`;
         preview.style.top = `${screenPos.y - 30}px`;
@@ -102,7 +178,8 @@ class EyedropperTool {
         preview.style.display = 'block';
         
         // Add transparency indication
-        if (color[3] === 0) {
+        const alpha = Array.isArray(color) ? color[3] : (color.a ?? 255);
+        if (alpha === 0) {
             preview.textContent = 'Transparent';
             preview.style.backgroundColor = 'transparent';
             preview.style.border = '2px dashed #666';
@@ -124,8 +201,19 @@ class EyedropperTool {
     // Show visual feedback when color is picked
     showPickedColorFeedback(x, y, color, isPrimary) {
         // Create ripple effect at pick position
-        const canvasRect = this.editor.canvasManager.mainCanvas.getBoundingClientRect();
-        const screenPos = this.editor.canvasManager.spriteToScreen(x, y);
+        let screenPos;
+        if (this.editor.canvasManager && this.editor.canvasManager.spriteToScreen) {
+            screenPos = this.editor.canvasManager.spriteToScreen(x, y);
+        } else {
+            // Fallback positioning
+            const canvas = this.editor.canvasManager?.mainCanvas || document.querySelector('canvas');
+            if (canvas) {
+                const rect = canvas.getBoundingClientRect();
+                screenPos = { x: rect.left + x * 10, y: rect.top + y * 10 };
+            } else {
+                return; // Can't show feedback without position
+            }
+        }
         
         const ripple = document.createElement('div');
         ripple.className = 'color-pick-ripple';
@@ -186,12 +274,24 @@ class EyedropperTool {
 
     // Convert RGBA color to hex string
     rgbaToHex(rgba) {
-        const [r, g, b, a] = rgba;
+        // Handle different input formats
+        let r, g, b, a;
+        
+        if (Array.isArray(rgba)) {
+            [r, g, b, a] = rgba;
+        } else if (rgba && typeof rgba === 'object') {
+            r = rgba.r;
+            g = rgba.g;
+            b = rgba.b;
+            a = rgba.a;
+        } else {
+            return '#000000'; // Fallback
+        }
         
         if (a === 0) return 'transparent';
         
         const toHex = (n) => {
-            const hex = Math.round(n).toString(16).padStart(2, '0');
+            const hex = Math.round(Math.max(0, Math.min(255, n))).toString(16).padStart(2, '0');
             return hex;
         };
         
@@ -200,7 +300,18 @@ class EyedropperTool {
 
     // Get contrasting color (black or white) for text
     getContrastColor(rgba) {
-        const [r, g, b] = rgba;
+        let r, g, b;
+        
+        if (Array.isArray(rgba)) {
+            [r, g, b] = rgba;
+        } else if (rgba && typeof rgba === 'object') {
+            r = rgba.r;
+            g = rgba.g;
+            b = rgba.b;
+        } else {
+            return '#ffffff'; // Fallback
+        }
+        
         // Calculate relative luminance
         const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
         return luminance > 0.5 ? '#000000' : '#ffffff';
@@ -217,7 +328,19 @@ class EyedropperTool {
             return null;
         }
         
-        const [r, g, b, a] = sprite.getPixel(x, y);
+        const color = sprite.getPixel(x, y);
+        let r, g, b, a;
+        
+        if (Array.isArray(color)) {
+            [r, g, b, a] = color;
+        } else if (color && typeof color === 'object') {
+            r = color.r;
+            g = color.g;
+            b = color.b;
+            a = color.a ?? 255;
+        } else {
+            return null;
+        }
         
         return {
             rgba: [r, g, b, a],
@@ -250,22 +373,24 @@ class EyedropperTool {
     // Initialize tool settings event listeners
     initializeSettings() {
         // Add right-click support for secondary color picking
-        this.editor.canvasManager.mainCanvas.addEventListener('contextmenu', (e) => {
-            if (this.editor.currentTool === this) {
-                e.preventDefault();
-                const pos = this.editor.canvasManager.screenToSprite(e.clientX, e.clientY);
-                const mockEvent = { shiftKey: true, button: 2 };
-                this.pickColor(pos.x, pos.y, mockEvent);
-            }
-        });
-        
-        // Update color info display on mouse move
-        this.editor.canvasManager.mainCanvas.addEventListener('mousemove', (e) => {
-            if (this.editor.currentTool === this) {
-                const pos = this.editor.canvasManager.screenToSprite(e.clientX, e.clientY);
-                this.updateColorInfo(pos.x, pos.y);
-            }
-        });
+        if (this.editor.canvasManager && this.editor.canvasManager.mainCanvas) {
+            this.editor.canvasManager.mainCanvas.addEventListener('contextmenu', (e) => {
+                if (this.editor.currentTool === this) {
+                    e.preventDefault();
+                    const pos = this.editor.canvasManager.screenToSprite(e.clientX, e.clientY);
+                    const mockEvent = { shiftKey: true, button: 2 };
+                    this.pickColor(pos.x, pos.y, mockEvent);
+                }
+            });
+            
+            // Update color info display on mouse move
+            this.editor.canvasManager.mainCanvas.addEventListener('mousemove', (e) => {
+                if (this.editor.currentTool === this) {
+                    const pos = this.editor.canvasManager.screenToSprite(e.clientX, e.clientY);
+                    this.updateColorInfo(pos.x, pos.y);
+                }
+            });
+        }
     }
 
     // Update color information display
