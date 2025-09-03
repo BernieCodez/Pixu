@@ -6,6 +6,10 @@ class BrightnessTool {
         this.intensity = 10; // Percentage change
         this.size = 1;
         this.isDrawing = false;
+        this.mode = 'rgb'; // 'rgb' or 'hsl'
+        this.applyOnce = false; // New: apply once per mouse down
+        this.randomMode = false; // New: random intensity mode
+        this.processedPixels = new Set(); // New: track processed pixels for apply once
     }
 
     // Handle mouse down event
@@ -13,6 +17,7 @@ class BrightnessTool {
         if (!this.editor.currentSprite) return;
         
         this.isDrawing = true;
+        this.processedPixels.clear(); // Clear processed pixels for new stroke
         this.adjustBrightness(x, y);
     }
 
@@ -29,6 +34,7 @@ class BrightnessTool {
         if (!this.editor.currentSprite || !this.isDrawing) return;
         
         this.isDrawing = false;
+        this.processedPixels.clear(); // Clear processed pixels
         
         // Save to history after brightness adjustment is complete
         this.editor.currentSprite.saveToHistory();
@@ -44,6 +50,7 @@ class BrightnessTool {
     onMouseLeave(event) {
         if (this.isDrawing) {
             this.isDrawing = false;
+            this.processedPixels.clear(); // Clear processed pixels
             this.editor.currentSprite.saveToHistory();
             this.editor.updateUI();
         }
@@ -70,9 +77,32 @@ class BrightnessTool {
                         if (distance > this.size / 2) continue;
                     }
                     
+                    // Check if we should skip this pixel for "apply once" mode
+                    const pixelKey = `${pixelX},${pixelY}`;
+                    if (this.applyOnce && this.processedPixels.has(pixelKey)) {
+                        continue;
+                    }
+                    
                     const currentColor = sprite.getPixel(pixelX, pixelY);
-                    const adjustedColor = this.adjustPixelBrightness(currentColor, this.intensity);
+                    
+                    // Determine intensity to use
+                    let intensityToUse = this.intensity;
+                    if (this.randomMode) {
+                        // Generate random intensity between -intensity and +intensity
+                        const maxIntensity = Math.abs(this.intensity);
+                        intensityToUse = (Math.random() * 2 - 1) * maxIntensity;
+                    }
+                    
+                    const adjustedColor = this.mode === 'hsl' ? 
+                        this.adjustPixelBrightnessHSL(currentColor, intensityToUse) :
+                        this.adjustPixelBrightness(currentColor, intensityToUse);
+                    
                     sprite.setPixel(pixelX, pixelY, adjustedColor);
+                    
+                    // Mark pixel as processed if apply once is enabled
+                    if (this.applyOnce) {
+                        this.processedPixels.add(pixelKey);
+                    }
                 }
             }
         }
@@ -227,6 +257,16 @@ class BrightnessTool {
         this.size = Math.max(1, Math.min(10, size));
     }
 
+    // Set apply once mode
+    setApplyOnce(applyOnce) {
+        this.applyOnce = applyOnce;
+    }
+
+    // Set random mode
+    setRandomMode(randomMode) {
+        this.randomMode = randomMode;
+    }
+
     // Get tool settings UI elements
     getSettingsHTML() {
         return `
@@ -247,9 +287,21 @@ class BrightnessTool {
             <div class="setting-group">
                 <label>Mode:</label>
                 <div class="button-group">
-                    <button class="btn btn-secondary btn-sm" id="brightness-mode-rgb" data-mode="rgb">RGB</button>
-                    <button class="btn btn-secondary btn-sm active" id="brightness-mode-hsl" data-mode="hsl">HSL</button>
+                    <button class="btn btn-secondary btn-sm active" id="brightness-mode-rgb" data-mode="rgb">RGB</button>
+                    <button class="btn btn-secondary btn-sm" id="brightness-mode-hsl" data-mode="hsl">HSL</button>
                 </div>
+            </div>
+            <div class="setting-group">
+                <label>
+                    <input type="checkbox" id="brightness-apply-once" ${this.applyOnce ? 'checked' : ''}>
+                    Apply Once (per stroke)
+                </label>
+            </div>
+            <div class="setting-group">
+                <label>
+                    <input type="checkbox" id="brightness-random" ${this.randomMode ? 'checked' : ''}>
+                    Random Intensity
+                </label>
             </div>
         `;
     }
@@ -260,6 +312,8 @@ class BrightnessTool {
         const sizeSlider = document.getElementById('brightness-size');
         const intensityValue = intensitySlider.nextElementSibling;
         const sizeValue = sizeSlider.nextElementSibling;
+        const applyOnceCheckbox = document.getElementById('brightness-apply-once');
+        const randomCheckbox = document.getElementById('brightness-random');
 
         intensitySlider.addEventListener('input', (e) => {
             this.setIntensity(parseInt(e.target.value));
@@ -270,6 +324,20 @@ class BrightnessTool {
             this.setSize(parseInt(e.target.value));
             sizeValue.textContent = this.size;
         });
+
+        // Apply once checkbox
+        if (applyOnceCheckbox) {
+            applyOnceCheckbox.addEventListener('change', (e) => {
+                this.setApplyOnce(e.target.checked);
+            });
+        }
+
+        // Random mode checkbox
+        if (randomCheckbox) {
+            randomCheckbox.addEventListener('change', (e) => {
+                this.setRandomMode(e.target.checked);
+            });
+        }
 
         // Mode buttons
         const rgbModeBtn = document.getElementById('brightness-mode-rgb');
@@ -288,8 +356,6 @@ class BrightnessTool {
                 rgbModeBtn.classList.remove('active');
             });
         }
-
-        this.mode = 'rgb'; // Default mode
     }
 
     // Get tool cursor

@@ -1,3 +1,65 @@
+/* Settings Button */
+#settings-btn {
+    padding: 8px 12px;
+    border-radius: 50%;
+    background: #444;
+    color: #fff;
+    border: 1px solid #555;
+    font-size: 18px;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s;
+}
+#settings-btn:hover {
+    background: #555;
+    color: #00d4ff;
+}
+
+/* Settings Menu Modal */
+.settings-menu {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(30, 30, 30, 0.7);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    transition: opacity 0.2s;
+}
+.settings-menu.open {
+    display: flex;
+    opacity: 1;
+}
+.settings-menu-content {
+    background: #222;
+    border-radius: 12px;
+    padding: 32px 28px 24px 28px;
+    min-width: 320px;
+    max-width: 90vw;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    position: relative;
+    color: #fff;
+}
+.settings-close {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    background: none;
+    border: none;
+    color: #aaa;
+    font-size: 22px;
+    cursor: pointer;
+    transition: color 0.2s;
+}
+.settings-close:hover {
+    color: #00d4ff;
+}
 /* Reset and Base Styles */
 * {
     margin: 0;
@@ -512,6 +574,66 @@ body {
     font-weight: 500;
 }
 
+/* Custom Checkbox Styles */
+.setting-group input[type="checkbox"] {
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    width: 18px;
+    height: 18px;
+    border: 2px solid #444;
+    border-radius: 4px;
+    background: #1a1a1a;
+    cursor: pointer;
+    position: relative;
+    transition: all 0.2s ease;
+    margin-right: 8px;
+    flex-shrink: 0;
+}
+
+.setting-group input[type="checkbox"]:hover {
+    border-color: #555;
+    background: #2a2a2a;
+}
+
+.setting-group input[type="checkbox"]:checked {
+    background: #00d4ff;
+    border-color: #00d4ff;
+    color: #1a1a1a;
+}
+
+.setting-group input[type="checkbox"]:checked::after {
+    content: '✓';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 12px;
+    font-weight: bold;
+    color: #1a1a1a;
+    line-height: 1;
+}
+
+.setting-group input[type="checkbox"]:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(0, 212, 255, 0.3);
+}
+
+/* Checkbox label styling */
+.setting-group label {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    user-select: none;
+    font-size: 14px;
+    color: #ccc;
+    transition: color 0.2s ease;
+}
+
+.setting-group label:hover {
+    color: #fff;
+}
+
 .slider-container {
     display: flex;
     align-items: center;
@@ -704,7 +826,7 @@ body {
 }
 
 .modal-footer {
-    background: #1a1a1a;
+    background: #2d2d2d;
     padding: 20px;
     display: flex;
     gap: 10px;

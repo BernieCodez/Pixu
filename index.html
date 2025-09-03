@@ -1,246 +1,464 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Pixel Editor</title>
-    <link rel="stylesheet" href="style.css">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="style.css" />
+    <link
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+      rel="stylesheet"
+    />
     <script src="https://cdn.jsdelivr.net/npm/@jaames/iro@5"></script>
     <script src="https://unpkg.com/konva@9/konva.min.js"></script>
-</head>
-<body>
+    <script src="js/settingsMenu.js"></script>
+  </head>
+  <body>
     <div class="app-container">
-        <!-- Header -->
-        <header class="header">
-            <div class="header-left">
-                <h1 class="app-title">
-                    <i class="fas fa-palette"></i>
-                    Pixel Editor
-                </h1>
-            </div>
-            <div class="header-center">
-                <button class="btn btn-secondary" id="resize-canvas">
-                    <i class="fas fa-expand-arrows-alt"></i>
-                    Resize
-                </button>
-                <span id="sprite-name-display" class="sprite-name-display">Untitled</span>
-                <button class="btn btn-sm" id="edit-sprite-name" title="Edit Sprite Name" style="margin-left:6px;">
-                    <i class="fas fa-edit"></i>
-                </button>
-            </div>
-            <div class="header-right">
-                <button class="btn btn-primary" id="new-sprite">
-                    <i class="fas fa-plus"></i>
-                    New
-                </button>
-                <button class="btn btn-secondary" id="import-btn">
-                    <i class="fas fa-file-import"></i>
-                    Import
-                </button>
-                <button class="btn btn-success" id="export-svg">
-                    <i class="fas fa-file-export"></i>
-                    Export SVG
-                </button>
-                <button class="btn btn-success" id="export-png">
-                    <i class="fas fa-file-image"></i>
-                    Export PNG
-                </button>
-            </div>
-        </header>
-
-        <!-- Main Content -->
-        <div class="main-container">
-            <!-- Sprite Sidebar (moved to far left) -->
-            <aside class="sidebar">
-                <div class="sidebar-section">
-                    <h3>Recent Sprites</h3>
-                    <button class="btn btn-secondary btn-sm" id="pick-folder">
-                        <i class="fas fa-folder-open"></i>
-                        Pick Sprites Folder
-                    </button>
-                    <div class="recent-sprites" id="recent-sprites">
-                        <div class="no-sprites-message">
-                            <i class="fas fa-image"></i>
-                            <p>No sprites folder selected</p>
-                            <p class="help-text">Pick a folder to save and load sprites</p>
-                        </div>
-                    </div>
-                </div>
-                <div class="sidebar-section">
-                    <h3>Current Session</h3>
-                    <div class="sprites-list" id="sprites-list">
-                        <!-- Sprite thumbnails will be populated here -->
-                    </div>
-                </div>
-            </aside>
-
-            <!-- Toolbox Sidebar (moved closer to canvas) -->
-            <aside class="toolbox-sidebar">
-                <div class="toolbox-section">
-                    <h3>Tools</h3>
-                    <div class="toolbox-tools">
-                        <button class="tool-btn" data-tool="brush" title="Brush Tool"><i class="fas fa-brush"></i></button>
-                        <button class="tool-btn" data-tool="eraser" title="Eraser Tool"><i class="fas fa-eraser"></i></button>
-                        <button class="tool-btn" data-tool="bucket" title="Bucket Fill"><i class="fas fa-fill-drip"></i></button>
-                        <button class="tool-btn" data-tool="select" title="Select Tool"><i class="fas fa-vector-square"></i></button>
-                        <button class="tool-btn" data-tool="eyedropper" title="Eyedropper"><i class="fas fa-eye-dropper"></i></button>
-                        <button class="tool-btn" data-tool="brightness" title="Brightness Tool"><i class="fas fa-sun"></i></button>
-                    </div>
-                </div>
-            </aside>
-
-            <!-- Canvas Area -->
-            <main class="canvas-area">
-                <div class="canvas-toolbar">
-                    <!-- Sprite name input removed, now in header -->
-                    <div class="toolbar-group">
-                        <!-- Tool Settings (moved from properties panel) -->
-                        <div class="tool-settings" id="tool-settings">
-                            <div class="setting-group brush-settings">
-                                <label for="brush-size">Brush Size:</label>
-                                <div class="slider-container">
-                                    <input type="range" id="brush-size" min="1" max="10" value="1">
-                                    <span class="slider-value">1</span>
-                                </div>
-                            </div>
-                            <div class="setting-group brush-settings">
-                                <label for="brush-opacity">Opacity:</label>
-                                <div class="slider-container">
-                                    <input type="range" id="brush-opacity" min="0" max="100" value="100">
-                                    <span class="slider-value">100%</span>
-                                </div>
-                            </div>
-                            <div class="setting-group bucket-settings" style="display: none;">
-                                <label for="bucket-tolerance">Tolerance:</label>
-                                <div class="slider-container">
-                                    <input type="range" id="bucket-tolerance" min="0" max="100" value="10">
-                                    <span class="slider-value">10</span>
-                                </div>
-                            </div>
-                            <div class="setting-group brightness-settings" style="display: none;">
-                                <label for="brightness-intensity">Intensity:</label>
-                                <div class="slider-container">
-                                    <input type="range" id="brightness-intensity" min="-50" max="50" value="10">
-                                    <span class="slider-value">+10%</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="toolbar-group">
-                        <button class="tool-btn" id="undo-btn" title="Undo">
-                            <i class="fas fa-undo"></i>
-                        </button>
-                        <button class="tool-btn" id="redo-btn" title="Redo">
-                            <i class="fas fa-redo"></i>
-                        </button>
-                    </div>
-                    <div class="toolbar-group">
-                        <button class="tool-btn" id="zoom-in" title="Zoom In">
-                            <i class="fas fa-search-plus"></i>
-                        </button>
-                        <button class="tool-btn" id="zoom-out" title="Zoom Out">
-                            <i class="fas fa-search-minus"></i>
-                        </button>
-                        <button class="tool-btn" id="toggle-grid" title="Toggle Grid">
-                            <i class="fas fa-th"></i>
-                        </button>
-                    </div>
-                </div>
-
-                <div class="canvas-container">
-                    <canvas id="main-canvas" width="512" height="512"></canvas>
-                    <canvas id="overlay-canvas" width="512" height="512"></canvas>
-                    <div id="konva-container" style="position: absolute; top: 0; left: 0; pointer-events: none; opacity: 0.0;"></div>
-                </div>
-            </main>
-
-            <!-- Properties Panel -->
-            <aside class="properties-panel">
-
-                <div class="panel-section">
-                    <h3>Color</h3>
-                    <div class="color-section">
-                        <div class="color-picker-container">
-                            <input type="color" id="color-picker" value="#000000">
-                            <div class="color-display">
-                                <div class="primary-color" id="primary-color"></div>
-                                <div class="secondary-color" id="secondary-color"></div>
-                            </div>
-                        </div>
-                        
-                        <div class="color-wheel-container">
-                            <div id="color-wheel"></div>
-                        </div>
-
-                        <div id="color-value-container" style="margin-top:10px;">
-                            <button id="toggle-color-mode" class="btn btn-secondary" style="font-size:12px; padding:4px 10px; margin-right:8px;">Show RGB</button>
-                            <label for="color-hex" id="label-hex">HEX:</label>
-                            <input type="text" id="color-hex" maxlength="7" size="7" value="#000000" />
-                            <label for="color-rgb" id="label-rgb" style="margin-left:10px; display:none;">RGB:</label>
-                            <input type="text" id="color-rgb" maxlength="16" size="16" value="rgb(0,0,0)" style="display:none;" />
-                        </div>
-                        
-                        <div class="color-palette" id="color-palette">
-                            <!-- Color swatches will be populated here -->
-                        </div>
-                    </div>
-                </div>
-
-                <div class="panel-section">
-                    <h3>Layers</h3>
-                    <div class="layers-controls" style="display: flex; gap: 6px; margin-bottom: 12px;">
-                        <button class="btn btn-sm" id="add-layer-btn" title="Add Layer" style="flex: 1; font-size: 12px; padding: 6px 8px;">
-                            <i class="fas fa-plus"></i>
-                        </button>
-                        <button class="btn btn-sm" id="duplicate-layer-btn" title="Duplicate Layer" style="flex: 1; font-size: 12px; padding: 6px 8px;">
-                            <i class="fas fa-copy"></i>
-                        </button>
-                        <button class="btn btn-sm" id="delete-layer-btn" title="Delete Layer" style="flex: 1; font-size: 12px; padding: 6px 8px;">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                    </div>
-                    <div class="layers-list" id="layers-list">
-                        <!-- Layers will be populated here by JavaScript -->
-                    </div>
-                </div>
-
-                <!-- Tool Settings moved to canvas toolbar -->
-            </aside>
+      <!-- Header -->
+      <header class="header">
+        <div class="header-left">
+          <h1 class="app-title">
+            <i class="fas fa-palette"></i>
+            Pixel Editor
+          </h1>
         </div>
+        <div class="header-center">
+          <button class="btn btn-secondary" id="resize-canvas">
+            <i class="fas fa-expand-arrows-alt"></i>
+            Resize
+          </button>
+          <span id="sprite-name-display" class="sprite-name-display"
+            >Untitled</span
+          >
+          <button
+            class="btn btn-sm"
+            id="edit-sprite-name"
+            title="Edit Sprite Name"
+            style="margin-left: 6px"
+          >
+            <i class="fas fa-edit"></i>
+          </button>
+        </div>
+        <div class="toolbar-group">
+          <button class="tool-btn" id="undo-btn" title="Undo">
+            <i class="fas fa-undo"></i>
+          </button>
+          <button class="tool-btn" id="redo-btn" title="Redo">
+            <i class="fas fa-redo"></i>
+          </button>
+        </div>
+        <div class="toolbar-group">
+          <button class="tool-btn" id="zoom-in" title="Zoom In">
+            <i class="fas fa-search-plus"></i>
+          </button>
+          <button class="tool-btn" id="zoom-out" title="Zoom Out">
+            <i class="fas fa-search-minus"></i>
+          </button>
+          <button class="tool-btn" id="toggle-grid" title="Toggle Grid">
+            <i class="fas fa-th"></i>
+          </button>
+        </div>
+        <div class="header-right">
+          <button class="btn btn-primary" id="new-sprite">
+            <i class="fas fa-plus"></i>
+            New
+          </button>
+          <button class="btn btn-secondary" id="import-btn">
+            <i class="fas fa-file-import"></i>
+            Import
+          </button>
+          <button class="btn btn-success" id="export-btn">
+            <i class="fas fa-download"></i>
+            Export
+          </button>
+          <button class="btn btn-secondary" id="settings-btn" title="Settings">
+            <i class="fas fa-cog"></i>
+          </button>
+        </div>
+      </header>
+
+      <!-- Export Modal -->
+      <div class="modal" id="export-modal">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h3>Export Sprite</h3>
+            <button class="modal-close" id="export-modal-close">&times;</button>
+          </div>
+          <div class="modal-body">
+            <div class="input-group">
+              <label for="export-format">Format:</label>
+              <select
+                id="export-format"
+                style="
+                  background: #1a1a1a;
+                  border: 1px solid #444;
+                  border-radius: 6px;
+                  padding: 10px;
+                  color: #fff;
+                  font-size: 14px;
+                "
+              >
+                <option value="svg">SVG (Vector)</option>
+                <option value="png">PNG (Raster)</option>
+              </select>
+            </div>
+            <div class="input-group">
+              <label for="export-scale"
+                >Scale: <span id="scale-value">1x</span></label
+              >
+              <div class="slider-container">
+                <input
+                  type="range"
+                  id="export-scale"
+                  min="1"
+                  max="32"
+                  value="1"
+                  style="
+                    flex: 1;
+                    height: 6px;
+                    border-radius: 3px;
+                    background: #444;
+                    outline: none;
+                  "
+                />
+              </div>
+            </div>
+            <div
+              class="export-preview"
+              style="
+                margin: 15px 0;
+                text-align: center;
+                color: #ccc;
+                font-size: 14px;
+              "
+            >
+              <div id="export-dimensions">16x16 → 16x16</div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-secondary" id="cancel-export">Cancel</button>
+            <button class="btn btn-primary" id="quick-export">
+              Quick Export (20x)
+            </button>
+            <button class="btn btn-success" id="apply-export">Export</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Settings Menu Modal -->
+      <div id="settings-menu" class="settings-menu">
+        <div class="settings-menu-content">
+          <button id="settings-close" class="settings-close" title="Close">
+            <i class="fas fa-times"></i>
+          </button>
+          <h2>Settings</h2>
+          <!-- Add your settings content here -->
+        </div>
+      </div>
+
+      <!-- Main Content -->
+      <div class="main-container">
+        <!-- Sprite Sidebar (moved to far left) -->
+        <aside class="sidebar">
+          <div class="sidebar-section">
+            <h3>Recent Sprites</h3>
+            <button class="btn btn-secondary btn-sm" id="pick-folder">
+              <i class="fas fa-folder-open"></i>
+              Pick Sprites Folder
+            </button>
+            <div class="recent-sprites" id="recent-sprites">
+              <div class="no-sprites-message">
+                <i class="fas fa-image"></i>
+                <p>No sprites folder selected</p>
+                <p class="help-text">Pick a folder to save and load sprites</p>
+              </div>
+            </div>
+          </div>
+          <div class="sidebar-section">
+            <h3>Current Session</h3>
+            <div class="sprites-list" id="sprites-list">
+              <!-- Sprite thumbnails will be populated here -->
+            </div>
+          </div>
+        </aside>
+
+        <!-- Toolbox Sidebar (moved closer to canvas) -->
+        <aside class="toolbox-sidebar">
+          <div class="toolbox-section">
+            <h3>Tools</h3>
+            <div class="toolbox-tools">
+              <button class="tool-btn" data-tool="brush" title="Brush Tool">
+                <i class="fas fa-brush"></i>
+              </button>
+              <button class="tool-btn" data-tool="eraser" title="Eraser Tool">
+                <i class="fas fa-eraser"></i>
+              </button>
+              <button class="tool-btn" data-tool="bucket" title="Bucket Fill">
+                <i class="fas fa-fill-drip"></i>
+              </button>
+              <button class="tool-btn" data-tool="select" title="Select Tool">
+                <i class="fas fa-vector-square"></i>
+              </button>
+              <button
+                class="tool-btn"
+                data-tool="eyedropper"
+                title="Eyedropper"
+              >
+                <i class="fas fa-eye-dropper"></i>
+              </button>
+              <button
+                class="tool-btn"
+                data-tool="brightness"
+                title="Brightness Tool"
+              >
+                <i class="fas fa-sun"></i>
+              </button>
+            </div>
+          </div>
+        </aside>
+
+        <!-- Canvas Area -->
+        <main class="canvas-area">
+          <div class="canvas-toolbar">
+            <!-- Sprite name input removed, now in header -->
+            <div class="toolbar-group">
+              <!-- Tool Settings (moved from properties panel) -->
+              <div class="tool-settings" id="tool-settings">
+                <div class="setting-group brush-settings">
+                  <label for="brush-size">Brush Size:</label>
+                  <div class="slider-container">
+                    <input
+                      type="range"
+                      id="brush-size"
+                      min="1"
+                      max="10"
+                      value="1"
+                    />
+                    <span class="slider-value">1</span>
+                  </div>
+                </div>
+                <div class="setting-group brush-settings">
+                  <label for="brush-opacity">Opacity:</label>
+                  <div class="slider-container">
+                    <input
+                      type="range"
+                      id="brush-opacity"
+                      min="0"
+                      max="100"
+                      value="100"
+                    />
+                    <span class="slider-value">100%</span>
+                  </div>
+                </div>
+                <div
+                  class="setting-group bucket-settings"
+                  style="display: none"
+                >
+                  <label for="bucket-tolerance">Tolerance:</label>
+                  <div class="slider-container">
+                    <input
+                      type="range"
+                      id="bucket-tolerance"
+                      min="0"
+                      max="100"
+                      value="10"
+                    />
+                    <span class="slider-value">10</span>
+                  </div>
+                </div>
+                <div
+                  class="setting-group brightness-settings"
+                  style="display: none"
+                >
+                  <label for="brightness-intensity">Intensity:</label>
+                  <div class="slider-container">
+                    <input
+                      type="range"
+                      id="brightness-intensity"
+                      min="-50"
+                      max="50"
+                      value="10"
+                    />
+                    <span class="slider-value">+10%</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="canvas-container">
+            <canvas id="main-canvas" width="512" height="512"></canvas>
+            <canvas id="overlay-canvas" width="512" height="512"></canvas>
+            <div
+              id="konva-container"
+              style="
+                position: absolute;
+                top: 0;
+                left: 0;
+                pointer-events: none;
+                opacity: 0;
+              "
+            ></div>
+          </div>
+        </main>
+
+        <!-- Properties Panel -->
+        <aside class="properties-panel">
+          <div class="panel-section">
+            <h3>Color</h3>
+            <div class="color-section">
+              <div class="color-picker-container">
+                <input type="color" id="color-picker" value="#000000" />
+                <div class="color-display">
+                  <div class="primary-color" id="primary-color"></div>
+                  <div class="secondary-color" id="secondary-color"></div>
+                </div>
+              </div>
+
+              <div class="color-wheel-container">
+                <div id="color-wheel"></div>
+              </div>
+
+              <div id="color-value-container" style="margin-top: 10px">
+                <button
+                  id="toggle-color-mode"
+                  class="btn btn-secondary"
+                  style="font-size: 12px; padding: 4px 10px; margin-right: 8px"
+                >
+                  Show RGB
+                </button>
+                <label for="color-hex" id="label-hex">HEX:</label>
+                <input
+                  type="text"
+                  id="color-hex"
+                  maxlength="7"
+                  size="7"
+                  value="#000000"
+                />
+                <label
+                  for="color-rgb"
+                  id="label-rgb"
+                  style="margin-left: 10px; display: none"
+                  >RGB:</label
+                >
+                <input
+                  type="text"
+                  id="color-rgb"
+                  maxlength="16"
+                  size="16"
+                  value="rgb(0,0,0)"
+                  style="display: none"
+                />
+              </div>
+
+              <div class="color-palette" id="color-palette">
+                <!-- Color swatches will be populated here -->
+              </div>
+            </div>
+          </div>
+
+          <div class="panel-section">
+            <h3>Layers</h3>
+            <div
+              class="layers-controls"
+              style="display: flex; gap: 6px; margin-bottom: 12px"
+            >
+              <button
+                class="btn btn-sm"
+                id="add-layer-btn"
+                title="Add Layer"
+                style="flex: 1; font-size: 12px; padding: 6px 8px"
+              >
+                <i class="fas fa-plus"></i>
+              </button>
+              <button
+                class="btn btn-sm"
+                id="duplicate-layer-btn"
+                title="Duplicate Layer"
+                style="flex: 1; font-size: 12px; padding: 6px 8px"
+              >
+                <i class="fas fa-copy"></i>
+              </button>
+              <button
+                class="btn btn-sm"
+                id="delete-layer-btn"
+                title="Delete Layer"
+                style="flex: 1; font-size: 12px; padding: 6px 8px"
+              >
+                <i class="fas fa-trash"></i>
+              </button>
+            </div>
+            <div class="layers-list" id="layers-list">
+              <!-- Layers will be populated here by JavaScript -->
+              <!-- Example layer item structure for JS to use:
+              <div class="layer-item" draggable="true" data-index="0">
+                <span class="drag-handle" title="Drag to reorder">
+                  <i class="fas fa-grip-vertical"></i>
+                </span>
+                <span class="layer-name">Layer 1</span>
+                <input type="range" class="layer-opacity" min="0" max="100" value="100" title="Opacity" />
+                <button class="btn btn-sm layer-visibility" title="Toggle Visibility">
+                  <i class="fas fa-eye"></i>
+                </button>
+              </div>
+              -->
+            </div>
+          </div>
+
+          <!-- Tool Settings moved to canvas toolbar -->
+        </aside>
+      </div>
     </div>
 
     <!-- Modals -->
     <div class="modal" id="resize-modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>Resize Canvas</h3>
-                <button class="modal-close">&times;</button>
-            </div>
-            <div class="modal-body">
-                <div class="input-group">
-                    <label for="canvas-width">Width:</label>
-                    <input type="number" id="canvas-width" min="1" max="128" value="16">
-                </div>
-                <div class="input-group">
-                    <label for="canvas-height">Height:</label>
-                    <input type="number" id="canvas-height" min="1" max="128" value="16">
-                </div>
-                <div class="checkbox-group">
-                    <label>
-                        <input type="checkbox" id="maintain-aspect-ratio">
-                        Maintain aspect ratio
-                    </label>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn-secondary" id="cancel-resize">Cancel</button>
-                <button class="btn btn-primary" id="apply-resize">Apply</button>
-            </div>
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Resize Canvas</h3>
+          <button class="modal-close">&times;</button>
         </div>
+        <div class="modal-body">
+          <div class="input-group">
+            <label for="canvas-width">Width:</label>
+            <input
+              type="number"
+              id="canvas-width"
+              min="1"
+              max="128"
+              value="16"
+            />
+          </div>
+          <div class="input-group">
+            <label for="canvas-height">Height:</label>
+            <input
+              type="number"
+              id="canvas-height"
+              min="1"
+              max="128"
+              value="16"
+            />
+          </div>
+          <div class="checkbox-group">
+            <label>
+              <input type="checkbox" id="maintain-aspect-ratio" />
+              Maintain aspect ratio
+            </label>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" id="cancel-resize">Cancel</button>
+          <button class="btn btn-primary" id="apply-resize">Apply</button>
+        </div>
+      </div>
     </div>
 
-    <input type="file" id="file-input" accept=".png,.jpg,.jpeg,.svg" style="display: none;">
+    <input
+      type="file"
+      id="file-input"
+      accept=".png,.jpg,.jpeg,.svg"
+      style="display: none"
+    />
 
     <!-- Scripts -->
     <script src="js/storage.js"></script>
@@ -256,6 +474,6 @@
     <script src="js/tools/brightness.js"></script>
     <script src="js/uiController.js"></script>
     <script src="js/editor.js"></script>
-    <script src="main.js" defer> </script>
-</body>
+    <script src="main.js" defer></script>
+  </body>
 </html>
