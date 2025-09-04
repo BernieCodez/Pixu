@@ -170,7 +170,8 @@ class RecentSpritesManager {
     }
 
     // Load recent sprites from the selected folder
-    async loadRecentSprites() {
+    // Load recent sprites from IndexedDB instead of folder
+async loadRecentSprites() {
         if (!this.dirHandle) return;
 
         try {
@@ -246,37 +247,90 @@ class RecentSpritesManager {
             container.appendChild(spriteElement);
         });
     }
+// Create thumbnail canvas from sprite data
+createSpriteThumbnail(sprite) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 32;
+    canvas.height = 32;
+    canvas.className = 'sprite-thumbnail';
+    canvas.style.cssText = 'width: 32px; height: 32px; image-rendering: pixelated;';
 
-    // Load sprite from file into editor
-    async loadSpriteFromFile(spriteInfo) {
-        try {
-            const svgText = await spriteInfo.file.text();
-            
-            // Parse SVG and convert to sprite
-            const sprite = await this.parseSVGToSprite(svgText, spriteInfo.name);
-            
-            // Check if sprite with same name already exists
-            const existingIndex = this.editor.sprites.findIndex(s => s.name === sprite.name);
-            
-            if (existingIndex !== -1) {
-                // Replace existing sprite
-                this.editor.sprites[existingIndex] = sprite;
-                this.editor.setCurrentSprite(sprite);
-                this.editor.uiManager.showNotification(`Replaced sprite: ${spriteInfo.name}`, 'success');
-            } else {
-                // Add new sprite to current session
-                this.editor.sprites.push(sprite);
-                this.editor.setCurrentSprite(sprite);
-                this.editor.uiManager.showNotification(`Loaded sprite: ${spriteInfo.name}`, 'success');
+    const ctx = canvas.getContext('2d');
+
+    // Create checkerboard pattern for transparency
+    this.drawCheckerboard(ctx, canvas.width, canvas.height, 4);
+
+    // Draw sprite scaled to fit thumbnail
+    const scaleX = canvas.width / sprite.width;
+    const scaleY = canvas.height / sprite.height;
+    const scale = Math.min(scaleX, scaleY);
+
+    const scaledWidth = sprite.width * scale;
+    const scaledHeight = sprite.height * scale;
+    const offsetX = (canvas.width - scaledWidth) / 2;
+    const offsetY = (canvas.height - scaledHeight) / 2;
+
+    // Draw pixels
+    for (let y = 0; y < sprite.height; y++) {
+        for (let x = 0; x < sprite.width; x++) {
+            const pixel = sprite.getPixel(x, y);
+            const [r, g, b, a] = pixel;
+
+            if (a > 0) {
+                ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${a / 255})`;
+                ctx.fillRect(
+                    offsetX + x * scale, 
+                    offsetY + y * scale, 
+                    scale, 
+                    scale
+                );
             }
-            
-            this.editor.updateUI();
-            
-        } catch (error) {
-            console.error('Failed to load sprite:', error);
-            this.editor.uiManager.showNotification(`Failed to load sprite: ${spriteInfo.name}`, 'error');
         }
     }
+
+    return canvas;
+}
+// Draw checkerboard pattern for transparency
+drawCheckerboard(ctx, width, height, size) {
+    const lightColor = '#ffffff';
+    const darkColor = '#e0e0e0';
+
+    for (let x = 0; x < width; x += size) {
+        for (let y = 0; y < height; y += size) {
+            const isEven = (Math.floor(x / size) + Math.floor(y / size)) % 2 === 0;
+            ctx.fillStyle = isEven ? lightColor : darkColor;
+            ctx.fillRect(x, y, size, size);
+        }
+    }
+}
+
+    // Load sprite from file into editor
+    // Load sprite from storage into editor
+loadSpriteFromStorage(spriteData) {
+    try {
+        const sprite = spriteData.sprite;
+        
+        // Check if sprite with same ID already exists in editor
+        const existingIndex = this.editor.sprites.findIndex(s => s.id === sprite.id);
+        
+        if (existingIndex !== -1) {
+            // Switch to existing sprite
+            this.editor.setCurrentSprite(this.editor.sprites[existingIndex]);
+            this.editor.uiManager.showNotification(`Switched to: ${sprite.name}`, 'info');
+        } else {
+            // Add sprite to current session
+            this.editor.sprites.push(sprite);
+            this.editor.setCurrentSprite(sprite);
+            this.editor.uiManager.showNotification(`Loaded sprite: ${sprite.name}`, 'success');
+        }
+        
+        this.editor.updateUI();
+        
+    } catch (error) {
+        console.error('Failed to load sprite:', error);
+        this.editor.uiManager.showNotification(`Failed to load sprite: ${spriteData.name}`, 'error');
+    }
+}
 
     // Parse SVG text to create a Sprite object
     async parseSVGToSprite(svgText, name) {
@@ -365,33 +419,15 @@ class RecentSpritesManager {
     }
 
     // Update UI based on current state
-    updateUI() {
-        const pickFolderBtn = document.getElementById('pick-folder');
-        const container = document.getElementById('recent-sprites');
-        
-        if (!this.dirHandle) {
-            if (container && !('showDirectoryPicker' in window)) {
-                this.showUnsupportedMessage();
-            } else if (container) {
-                container.innerHTML = `
-                    <div class="no-sprites-message">
-                        <i class="fas fa-folder-open"></i>
-                        <p>No sprites folder selected</p>
-                        <p class="help-text">Pick a folder to save and load sprites</p>
-                    </div>
-                `;
-            }
-            
-            if (pickFolderBtn) {
-                pickFolderBtn.innerHTML = '<i class="fas fa-folder-open"></i> Pick Sprites Folder';
-            }
-        } else {
-            if (pickFolderBtn) {
-                pickFolderBtn.innerHTML = '<i class="fas fa-sync"></i> Refresh Sprites';
-                pickFolderBtn.onclick = () => this.loadRecentSprites();
-            }
-        }
+    // Update UI based on current state
+updateUI() {
+    const container = document.getElementById('recent-sprites');
+    
+    if (container) {
+        // Always try to load recent sprites from IndexedDB
+        this.loadRecentSprites();
     }
+}
 }
 
 // Make RecentSpritesManager globally available

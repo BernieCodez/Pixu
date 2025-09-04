@@ -39,8 +39,8 @@ class UIController {
       "#20b2aa",
       "#f08080",
     ];
-  // Bind swap color method for event listeners
-  this.swapPrimarySecondaryColor = this.swapPrimarySecondaryColor.bind(this);
+    // Bind swap color method for event listeners
+    this.swapPrimarySecondaryColor = this.swapPrimarySecondaryColor.bind(this);
     this.setupEventListeners();
     this.initializeColorPalette();
     this.initializeColorWheel();
@@ -49,7 +49,7 @@ class UIController {
     this.setupColorInputListeners();
     this.setupColorModeToggle();
     this.setupSpriteNameInputListener();
-  this.setupSecondaryColorSwitch();
+    this.setupSecondaryColorSwitch();
   }
   // Setup event listener for secondary color switching
   setupSecondaryColorSwitch() {
@@ -72,11 +72,30 @@ class UIController {
     }
   }
 
+  // Replace the initializeColorWheel method in UIController class
+
   initializeColorWheel() {
+    // Prevent duplicate initialization
+    if (this.colorPicker || this.colorWheel) {
+      console.warn("Color wheel already initialized");
+      return;
+    }
+
     const colorWheelContainer = document.getElementById("color-wheel");
-    if (colorWheelContainer && window.ColorWheel) {
+    if (!colorWheelContainer) {
+      console.warn("Color wheel container not found");
+      return;
+    }
+
+    // Clear any existing content first
+    const existingPickers = colorWheelContainer.querySelectorAll(
+      ".iro__color-picker, canvas"
+    );
+    existingPickers.forEach((picker) => picker.remove());
+
+    if (window.ColorWheel) {
       // If using custom ColorWheel class
-      const canvas = colorWheelContainer.querySelector('canvas');
+      const canvas = colorWheelContainer.querySelector("canvas");
       if (canvas) {
         this.colorWheel = new window.ColorWheel(canvas, (hex) => {
           const rgba = this.hexToRgba(hex);
@@ -86,24 +105,29 @@ class UIController {
           this.deselectColorPalette();
         });
       }
-    } else if (colorWheelContainer && window.iro) {
-      // Fallback to iro.js
-      this.colorPicker = new iro.ColorPicker("#color-wheel", {
-        width: 120,
-        color: {
-          hsl: { h: 0, s: 50, l: 50 },
-        },
-        borderWidth: 2,
-        borderColor: "#333",
-      });
-      this.colorPicker.on("color:change", (color) => {
-        const hex = color.hexString;
-        const rgba = this.hexToRgba(hex);
-        this.editor.setPrimaryColor(rgba);
-        this.updateColorDisplay();
-        this.updateColorInputs(hex, rgba);
-        this.deselectColorPalette();
-      });
+    } else if (window.iro) {
+      // Fallback to iro.js - only create if not already exists
+      try {
+        this.colorPicker = new iro.ColorPicker(colorWheelContainer, {
+          width: 120,
+          color: {
+            hsl: { h: 0, s: 50, l: 50 },
+          },
+          borderWidth: 2,
+          borderColor: "#333",
+        });
+
+        this.colorPicker.on("color:change", (color) => {
+          const hex = color.hexString;
+          const rgba = this.hexToRgba(hex);
+          this.editor.setPrimaryColor(rgba);
+          this.updateColorDisplay();
+          this.updateColorInputs(hex, rgba);
+          this.deselectColorPalette();
+        });
+      } catch (error) {
+        console.error("Failed to create iro color picker:", error);
+      }
     }
   }
 
@@ -234,7 +258,11 @@ class UIController {
           align-items: center;
           padding: 8px 12px;
           margin-bottom: 4px;
-          background: ${i === activeIndex ? "rgba(74, 144, 226, 0.2)" : "rgba(255, 255, 255, 0.05)"};
+          background: ${
+            i === activeIndex
+              ? "rgba(74, 144, 226, 0.2)"
+              : "rgba(255, 255, 255, 0.05)"
+          };
           border: 1px solid ${i === activeIndex ? "#4a90e2" : "transparent"};
           border-radius: 6px;
           cursor: pointer;
@@ -245,9 +273,15 @@ class UIController {
           <span class="drag-handle" title="Drag to reorder" style="cursor: grab; margin-right: 8px; color: #aaa;">
             <i class="fas fa-grip-vertical"></i>
           </span>
-          <span class="layer-name" style="flex: 1; color: white;">${layer.name}</span>
-          <input type="range" class="layer-opacity-slider" min="0" max="100" value="${Math.round(layer.opacity * 100)}" title="Opacity" style="width: 70px; margin-left: 8px;" />
-          <span class="layer-opacity-value" style="font-size: 12px; color: #999; margin-left: 4px;">${Math.round(layer.opacity * 100)}%</span>
+          <span class="layer-name" style="flex: 1; color: white;">${
+            layer.name
+          }</span>
+          <input type="range" class="layer-opacity-slider" min="0" max="100" value="${Math.round(
+            layer.opacity * 100
+          )}" title="Opacity" style="width: 70px; margin-left: 8px;" />
+          <span class="layer-opacity-value" style="font-size: 12px; color: #999; margin-left: 4px;">${Math.round(
+            layer.opacity * 100
+          )}%</span>
           <button class="btn btn-sm layer-visibility" title="Toggle Visibility" style="margin-left: 8px;">
             <i class="fas ${layer.visible ? "fa-eye" : "fa-eye-slash"}"></i>
           </button>
@@ -256,7 +290,10 @@ class UIController {
         // Click to select layer
         layerItem.addEventListener("click", (e) => {
           // Only select if not clicking slider or button
-          if (!e.target.classList.contains("layer-opacity-slider") && !e.target.classList.contains("layer-visibility")) {
+          if (
+            !e.target.classList.contains("layer-opacity-slider") &&
+            !e.target.classList.contains("layer-visibility")
+          ) {
             this.editor.layerManager.setActiveLayer(i);
             this.updateLayersList();
             this.showNotification(`Selected ${layer.name}`, "info");
@@ -804,7 +841,7 @@ class UIController {
             e.preventDefault();
           }
           break;
-        case "g":
+        case "f":
           if (!e.ctrlKey && !e.metaKey) {
             this.editor.setCurrentTool("bucket");
             e.preventDefault();
@@ -937,33 +974,44 @@ class UIController {
     }
   }
 
+  // In the updateSpritesList method, add a safety check at the beginning:
   updateSpritesList() {
     const spritesList = document.getElementById("sprites-list");
     if (!spritesList) return;
 
     spritesList.innerHTML = "";
 
+    // Add safety check for sprites array
+    if (!this.editor.sprites || !Array.isArray(this.editor.sprites)) {
+      console.warn("Sprites array not available yet");
+      return;
+    }
+
     this.editor.sprites.forEach((sprite, index) => {
       const spriteItem = document.createElement("div");
-      spriteItem.className = "sprite-item";
-      if (sprite === this.editor.currentSprite) {
-        spriteItem.classList.add("active");
-      }
+      spriteItem.className = `sprite-item ${
+        sprite === this.editor.currentSprite ? "active" : ""
+      }`;
 
+      // Create thumbnail
       const thumbnail = this.createSpriteThumbnail(sprite);
-      const nameSpan = document.createElement("span");
-      nameSpan.textContent = sprite.name;
-      nameSpan.className = "sprite-name";
+
+      const spriteInfo = document.createElement("div");
+      spriteInfo.className = "sprite-info";
+      spriteInfo.innerHTML = `
+            <div class="sprite-name">${sprite.name}</div>
+            <div class="sprite-size">${sprite.width}×${sprite.height}</div>
+        `;
 
       spriteItem.appendChild(thumbnail);
-      spriteItem.appendChild(nameSpan);
+      spriteItem.appendChild(spriteInfo);
 
+      // Click to select sprite
       spriteItem.addEventListener("click", () => {
         this.editor.setCurrentSprite(sprite);
-        this.updateHeaderSpriteName();
       });
 
-      // Add right-click context menu
+      // Right-click context menu
       spriteItem.addEventListener("contextmenu", (e) => {
         e.preventDefault();
         this.showSpriteContextMenu(e, sprite, index);
@@ -971,6 +1019,242 @@ class UIController {
 
       spritesList.appendChild(spriteItem);
     });
+
+    // Load IndexedDB sprites for current session display
+    this.loadSessionSprites();
+  }
+
+  // Load and display sprites from IndexedDB under current session
+  async loadSessionSprites() {
+    try {
+      const allStoredSprites = await this.editor.storageManager.loadSprites();
+
+      if (!allStoredSprites || allStoredSprites.length === 0) {
+        return;
+      }
+
+      // Get sprites not currently in the session
+      const sessionSpriteIds = new Set(this.editor.sprites.map((s) => s.id));
+      const storedOnlySprites = allStoredSprites.filter(
+        (sprite) => !sessionSpriteIds.has(sprite.id)
+      );
+
+      if (storedOnlySprites.length > 0) {
+        this.displayStoredSprites(storedOnlySprites);
+      }
+    } catch (error) {
+      console.error("Failed to load session sprites:", error);
+    }
+  }
+  // Display stored sprites under current session
+  displayStoredSprites(sprites) {
+    const spritesList = document.getElementById("sprites-list");
+    if (!spritesList) return;
+
+    // Add separator if there are current session sprites
+    if (this.editor.sprites.length > 0) {
+      const separator = document.createElement("div");
+      separator.className = "sprites-separator";
+      separator.innerHTML = `
+            <div style="
+                margin: 12px 0 8px 0;
+                padding: 4px 8px;
+                font-size: 11px;
+                color: #888;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+                border-top: 1px solid #333;
+                padding-top: 8px;
+            ">Stored Sprites</div>
+        `;
+      spritesList.appendChild(separator);
+    }
+
+    // Sort by modified date (newest first)
+    sprites.sort((a, b) => new Date(b.modifiedAt) - new Date(a.modifiedAt));
+
+    sprites.forEach((sprite) => {
+      const spriteItem = document.createElement("div");
+      spriteItem.className = "sprite-item stored-sprite";
+      spriteItem.style.opacity = "0.7"; // Visual distinction
+
+      // Create thumbnail
+      const thumbnail = this.createSpriteThumbnail(sprite);
+
+      const spriteInfo = document.createElement("div");
+      spriteInfo.className = "sprite-info";
+      spriteInfo.innerHTML = `
+            <div class="sprite-name">${sprite.name}</div>
+            <div class="sprite-size">${sprite.width}×${sprite.height}</div>
+            <div class="sprite-date" style="font-size: 10px; color: #666;">
+                ${new Date(sprite.modifiedAt).toLocaleDateString()}
+            </div>
+        `;
+
+      spriteItem.appendChild(thumbnail);
+      spriteItem.appendChild(spriteInfo);
+
+      // Click to load sprite into session
+      spriteItem.addEventListener("click", () => {
+        this.loadStoredSpriteToSession(sprite);
+      });
+
+      // Right-click context menu for stored sprites
+      spriteItem.addEventListener("contextmenu", (e) => {
+        e.preventDefault();
+        this.showStoredSpriteContextMenu(e, sprite);
+      });
+
+      spritesList.appendChild(spriteItem);
+    });
+  }
+  // Load a stored sprite into the current session
+  loadStoredSpriteToSession(sprite) {
+    // Check if sprite is already in session
+    const existingIndex = this.editor.sprites.findIndex(
+      (s) => s.id === sprite.id
+    );
+
+    if (existingIndex !== -1) {
+      // Switch to existing sprite
+      this.editor.setCurrentSprite(this.editor.sprites[existingIndex]);
+      this.showNotification(`Switched to: ${sprite.name}`, "info");
+    } else {
+      // Add to session
+      this.editor.sprites.push(sprite);
+      this.editor.setCurrentSprite(sprite);
+      this.showNotification(`Loaded to session: ${sprite.name}`, "success");
+    }
+
+    this.editor.updateUI();
+  }
+  // Show context menu for stored sprites
+  showStoredSpriteContextMenu(event, sprite) {
+    // Remove any existing context menu
+    this.hideContextMenu();
+
+    const contextMenu = document.createElement("div");
+    contextMenu.className = "sprite-context-menu";
+    contextMenu.style.cssText = `
+        position: fixed;
+        background: #2d2d2d;
+        border: 1px solid #444;
+        border-radius: 6px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        z-index: 10000;
+        min-width: 140px;
+        padding: 4px 0;
+        font-family: system-ui, -apple-system, sans-serif;
+        color: white;
+        font-size: 14px;
+    `;
+
+    const menuItems = [
+      {
+        label: "Load to Session",
+        icon: "fas fa-plus",
+        action: () => {
+          this.loadStoredSpriteToSession(sprite);
+          this.hideContextMenu();
+        },
+      },
+      {
+        label: "Duplicate to Session",
+        icon: "fas fa-copy",
+        action: () => {
+          const duplicate = sprite.clone();
+          this.editor.sprites.push(duplicate);
+          this.editor.setCurrentSprite(duplicate);
+          this.editor.updateUI();
+          this.showNotification(
+            `Duplicated to session: ${duplicate.name}`,
+            "success"
+          );
+          this.hideContextMenu();
+        },
+      },
+      { type: "separator" },
+      {
+        label: "Delete from Storage",
+        icon: "fas fa-trash",
+        action: async () => {
+          if (confirm(`Delete "${sprite.name}" from storage permanently?`)) {
+            await this.editor.storageManager.deleteSprite(sprite.id);
+            this.editor.updateUI();
+            this.showNotification(
+              `Deleted from storage: ${sprite.name}`,
+              "success"
+            );
+          }
+          this.hideContextMenu();
+        },
+        danger: true,
+      },
+    ];
+
+    menuItems.forEach((item) => {
+      if (item.type === "separator") {
+        const separator = document.createElement("div");
+        separator.style.cssText = `
+                height: 1px;
+                background: #444;
+                margin: 4px 0;
+            `;
+        contextMenu.appendChild(separator);
+      } else {
+        const menuItem = document.createElement("div");
+        menuItem.style.cssText = `
+                padding: 8px 12px;
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                transition: background-color 0.15s ease;
+                ${item.danger ? "color: #ff6b6b;" : ""}
+            `;
+        menuItem.innerHTML = `
+                <i class="${item.icon}" style="width: 14px;"></i>
+                <span>${item.label}</span>
+            `;
+
+        menuItem.addEventListener("mouseenter", () => {
+          menuItem.style.backgroundColor = item.danger
+            ? "rgba(255, 107, 107, 0.1)"
+            : "rgba(255, 255, 255, 0.1)";
+        });
+
+        menuItem.addEventListener("mouseleave", () => {
+          menuItem.style.backgroundColor = "transparent";
+        });
+
+        menuItem.addEventListener("click", item.action);
+        contextMenu.appendChild(menuItem);
+      }
+    });
+
+    // Position the context menu
+    let left = event.clientX;
+    let top = event.clientY;
+
+    if (left + 140 > window.innerWidth) {
+      left = window.innerWidth - 140 - 10;
+    }
+    if (top + 200 > window.innerHeight) {
+      top = window.innerHeight - 200 - 10;
+    }
+
+    contextMenu.style.left = `${left}px`;
+    contextMenu.style.top = `${top}px`;
+
+    document.body.appendChild(contextMenu);
+    this.activeContextMenu = contextMenu;
+
+    // Close menu when clicking outside
+    document.addEventListener(
+      "click",
+      this.handleContextMenuOutsideClick.bind(this),
+      { once: true }
+    );
   }
 
   createSpriteThumbnail(sprite) {
@@ -1172,15 +1456,25 @@ class UIController {
   }
 
   // Update all UI elements
+  // In the updateAll method, make it safer:
   updateAll() {
-    this.updateToolButtons();
-    this.updateColorDisplay();
-    this.updateSpritesList();
-    this.updateCanvasSizeDisplay();
-    this.updateUndoRedoButtons();
-    this.updateToolSettings();
-    this.updateSpriteNameInput();
-    this.updateHeaderSpriteName();
+    try {
+      this.updateToolButtons();
+      this.updateColorDisplay();
+
+      // Only update sprites list if sprites are available
+      if (this.editor.sprites && Array.isArray(this.editor.sprites)) {
+        this.updateSpritesList();
+      }
+
+      this.updateCanvasSizeDisplay();
+      this.updateUndoRedoButtons();
+      this.updateToolSettings();
+      this.updateSpriteNameInput();
+      this.updateHeaderSpriteName();
+    } catch (error) {
+      console.warn("Error updating UI:", error);
+    }
   }
 
   // Update the sprite name in the header

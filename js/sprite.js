@@ -7,15 +7,14 @@ class Sprite {
         this.height = height;
         this.createdAt = new Date().toISOString();
         this.modifiedAt = new Date().toISOString();
-        
         // Initialize pixel data as 2D array of RGBA values
         this.pixels = this.createEmptyPixelArray();
-        
         // History for undo/redo
         this.history = [];
         this.historyIndex = -1;
         this.maxHistorySize = 50;
-        
+        // Auto-save callback
+        this.onChange = null;
         // Save initial state
         this.saveToHistory();
     }
@@ -54,6 +53,9 @@ class Sprite {
         
         this.pixels[y][x] = [...color];
         this.modifiedAt = new Date().toISOString();
+        if (typeof this.onChange === 'function') {
+            this.onChange(this);
+        }
         return true;
     }
 
@@ -78,6 +80,9 @@ class Sprite {
         
         this.pixels = pixels.map(row => row.map(pixel => [...pixel]));
         this.modifiedAt = new Date().toISOString();
+        if (typeof this.onChange === 'function') {
+            this.onChange(this);
+        }
         return true;
     }
 
@@ -110,8 +115,10 @@ class Sprite {
         this.height = newHeight;
         this.pixels = newPixels;
         this.modifiedAt = new Date().toISOString();
-        
         this.saveToHistory();
+        if (typeof this.onChange === 'function') {
+            this.onChange(this);
+        }
         return true;
     }
 
@@ -120,6 +127,9 @@ class Sprite {
         this.pixels = this.createEmptyPixelArray();
         this.modifiedAt = new Date().toISOString();
         this.saveToHistory();
+        if (typeof this.onChange === 'function') {
+            this.onChange(this);
+        }
     }
 
     // Fill entire sprite with a color
@@ -131,6 +141,9 @@ class Sprite {
         }
         this.modifiedAt = new Date().toISOString();
         this.saveToHistory();
+        if (typeof this.onChange === 'function') {
+            this.onChange(this);
+        }
     }
 
     // Save current state to history for undo/redo

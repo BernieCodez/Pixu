@@ -8,7 +8,7 @@ class PixelEditor {
     this.storageManager = window.storageManager;
 
     // Editor state
-    this.sprites = [];
+    this.sprites = []; // Initialize as empty array
     this.currentSprite = null;
     this.currentTool = null;
     this.previousTool = null;
@@ -18,16 +18,24 @@ class PixelEditor {
     this.primaryColor = [0, 0, 0, 255]; // Black
     this.secondaryColor = [255, 255, 255, 255]; // White
 
-    // Settings
-    this.settings = this.storageManager.loadSettings();
+    // Settings - will be loaded async
+    this.settings = null;
 
-    this.initialize();
+    this.initialize().catch((error) => {
+      console.error("Failed to initialize editor:", error);
+    });
   }
 
   /**
    * Initialize the editor
    */
-  initialize() {
+  /**
+   * Initialize the editor
+   */
+  /**
+   * Initialize the editor
+   */
+  async initialize() {
     // Initialize canvas manager
     this.canvasManager = new CanvasManager("main-canvas", "overlay-canvas");
 
@@ -36,14 +44,17 @@ class PixelEditor {
       this.layerManager = new LayerManager("konva-container", 16, 16);
     }
 
-    // Initialize tools
+    // Load settings BEFORE initializing tools
+    this.settings = await this.storageManager.loadSettings();
+
+    // Initialize tools (now that settings are loaded)
     this.initializeTools();
 
     // Initialize UI manager
     this.uiManager = new UIController(this);
 
-    // Load sprites from storage
-    this.loadSprites();
+    // Load sprites from storage (now async)
+    await this.loadSprites();
 
     // Set initial colors
     this.setPrimaryColor(this.hexToRgba(this.settings.primaryColor));
@@ -82,7 +93,14 @@ class PixelEditor {
   }
 
   // Apply saved tool settings
+  // Apply saved tool settings
   applyToolSettings() {
+    // Safety check - if settings not loaded yet, use defaults
+    if (!this.settings) {
+      console.warn("Settings not loaded, skipping tool settings application");
+      return;
+    }
+
     if (this.tools.brush) {
       this.tools.brush.setSize(this.settings.brushSize);
       this.tools.brush.setOpacity(this.settings.brushOpacity);
@@ -141,11 +159,15 @@ class PixelEditor {
   createNewSprite(width = 16, height = 16, name = null) {
     const spriteName = name || `Sprite ${this.sprites.length + 1}`;
     const sprite = new Sprite(width, height, spriteName);
-
+    // Set up auto-save callback
+    sprite.onChange = (s) => {
+      if (this.storageManager && typeof this.storageManager.saveSprite === 'function') {
+        this.storageManager.saveSprite(s);
+      }
+    };
     this.sprites.push(sprite);
     this.setCurrentSprite(sprite);
     this.saveSprites();
-
     this.uiManager.showNotification(
       `Created new sprite: ${spriteName}`,
       "success"
@@ -156,6 +178,14 @@ class PixelEditor {
   // Set current sprite
   setCurrentSprite(sprite) {
     this.currentSprite = sprite;
+    // Ensure auto-save callback is set
+    if (sprite) {
+      sprite.onChange = (s) => {
+        if (this.storageManager && typeof this.storageManager.saveSprite === 'function') {
+          this.storageManager.saveSprite(s);
+        }
+      };
+    }
     this.canvasManager.setSprite(sprite);
     this.updateUI();
   }
@@ -273,32 +303,57 @@ class PixelEditor {
   /**
    * Save sprites to storage
    */
-  saveSprites() {
-    const success = this.storageManager.saveSprites(this.sprites);
-    if (!success) {
+  /**
+   * Save sprites to storage
+   */
+  async saveSprites() {
+    try {
+      const success = await this.storageManager.saveSprites(this.sprites);
+      if (!success) {
+        this.uiManager.showNotification("Failed to save sprites", "error");
+      }
+      return success;
+    } catch (error) {
+      console.error("Failed to save sprites:", error);
       this.uiManager.showNotification("Failed to save sprites", "error");
+      return false;
     }
-    return success;
   }
 
   /**
    * Load sprites from storage
    */
-  loadSprites() {
-    const loadedSprites = this.storageManager.loadSprites();
-    this.sprites = loadedSprites;
+  /**
+   * Load sprites from storage
+   */
+  async loadSprites() {
+    try {
+      const loadedSprites = await this.storageManager.loadSprites();
+      this.sprites = loadedSprites || []; // Ensure it's always an array
 
-    if (this.sprites.length > 0) {
-      this.setCurrentSprite(this.sprites[0]);
+      if (this.sprites.length > 0) {
+        this.setCurrentSprite(this.sprites[0]);
+      }
+
+      return this.sprites.length;
+    } catch (error) {
+      console.error("Failed to load sprites:", error);
+      this.sprites = []; // Fallback to empty array
+      return 0;
     }
-
-    return this.sprites.length;
   }
 
   /**
    * Save settings to storage
    */
-  saveSettings() {
+  /**
+   * Save settings to storage
+   */
+  async saveSettings() {
+    if (!this.settings) {
+      this.settings = this.storageManager.getDefaultSettings();
+    }
+
     this.settings.primaryColor = this.rgbaToHex(this.primaryColor);
     this.settings.secondaryColor = this.rgbaToHex(this.secondaryColor);
 
@@ -319,7 +374,11 @@ class PixelEditor {
     this.settings.showGrid = this.canvasManager.showGrid;
     this.settings.zoomLevel = this.canvasManager.zoomLevel;
 
-    this.storageManager.saveSettings(this.settings);
+    try {
+      await this.storageManager.saveSettings(this.settings);
+    } catch (error) {
+      console.error("Failed to save settings:", error);
+    }
   }
 
   /**

@@ -68,6 +68,7 @@ function setupErrorHandling() {
 }
 
 // Setup performance monitoring
+// In the setupPerformanceMonitoring function, replace the localStorage monitoring section:
 function setupPerformanceMonitoring() {
     // Monitor memory usage (if available)
     if ('memory' in performance) {
@@ -82,12 +83,16 @@ function setupPerformanceMonitoring() {
         }, 10000); // Check every 10 seconds
     }
     
-    // Monitor local storage usage
-    setInterval(() => {
+    // Monitor IndexedDB storage usage
+    setInterval(async () => {
         if (editor && editor.storageManager) {
-            const usage = editor.storageManager.getStorageUsage();
-            if (usage.totalSize > 5 * 1024 * 1024) { // 5MB
-                console.warn('High localStorage usage:', usage.totalSizeFormatted);
+            try {
+                const usage = await editor.storageManager.getStorageUsage();
+                if (usage.totalSize > 50 * 1024 * 1024) { // 50MB
+                    console.warn('High IndexedDB usage:', usage.totalSizeFormatted);
+                }
+            } catch (error) {
+                console.warn('Could not check storage usage:', error);
             }
         }
     }, 30000); // Check every 30 seconds
