@@ -1,20 +1,66 @@
 // Canvas Manager - Handles canvas rendering and interactions
 class CanvasManager {
   // Render only the selection box overlay
+  // Modified renderSelectionBox method - always show handles
   renderSelectionBox(selection) {
     this.clearOverlay();
     if (!selection) return;
+
     const startX = selection.left * this.zoomLevel;
     const startY = selection.top * this.zoomLevel;
     const width = (selection.right - selection.left + 1) * this.zoomLevel;
     const height = (selection.bottom - selection.top + 1) * this.zoomLevel;
+
+    // Draw selection box
     this.overlayCtx.strokeStyle = "#00d4ff";
     this.overlayCtx.lineWidth = 2;
     this.overlayCtx.setLineDash([5, 5]);
     this.overlayCtx.strokeRect(startX, startY, width, height);
     this.overlayCtx.fillStyle = "rgba(0, 212, 255, 0.1)";
     this.overlayCtx.fillRect(startX, startY, width, height);
+
+    // Always draw scale handles for selections
+    this.renderScaleHandles(selection);
   }
+  // New method: Render scale handles at selection corners
+  renderScaleHandles(selection) {
+    if (!selection) return;
+
+    const handleSize = 8; // Size of the handle squares in screen pixels
+    const handles = [
+      { x: selection.left, y: selection.top, type: "nw" }, // Northwest
+      { x: selection.right, y: selection.top, type: "ne" }, // Northeast
+      { x: selection.left, y: selection.bottom, type: "sw" }, // Southwest
+      { x: selection.right, y: selection.bottom, type: "se" }, // Southeast
+    ];
+
+    this.overlayCtx.setLineDash([]); // Reset line dash
+
+    handles.forEach((handle) => {
+      const screenX = handle.x * this.zoomLevel;
+      const screenY = handle.y * this.zoomLevel;
+
+      // Draw handle background (white)
+      this.overlayCtx.fillStyle = "#ffffff";
+      this.overlayCtx.fillRect(
+        screenX - handleSize / 2,
+        screenY - handleSize / 2,
+        handleSize,
+        handleSize
+      );
+
+      // Draw handle border (blue)
+      this.overlayCtx.strokeStyle = "#00d4ff";
+      this.overlayCtx.lineWidth = 2;
+      this.overlayCtx.strokeRect(
+        screenX - handleSize / 2,
+        screenY - handleSize / 2,
+        handleSize,
+        handleSize
+      );
+    });
+  }
+
   /**
    * Debug overlay canvas visibility
    */
@@ -41,6 +87,7 @@ class CanvasManager {
   /**
    * Show a semi-transparent preview of the dragged selection
    */
+  // Modified showDraggedSelectionPreview method - also show scale handles during scaling
   showDraggedSelectionPreview(selection, clipboard) {
     this.clearOverlay();
     if (!selection || !clipboard) return;
@@ -77,6 +124,53 @@ class CanvasManager {
       clipboard.width * this.zoomLevel,
       clipboard.height * this.zoomLevel
     );
+
+    // Always show scale handles during preview (both dragging and scaling)
+    if (
+      window.editor &&
+      window.editor.currentTool &&
+      window.editor.currentTool.name === "select"
+    ) {
+      // Create temporary selection object for handles
+      const tempSelection = {
+        left: left,
+        top: top,
+        right: left + clipboard.width - 1,
+        bottom: top + clipboard.height - 1,
+      };
+      this.renderScaleHandles(tempSelection);
+    }
+  }
+
+  // New method: Check if position is over a scale handle
+  isOverScaleHandle(x, y, selection) {
+    if (!selection) return null;
+
+    const handleSize = 8;
+    const tolerance = handleSize / 2;
+
+    const handles = [
+      { x: selection.left, y: selection.top, type: "nw" },
+      { x: selection.right, y: selection.top, type: "ne" },
+      { x: selection.left, y: selection.bottom, type: "sw" },
+      { x: selection.right, y: selection.bottom, type: "se" },
+    ];
+
+    for (const handle of handles) {
+      const screenX = handle.x * this.zoomLevel;
+      const screenY = handle.y * this.zoomLevel;
+      const mouseScreenX = x * this.zoomLevel;
+      const mouseScreenY = y * this.zoomLevel;
+
+      if (
+        Math.abs(mouseScreenX - screenX) <= tolerance &&
+        Math.abs(mouseScreenY - screenY) <= tolerance
+      ) {
+        return handle.type;
+      }
+    }
+
+    return null;
   }
 
   // Show dragged selection overlay with shadow effect
@@ -719,15 +813,17 @@ class CanvasManager {
   /**
    * Render hover outline for pixel
    */
+  // Modified renderHoverOutline method - don't interfere with scale handles and scale with brush size
   renderHoverOutline() {
-    // Don't interfere with drag preview
+    // Don't interfere with drag preview or scaling
     if (
       window.editor &&
       window.editor.currentTool &&
       window.editor.currentTool.name === "select" &&
-      window.editor.currentTool.isDragging
+      (window.editor.currentTool.isDragging ||
+        window.editor.currentTool.isScaling)
     ) {
-      return; // Don't clear overlay during drag operations
+      return;
     }
 
     // Only clear hover outline, not selection overlay
@@ -740,17 +836,27 @@ class CanvasManager {
       }
       return;
     }
+
     // If selection is active, render selection first, then hover outline
     if (this.selection.active) {
       this.renderSelection();
     } else {
       this.clearOverlay();
     }
+
     const { x, y } = this.hoveredPixel;
     this.overlayCtx.save();
-    // Get tool color
+
+    // Get tool color and size
     let color = "#ff9800";
+    let toolSize = 1;
+
     if (window.editor && window.editor.currentTool) {
+      // Get tool size for brush and eraser tools
+      if (window.editor.currentTool.size !== undefined) {
+        toolSize = window.editor.currentTool.size;
+      }
+
       switch (window.editor.currentTool.name) {
         case "brush":
           color = "#222";
@@ -771,14 +877,56 @@ class CanvasManager {
           color = "#ff9800";
       }
     }
+
     this.overlayCtx.strokeStyle = color;
     this.overlayCtx.lineWidth = 2;
-    this.overlayCtx.strokeRect(
-      x * this.zoomLevel + 1,
-      y * this.zoomLevel + 1,
-      this.zoomLevel - 2,
-      this.zoomLevel - 2
-    );
+
+    // Calculate hover outline size based on tool size
+    const halfSize = Math.floor(toolSize / 2);
+    const outlineSize = toolSize * this.zoomLevel;
+    const outlineX = (x - halfSize) * this.zoomLevel;
+    const outlineY = (y - halfSize) * this.zoomLevel;
+
+    // Draw outline based on tool size - pixel-perfect circle
+    if (toolSize === 1) {
+      // Single pixel outline
+      this.overlayCtx.strokeRect(
+        x * this.zoomLevel + 1,
+        y * this.zoomLevel + 1,
+        this.zoomLevel - 2,
+        this.zoomLevel - 2
+      );
+    } else {
+      // Draw pixel-by-pixel circle outline that matches the brush pattern
+      for (let dy = -halfSize; dy <= halfSize; dy++) {
+        for (let dx = -halfSize; dx <= halfSize; dx++) {
+          const pixelX = x + dx;
+          const pixelY = y + dy;
+
+          // Check if this pixel would be affected by the brush (same logic as brush tool)
+          const distance = Math.sqrt(dx * dx + dy * dy);
+          const isOnEdge =
+            distance <= toolSize / 2 && distance > toolSize / 2 - 1;
+
+          // Only draw outline for edge pixels and within sprite bounds
+          if (
+            isOnEdge &&
+            pixelX >= 0 &&
+            pixelX < this.currentSprite.width &&
+            pixelY >= 0 &&
+            pixelY < this.currentSprite.height
+          ) {
+            this.overlayCtx.strokeRect(
+              pixelX * this.zoomLevel + 1,
+              pixelY * this.zoomLevel + 1,
+              this.zoomLevel - 2,
+              this.zoomLevel - 2
+            );
+          }
+        }
+      }
+    }
+
     this.overlayCtx.restore();
   }
 }

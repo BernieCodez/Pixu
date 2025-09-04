@@ -2,7 +2,7 @@
 class BucketTool {
   constructor(editor) {
     this.editor = editor;
-    this.name = "fill";
+    this.name = "bucket";
     this.color = [0, 0, 0, 255]; // Black
     this.opacity = 100; // Opacity percentage (0-100)
     this.tolerance = 0; // Color matching tolerance
