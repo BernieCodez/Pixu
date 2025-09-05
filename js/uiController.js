@@ -1686,6 +1686,273 @@ class UIController {
       this.activeContextMenu = null;
     }
   }
+  // Show downscale modal for large images
+  showDownscaleModal(imageData, originalWidth, originalHeight) {
+    const modal = document.getElementById("downscale-modal");
+    if (!modal) return;
+
+    // Store original image data for processing
+    this.originalImageData = imageData;
+    this.originalImageWidth = originalWidth;
+    this.originalImageHeight = originalHeight;
+
+    // Update dimensions display
+    document.getElementById(
+      "original-dimensions"
+    ).textContent = `${originalWidth}x${originalHeight}`;
+
+    // Calculate initial target size maintaining aspect ratio
+    const aspectRatio = originalWidth / originalHeight;
+    let targetWidth, targetHeight;
+
+    if (aspectRatio > 1) {
+      targetWidth = Math.min(64, originalWidth);
+      targetHeight = Math.round(targetWidth / aspectRatio);
+    } else {
+      targetHeight = Math.min(64, originalHeight);
+      targetWidth = Math.round(targetHeight * aspectRatio);
+    }
+
+    // Set initial values
+    document.getElementById("target-width").value = targetWidth;
+    document.getElementById("target-height").value = targetHeight;
+
+    // Setup preview canvases
+    this.updateDownscalePreview();
+
+    // Show modal
+    modal.style.display = "flex";
+
+    // Setup event listeners if not already done
+    this.setupDownscaleModalListeners();
+  }
+
+  setupDownscaleModalListeners() {
+    if (this.downscaleListenersSetup) return;
+    this.downscaleListenersSetup = true;
+
+    const modal = document.getElementById("downscale-modal");
+    const targetWidthInput = document.getElementById("target-width");
+    const targetHeightInput = document.getElementById("target-height");
+    const maintainAspectCheckbox = document.getElementById(
+      "maintain-aspect-downscale"
+    );
+    const cancelBtn = document.getElementById("cancel-downscale");
+    const applyBtn = document.getElementById("apply-downscale");
+    const closeBtn = document.getElementById("downscale-modal-close");
+
+    // Update preview when inputs change
+    targetWidthInput.addEventListener("input", () => {
+      if (maintainAspectCheckbox.checked) {
+        const aspectRatio = this.originalImageWidth / this.originalImageHeight;
+        const newHeight = Math.round(
+          parseInt(targetWidthInput.value) / aspectRatio
+        );
+        targetHeightInput.value = Math.min(64, Math.max(1, newHeight));
+      }
+      this.updateDownscalePreview();
+    });
+
+    targetHeightInput.addEventListener("input", () => {
+      if (maintainAspectCheckbox.checked) {
+        const aspectRatio = this.originalImageWidth / this.originalImageHeight;
+        const newWidth = Math.round(
+          parseInt(targetHeightInput.value) * aspectRatio
+        );
+        targetWidthInput.value = Math.min(64, Math.max(1, newWidth));
+      }
+      this.updateDownscalePreview();
+    });
+
+    maintainAspectCheckbox.addEventListener(
+      "change",
+      this.updateDownscalePreview.bind(this)
+    );
+
+    // Modal controls
+    cancelBtn.addEventListener("click", () => this.hideDownscaleModal());
+    closeBtn.addEventListener("click", () => this.hideDownscaleModal());
+    applyBtn.addEventListener("click", () => this.applyDownscale());
+
+    // Close on outside click
+    modal.addEventListener("click", (e) => {
+      if (e.target === modal) {
+        this.hideDownscaleModal();
+      }
+    });
+  }
+
+  updateDownscalePreview() {
+    const originalCanvas = document.getElementById("original-preview");
+    const downscaledCanvas = document.getElementById("downscaled-preview");
+    const originalSizeInfo = document.getElementById("original-size-info");
+    const downscaledSizeInfo = document.getElementById("downscaled-size-info");
+
+    if (!originalCanvas || !downscaledCanvas || !this.originalImageData) return;
+
+    const targetWidth = parseInt(document.getElementById("target-width").value);
+    const targetHeight = parseInt(
+      document.getElementById("target-height").value
+    );
+
+    // Draw original image
+    const originalCtx = originalCanvas.getContext("2d");
+    originalCtx.clearRect(0, 0, originalCanvas.width, originalCanvas.height);
+
+    // Scale original to fit preview canvas
+    const originalScale = Math.min(
+      128 / this.originalImageWidth,
+      128 / this.originalImageHeight
+    );
+    const scaledOriginalWidth = this.originalImageWidth * originalScale;
+    const scaledOriginalHeight = this.originalImageHeight * originalScale;
+    const originalOffsetX = (128 - scaledOriginalWidth) / 2;
+    const originalOffsetY = (128 - scaledOriginalHeight) / 2;
+
+    originalCtx.putImageData(this.originalImageData, 0, 0);
+    const tempCanvas = document.createElement("canvas");
+    tempCanvas.width = this.originalImageWidth;
+    tempCanvas.height = this.originalImageHeight;
+    const tempCtx = tempCanvas.getContext("2d");
+    tempCtx.putImageData(this.originalImageData, 0, 0);
+
+    originalCtx.clearRect(0, 0, originalCanvas.width, originalCanvas.height);
+    originalCtx.drawImage(
+      tempCanvas,
+      originalOffsetX,
+      originalOffsetY,
+      scaledOriginalWidth,
+      scaledOriginalHeight
+    );
+
+    // Draw downscaled version
+    const downscaledCtx = downscaledCanvas.getContext("2d");
+    downscaledCtx.clearRect(
+      0,
+      0,
+      downscaledCanvas.width,
+      downscaledCanvas.height
+    );
+
+    // Create downscaled version
+    const downscaledTempCanvas = document.createElement("canvas");
+    downscaledTempCanvas.width = targetWidth;
+    downscaledTempCanvas.height = targetHeight;
+    const downscaledTempCtx = downscaledTempCanvas.getContext("2d");
+
+    // Use smoothing for better downscale quality
+    downscaledTempCtx.imageSmoothingEnabled = true;
+    downscaledTempCtx.imageSmoothingQuality = "high";
+    downscaledTempCtx.drawImage(tempCanvas, 0, 0, targetWidth, targetHeight);
+
+    // Scale to fit preview canvas
+    const downscaledScale = Math.min(128 / targetWidth, 128 / targetHeight);
+    const scaledDownscaledWidth = targetWidth * downscaledScale;
+    const scaledDownscaledHeight = targetHeight * downscaledScale;
+    const downscaledOffsetX = (128 - scaledDownscaledWidth) / 2;
+    const downscaledOffsetY = (128 - scaledDownscaledHeight) / 2;
+
+    downscaledCtx.drawImage(
+      downscaledTempCanvas,
+      downscaledOffsetX,
+      downscaledOffsetY,
+      scaledDownscaledWidth,
+      scaledDownscaledHeight
+    );
+
+    // Update size info
+    originalSizeInfo.textContent = `${this.originalImageWidth} x ${this.originalImageHeight}`;
+    downscaledSizeInfo.textContent = `${targetWidth} x ${targetHeight}`;
+  }
+
+  hideDownscaleModal() {
+    const modal = document.getElementById("downscale-modal");
+    if (modal) {
+      modal.style.display = "none";
+    }
+    // Clean up stored data
+    this.originalImageData = null;
+    this.originalImageWidth = null;
+    this.originalImageHeight = null;
+  }
+
+  applyDownscale() {
+    const targetWidth = parseInt(document.getElementById("target-width").value);
+    const targetHeight = parseInt(
+      document.getElementById("target-height").value
+    );
+
+    if (
+      targetWidth < 1 ||
+      targetHeight < 1 ||
+      targetWidth > 64 ||
+      targetHeight > 64
+    ) {
+      this.showNotification(
+        "Invalid dimensions. Use values between 1 and 64.",
+        "error"
+      );
+      return;
+    }
+
+    // Create downscaled image data
+    const canvas = document.createElement("canvas");
+    canvas.width = this.originalImageWidth;
+    canvas.height = this.originalImageHeight;
+    const ctx = canvas.getContext("2d");
+    ctx.putImageData(this.originalImageData, 0, 0);
+
+    // Create final downscaled canvas
+    const finalCanvas = document.createElement("canvas");
+    finalCanvas.width = targetWidth;
+    finalCanvas.height = targetHeight;
+    const finalCtx = finalCanvas.getContext("2d");
+    finalCtx.imageSmoothingEnabled = true;
+    finalCtx.imageSmoothingQuality = "high";
+    finalCtx.drawImage(canvas, 0, 0, targetWidth, targetHeight);
+
+    // Get downscaled image data
+    const downscaledImageData = finalCtx.getImageData(
+      0,
+      0,
+      targetWidth,
+      targetHeight
+    );
+
+    // Create sprite from downscaled data
+    this.createSpriteFromImageData(
+      downscaledImageData,
+      targetWidth,
+      targetHeight
+    );
+
+    this.hideDownscaleModal();
+    this.showNotification(
+      `Image downscaled to ${targetWidth}x${targetHeight}`,
+      "success"
+    );
+  }
+  createSpriteFromImageData(imageData, width, height) {
+    const sprite = this.editor.createNewSprite(width, height);
+    const pixels = [];
+
+    // Initialize pixel array
+    for (let y = 0; y < height; y++) {
+      pixels[y] = [];
+      for (let x = 0; x < width; x++) {
+        const index = (y * width + x) * 4;
+        pixels[y][x] = [
+          imageData.data[index], // R
+          imageData.data[index + 1], // G
+          imageData.data[index + 2], // B
+          imageData.data[index + 3], // A
+        ];
+      }
+    }
+
+    sprite.setPixelArray(pixels);
+    this.editor.updateUI();
+  }
 
   // Show rename dialog
   showRenameDialog(sprite) {

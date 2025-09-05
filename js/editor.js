@@ -24,8 +24,27 @@ class PixelEditor {
     this.initialize().catch((error) => {
       console.error("Failed to initialize editor:", error);
     });
-  }
 
+    this.debouncedSave = this.debounce(async (sprite) => {
+      if (
+        this.storageManager &&
+        typeof this.storageManager.saveSprite === "function"
+      ) {
+        await this.storageManager.saveSprite(sprite);
+      }
+    }, 500); // Save after 500ms of inactivity
+  }
+  debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+      const later = () => {
+        clearTimeout(timeout);
+        func(...args);
+      };
+      clearTimeout(timeout);
+      timeout = setTimeout(later, wait);
+    };
+  }
   /**
    * Initialize the editor
    */
@@ -161,7 +180,10 @@ class PixelEditor {
     const sprite = new Sprite(width, height, spriteName);
     // Set up auto-save callback
     sprite.onChange = (s) => {
-      if (this.storageManager && typeof this.storageManager.saveSprite === 'function') {
+      if (
+        this.storageManager &&
+        typeof this.storageManager.saveSprite === "function"
+      ) {
         this.storageManager.saveSprite(s);
       }
     };
@@ -178,16 +200,28 @@ class PixelEditor {
   // Set current sprite
   setCurrentSprite(sprite) {
     this.currentSprite = sprite;
-    // Ensure auto-save callback is set
     if (sprite) {
-      sprite.onChange = (s) => {
-        if (this.storageManager && typeof this.storageManager.saveSprite === 'function') {
-          this.storageManager.saveSprite(s);
-        }
-      };
+      sprite.onChange = (s) => this.debouncedSave(s);
     }
     this.canvasManager.setSprite(sprite);
     this.updateUI();
+  }
+  /**
+   * Create optimized canvas setup for large sprites
+   */
+  setupLargeCanvasHandling() {
+    // Limit initial zoom for very large sprites
+    if (
+      this.currentSprite &&
+      this.currentSprite.width * this.currentSprite.height > 100000
+    ) {
+      const maxDimension = Math.max(
+        this.currentSprite.width,
+        this.currentSprite.height
+      );
+      const optimalZoom = Math.max(1, Math.floor(800 / maxDimension));
+      this.canvasManager.setZoom(optimalZoom);
+    }
   }
 
   // Duplicate sprite
@@ -384,56 +418,135 @@ class PixelEditor {
   /**
    * Import file (PNG, SVG, JSON)
    */
-  async importFile(file) {
-    try {
-      const fileType = file.type.toLowerCase();
-      const fileName = file.name.toLowerCase();
+  importFile(file) {
+    if (!file) return;
 
-      if (
-        fileType.includes("image") ||
-        fileName.endsWith(".png") ||
-        fileName.endsWith(".jpg") ||
-        fileName.endsWith(".jpeg")
-      ) {
-        // Import image file
-        const sprite = await this.canvasManager.importFromImage(file);
-        this.sprites.push(sprite);
-        this.setCurrentSprite(sprite);
-        this.saveSprites();
+    const fileType = file.type;
 
-        this.uiManager.showNotification(
-          `Imported image: ${file.name}`,
-          "success"
-        );
-      } else if (fileName.endsWith(".svg")) {
-        // Import SVG file
-        await this.importSVG(file);
-      } else if (fileName.endsWith(".json")) {
-        // Import sprite data
-        const importedSprites = await this.storageManager.importSprites(file);
-        this.sprites.push(...importedSprites);
-
-        if (importedSprites.length > 0) {
-          this.setCurrentSprite(importedSprites[0]);
-        }
-
-        this.saveSprites();
-        this.uiManager.showNotification(
-          `Imported ${importedSprites.length} sprites`,
-          "success"
-        );
-      } else {
-        throw new Error("Unsupported file format");
-      }
-    } catch (error) {
-      console.error("Import failed:", error);
-      this.uiManager.showNotification(
-        `Import failed: ${error.message}`,
-        "error"
-      );
+    if (fileType.startsWith("image/")) {
+      this.importImage(file);
+    } else if (file.name.endsWith(".json")) {
+      this.importJSON(file);
+    } else {
+      this.uiManager.showNotification("Unsupported file type", "error");
     }
   }
 
+  importJSON(file) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = JSON.parse(e.target.result);
+
+        if (data.sprites && Array.isArray(data.sprites)) {
+          // Import multiple sprites
+          data.sprites.forEach((spriteData) => {
+            if (spriteData.width > 64 || spriteData.height > 64) {
+              this.uiManager.showNotification(
+                `Skipped sprite "${spriteData.name}" - too large (${spriteData.width}x${spriteData.height})`,
+                "warning"
+              );
+              return;
+            }
+
+            const sprite = new Sprite(
+              spriteData.width,
+              spriteData.height,
+              spriteData.name || "Imported Sprite",
+              spriteData.id || Date.now() + Math.random()
+            );
+
+            if (spriteData.pixels) {
+              sprite.setPixelArray(spriteData.pixels);
+            }
+
+            this.sprites.push(sprite);
+          });
+
+          if (this.sprites.length > 0) {
+            this.setCurrentSprite(this.sprites[this.sprites.length - 1]);
+          }
+
+          this.updateUI();
+          this.uiManager.showNotification(
+            `Imported ${data.sprites.length} sprites`,
+            "success"
+          );
+        } else {
+          this.uiManager.showNotification(
+            "Invalid sprite file format",
+            "error"
+          );
+        }
+      } catch (error) {
+        console.error("Import error:", error);
+        this.uiManager.showNotification("Failed to import file", "error");
+      }
+    };
+
+    reader.readAsText(file);
+  }
+  importImage(file) {
+    const img = new Image();
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    const editor = this; // Capture 'this' reference
+
+    img.onload = () => {
+      canvas.width = img.width;
+      canvas.height = img.height;
+      ctx.drawImage(img, 0, 0);
+
+      // Check if image exceeds maximum size
+      if (img.width > 64 || img.height > 64) {
+        // Show downscale modal
+        const imageData = ctx.getImageData(0, 0, img.width, img.height);
+        editor.uiManager.showDownscaleModal(
+          imageData,
+          img.width,
+          img.height
+        );
+        return;
+      }
+
+      // Image is within limits, create sprite directly
+      const imageData = ctx.getImageData(0, 0, img.width, img.height);
+      editor.createSpriteFromImageData(imageData, img.width, img.height);
+      editor.uiManager.showNotification(
+        `Imported image: ${img.width}x${img.height}`,
+        "success"
+      );
+    };
+
+    img.onerror = () => {
+      editor.uiManager.showNotification("Failed to load image", "error");
+    };
+
+    img.src = URL.createObjectURL(file);
+  }
+
+  createSpriteFromImageData(imageData, width, height) {
+    const sprite = this.createNewSprite(width, height);
+    const pixels = [];
+
+    // Initialize pixel array
+    for (let y = 0; y < height; y++) {
+      pixels[y] = [];
+      for (let x = 0; x < width; x++) {
+        const index = (y * width + x) * 4;
+        pixels[y][x] = [
+          imageData.data[index], // R
+          imageData.data[index + 1], // G
+          imageData.data[index + 2], // B
+          imageData.data[index + 3], // A
+        ];
+      }
+    }
+
+    sprite.setPixelArray(pixels);
+    this.updateUI();
+    return sprite;
+  }
   /**
    * Import SVG file
    */

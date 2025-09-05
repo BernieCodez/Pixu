@@ -320,6 +320,9 @@ class CanvasManager {
   /**
    * Render the current sprite to canvas
    */
+  /**
+   * Render the current sprite to canvas with optimizations
+   */
   render() {
     if (!this.currentSprite) {
       this.clearCanvas();
@@ -329,18 +332,77 @@ class CanvasManager {
     // Clear canvas
     this.mainCtx.clearRect(0, 0, this.mainCanvas.width, this.mainCanvas.height);
 
-    // Render checkerboard background for transparency
-    this.renderTransparencyBackground();
-
-    // Render sprite pixels
-    this.renderSprite();
+    // For large sprites, use ImageData for better performance
+    if (this.currentSprite.width * this.currentSprite.height > 10000) {
+      this.renderLargeSprite();
+    } else {
+      // Render checkerboard background for transparency
+      this.renderTransparencyBackground();
+      // Render sprite pixels
+      this.renderSprite();
+    }
 
     // Render grid if enabled
-    if (this.showGrid) {
+    if (this.showGrid && this.zoomLevel >= 4) {
+      // Only show grid at higher zoom levels
       this.renderGrid();
     }
   }
+  /**
+   * Optimized rendering for large sprites using ImageData
+   */
+  renderLargeSprite() {
+    const imageData = this.mainCtx.createImageData(
+      this.mainCanvas.width,
+      this.mainCanvas.height
+    );
+    const data = imageData.data;
 
+    // Render checkerboard background
+    for (let canvasY = 0; canvasY < this.mainCanvas.height; canvasY++) {
+      for (let canvasX = 0; canvasX < this.mainCanvas.width; canvasX++) {
+        const spriteX = Math.floor(canvasX / this.zoomLevel);
+        const spriteY = Math.floor(canvasY / this.zoomLevel);
+        const pixelIndex = (canvasY * this.mainCanvas.width + canvasX) * 4;
+
+        // Checkerboard background
+        const isChecker = (Math.floor(spriteX) + Math.floor(spriteY)) % 2 === 1;
+        const bgColor = isChecker ? 224 : 255; // #e0e0e0 or #ffffff
+
+        if (
+          spriteX >= 0 &&
+          spriteX < this.currentSprite.width &&
+          spriteY >= 0 &&
+          spriteY < this.currentSprite.height
+        ) {
+          const [r, g, b, a] = this.currentSprite.getPixel(spriteX, spriteY);
+
+          if (a > 0) {
+            // Alpha blend with background
+            const alpha = a / 255;
+            data[pixelIndex] = r * alpha + bgColor * (1 - alpha);
+            data[pixelIndex + 1] = g * alpha + bgColor * (1 - alpha);
+            data[pixelIndex + 2] = b * alpha + bgColor * (1 - alpha);
+            data[pixelIndex + 3] = 255;
+          } else {
+            // Just background
+            data[pixelIndex] = bgColor;
+            data[pixelIndex + 1] = bgColor;
+            data[pixelIndex + 2] = bgColor;
+            data[pixelIndex + 3] = 255;
+          }
+        } else {
+          // Outside sprite bounds
+          data[pixelIndex] = bgColor;
+          data[pixelIndex + 1] = bgColor;
+          data[pixelIndex + 2] = bgColor;
+          data[pixelIndex + 3] = 255;
+        }
+      }
+    }
+
+    this.mainCtx.putImageData(imageData, 0, 0);
+  }
   /**
    * Render transparency checkerboard background
    */
@@ -367,19 +429,54 @@ class CanvasManager {
   /**
    * Render sprite pixels
    */
+  /**
+   * Optimized sprite rendering with viewport culling
+   */
   renderSprite() {
-    for (let y = 0; y < this.currentSprite.height; y++) {
-      for (let x = 0; x < this.currentSprite.width; x++) {
-        const [r, g, b, a] = this.currentSprite.getPixel(x, y);
+    // For very large sprites, only render visible pixels
+    if (
+      this.currentSprite.width * this.currentSprite.height > 50000 &&
+      this.viewport
+    ) {
+      const startX = Math.max(0, Math.floor(this.viewport.x / this.zoomLevel));
+      const endX = Math.min(
+        this.currentSprite.width,
+        Math.ceil((this.viewport.x + this.viewport.width) / this.zoomLevel)
+      );
+      const startY = Math.max(0, Math.floor(this.viewport.y / this.zoomLevel));
+      const endY = Math.min(
+        this.currentSprite.height,
+        Math.ceil((this.viewport.y + this.viewport.height) / this.zoomLevel)
+      );
 
-        if (a > 0) {
-          this.mainCtx.fillStyle = `rgba(${r}, ${g}, ${b}, ${a / 255})`;
-          this.mainCtx.fillRect(
-            x * this.zoomLevel,
-            y * this.zoomLevel,
-            this.zoomLevel,
-            this.zoomLevel
-          );
+      for (let y = startY; y < endY; y++) {
+        for (let x = startX; x < endX; x++) {
+          const [r, g, b, a] = this.currentSprite.getPixel(x, y);
+          if (a > 0) {
+            this.mainCtx.fillStyle = `rgba(${r}, ${g}, ${b}, ${a / 255})`;
+            this.mainCtx.fillRect(
+              x * this.zoomLevel,
+              y * this.zoomLevel,
+              this.zoomLevel,
+              this.zoomLevel
+            );
+          }
+        }
+      }
+    } else {
+      // Original rendering for smaller sprites
+      for (let y = 0; y < this.currentSprite.height; y++) {
+        for (let x = 0; x < this.currentSprite.width; x++) {
+          const [r, g, b, a] = this.currentSprite.getPixel(x, y);
+          if (a > 0) {
+            this.mainCtx.fillStyle = `rgba(${r}, ${g}, ${b}, ${a / 255})`;
+            this.mainCtx.fillRect(
+              x * this.zoomLevel,
+              y * this.zoomLevel,
+              this.zoomLevel,
+              this.zoomLevel
+            );
+          }
         }
       }
     }
@@ -469,6 +566,30 @@ class CanvasManager {
    */
   zoomOut() {
     this.setZoom(this.zoomLevel / 2);
+  }
+
+  /**
+   * Set viewport for large canvas optimization
+   */
+  setViewport(x, y, width, height) {
+    this.viewport = { x, y, width, height };
+  }
+
+  /**
+   * Check if a pixel is in the current viewport
+   */
+  isInViewport(x, y) {
+    if (!this.viewport) return true;
+
+    const screenX = x * this.zoomLevel;
+    const screenY = y * this.zoomLevel;
+
+    return (
+      screenX >= this.viewport.x - this.zoomLevel &&
+      screenX <= this.viewport.x + this.viewport.width + this.zoomLevel &&
+      screenY >= this.viewport.y - this.zoomLevel &&
+      screenY <= this.viewport.y + this.viewport.height + this.zoomLevel
+    );
   }
 
   /**

@@ -412,6 +412,77 @@
     </div>
 
     <!-- Modals -->
+    <!-- Add this modal to your HTML file after the existing resize-modal -->
+    <div class="modal" id="downscale-modal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Image Too Large - Downscale Required</h3>
+          <button class="modal-close" id="downscale-modal-close">
+            &times;
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="downscale-info">
+            <p>
+              The imported image is <span id="original-dimensions"></span> which
+              exceeds the maximum size of 64x64 pixels.
+            </p>
+            <p>Please choose a target size for downscaling:</p>
+          </div>
+
+          <div class="input-group">
+            <label for="target-width">Target Width:</label>
+            <input
+              type="number"
+              id="target-width"
+              min="1"
+              max="64"
+              value="32"
+            />
+          </div>
+
+          <div class="input-group">
+            <label for="target-height">Target Height:</label>
+            <input
+              type="number"
+              id="target-height"
+              min="1"
+              max="64"
+              value="32"
+            />
+          </div>
+
+          <div class="checkbox-group">
+            <label>
+              <input type="checkbox" id="maintain-aspect-downscale" checked />
+              Maintain aspect ratio
+            </label>
+          </div>
+
+          <div class="downscale-preview-container">
+            <div class="preview-section">
+              <h4>Original</h4>
+              <canvas id="original-preview" width="128" height="128"></canvas>
+              <div id="original-size-info"></div>
+            </div>
+            <div class="preview-section">
+              <h4>Downscaled Preview</h4>
+              <canvas id="downscaled-preview" width="128" height="128"></canvas>
+              <div id="downscaled-size-info"></div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" id="cancel-downscale">
+            Cancel
+          </button>
+          <button class="btn btn-primary" id="apply-downscale">
+            Create Sprite
+          </button>
+        </div>
+      </div>
+    </div>
+
     <div class="modal" id="resize-modal">
       <div class="modal-content">
         <div class="modal-header">
