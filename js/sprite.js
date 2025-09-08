@@ -1,6 +1,6 @@
 // Sprite Class - Represents a pixel art sprite
 class Sprite {
-  constructor(width, height, name = "Untitled", id = null) {
+  constructor(width, height, name = "Untitled", id = null, layers = null) {
     this.id = id || Date.now() + Math.random();
     this.name = name;
     this.width = width;
@@ -8,22 +8,78 @@ class Sprite {
     this.createdAt = new Date().toISOString();
     this.modifiedAt = new Date().toISOString();
 
-    // Use Uint8Array for better memory efficiency on large images
-    if (width * height > 50000) {
-      this.pixels = new Uint8Array(width * height * 4);
-      this.useTypedArray = true;
+    // Layers support: if layers provided, use them, else create one default layer
+    if (Array.isArray(layers) && layers.length > 0) {
+      this.layers = layers.map((layer, idx) => this._initLayer(layer, idx));
     } else {
-      this.pixels = this.createEmptyPixelArray();
-      this.useTypedArray = false;
+      this.layers = [this._createDefaultLayer()];
     }
+
+    // For backward compatibility, keep pixels as reference to first layer
+    this.pixels = this.layers[0].pixels;
+    this.useTypedArray = this.layers[0].useTypedArray;
 
     // Optimized history for large sprites
     this.history = [];
     this.historyIndex = -1;
-    this.maxHistorySize = width * height > 100000 ? 10 : 50; // Fewer history states for large sprites
+    this.maxHistorySize = width * height > 100000 ? 10 : 50;
 
     this.onChange = null;
     this.saveToHistory();
+  }
+
+  // Helper to initialize a layer from raw data or object
+  _initLayer(layer, idx) {
+    if (layer && typeof layer === "object" && layer.pixels) {
+      // Layer object
+      const useTypedArray =
+        layer.useTypedArray || this.width * this.height > 50000;
+      let pixels;
+      if (useTypedArray && layer.pixels instanceof Uint8Array) {
+        pixels = new Uint8Array(layer.pixels);
+      } else if (useTypedArray && Array.isArray(layer.pixels)) {
+        pixels = new Uint8Array(layer.pixels);
+      } else {
+        pixels = Array.isArray(layer.pixels)
+          ? layer.pixels.map((row) => row.map((pixel) => [...pixel]))
+          : this.createEmptyPixelArray();
+      }
+      return {
+        name: layer.name || `Layer ${idx + 1}`,
+        visible: layer.visible !== false,
+        opacity: typeof layer.opacity === "number" ? layer.opacity : 1,
+        pixels,
+        useTypedArray,
+      };
+    } else {
+      // Raw pixel array
+      return {
+        name: `Layer ${idx + 1}`,
+        visible: true,
+        opacity: 1,
+        pixels: Array.isArray(layer)
+          ? layer.map((row) => row.map((pixel) => [...pixel]))
+          : this.createEmptyPixelArray(),
+        useTypedArray: false,
+      };
+    }
+  }
+
+  _createDefaultLayer() {
+    const useTypedArray = this.width * this.height > 50000;
+    let pixels;
+    if (useTypedArray) {
+      pixels = new Uint8Array(this.width * this.height * 4);
+    } else {
+      pixels = this.createEmptyPixelArray();
+    }
+    return {
+      name: "Layer 1",
+      visible: true,
+      opacity: 1,
+      pixels,
+      useTypedArray,
+    };
   }
 
   createEmptyPixelArray() {
@@ -42,45 +98,170 @@ class Sprite {
   }
 
   // Get pixel at specific coordinates
+  // Get composited pixel at (x, y) from all visible layers
   getPixel(x, y) {
     if (x < 0 || x >= this.width || y < 0 || y >= this.height) {
       return [0, 0, 0, 0];
     }
-
-    if (this.useTypedArray) {
-      const index = (y * this.width + x) * 4;
-      return [
-        this.pixels[index],
-        this.pixels[index + 1],
-        this.pixels[index + 2],
-        this.pixels[index + 3],
-      ];
+    // Composite visible layers (simple alpha over)
+    let result = [0, 0, 0, 0];
+    for (const layer of this.layers) {
+      if (!layer.visible) continue;
+      let pixel;
+      if (layer.useTypedArray) {
+        const index = (y * this.width + x) * 4;
+        pixel = [
+          layer.pixels[index],
+          layer.pixels[index + 1],
+          layer.pixels[index + 2],
+          layer.pixels[index + 3],
+        ];
+      } else {
+        pixel = [...layer.pixels[y][x]];
+      }
+      // Alpha compositing
+      if (pixel[3] === 0) continue;
+      if (result[3] === 0) {
+        result = pixel.slice();
+      } else {
+        // Simple alpha over
+        const alpha = (pixel[3] / 255) * layer.opacity;
+        const outAlpha = result[3] / 255;
+        const newAlpha = alpha + outAlpha * (1 - alpha);
+        if (newAlpha > 0) {
+          result[0] = Math.round(
+            (pixel[0] * alpha + result[0] * outAlpha * (1 - alpha)) / newAlpha
+          );
+          result[1] = Math.round(
+            (pixel[1] * alpha + result[1] * outAlpha * (1 - alpha)) / newAlpha
+          );
+          result[2] = Math.round(
+            (pixel[2] * alpha + result[2] * outAlpha * (1 - alpha)) / newAlpha
+          );
+          result[3] = Math.round(newAlpha * 255);
+        }
+      }
+    }
+    return result;
+  }
+  // Add this method to load from LayerManager
+  loadFromLayerManager(layerManager) {
+    if (
+      layerManager.width !== this.width ||
+      layerManager.height !== this.height
+    ) {
+      this.resize(layerManager.width, layerManager.height, false);
     }
 
-    return [...this.pixels[y][x]];
+    // Convert LayerManager data to Sprite layer format
+    this.layers = layerManager.layers.map((layer, idx) => ({
+      name: layer.name,
+      visible: layer.visible,
+      opacity: layer.opacity,
+      pixels: layer.pixels.map((row) => row.map((pixel) => [...pixel])),
+      useTypedArray: false,
+    }));
+
+    // Update backward compatibility reference
+    this.pixels = this.layers[0].pixels;
+    this.useTypedArray = this.layers[0].useTypedArray;
+    this.modifiedAt = new Date().toISOString();
+
+    if (typeof this.onChange === "function") {
+      this.onChange(this);
+    }
+  }
+  // Add this method to integrate with LayerManager
+  loadFromLayerManager(layerManager) {
+    if (
+      layerManager.width !== this.width ||
+      layerManager.height !== this.height
+    ) {
+      this.resize(layerManager.width, layerManager.height, false);
+    }
+
+    // Convert LayerManager data to Sprite layer format
+    this.layers = layerManager.layers.map((layer, idx) => ({
+      name: layer.name,
+      visible: layer.visible,
+      opacity: layer.opacity,
+      pixels: layer.pixels.map((row) => row.map((pixel) => [...pixel])),
+      useTypedArray: false,
+    }));
+
+    // Update backward compatibility reference
+    this.pixels = this.layers[0].pixels;
+    this.useTypedArray = this.layers[0].useTypedArray;
+    this.modifiedAt = new Date().toISOString();
+
+    if (typeof this.onChange === "function") {
+      this.onChange(this);
+    }
   }
 
+  // Add this method to export to LayerManager
+  toLayerManager() {
+    const layerManager = new LayerManager(this.width, this.height);
+
+    // Clear default layer
+    layerManager.layers = [];
+
+    // Convert sprite layers to LayerManager format
+    layerManager.layers = this.layers.map((layer) => {
+      let pixels;
+      if (layer.useTypedArray) {
+        // Convert TypedArray back to 2D array
+        pixels = [];
+        for (let y = 0; y < this.height; y++) {
+          pixels[y] = [];
+          for (let x = 0; x < this.width; x++) {
+            const index = (y * this.width + x) * 4;
+            pixels[y][x] = [
+              layer.pixels[index],
+              layer.pixels[index + 1],
+              layer.pixels[index + 2],
+              layer.pixels[index + 3],
+            ];
+          }
+        }
+      } else {
+        pixels = layer.pixels.map((row) => row.map((pixel) => [...pixel]));
+      }
+
+      return {
+        id: Date.now() + Math.random(),
+        name: layer.name,
+        visible: layer.visible !== false,
+        opacity: typeof layer.opacity === "number" ? layer.opacity : 1,
+        pixels: pixels,
+        locked: false,
+        blendMode: "normal",
+      };
+    });
+
+    layerManager.activeLayerIndex = 0;
+    return layerManager;
+  }
   // Set pixel at specific coordinates
-  setPixel(x, y, color) {
+  // Set pixel in a specific layer (default: first layer)
+  setPixel(x, y, color, layerIndex = 0) {
     if (x < 0 || x >= this.width || y < 0 || y >= this.height) {
       return false;
     }
-
     if (!Array.isArray(color) || color.length !== 4) {
       console.error("Invalid color format:", color);
       return false;
     }
-
-    if (this.useTypedArray) {
+    const layer = this.layers[layerIndex] || this.layers[0];
+    if (layer.useTypedArray) {
       const index = (y * this.width + x) * 4;
-      this.pixels[index] = color[0];
-      this.pixels[index + 1] = color[1];
-      this.pixels[index + 2] = color[2];
-      this.pixels[index + 3] = color[3];
+      layer.pixels[index] = color[0];
+      layer.pixels[index + 1] = color[1];
+      layer.pixels[index + 2] = color[2];
+      layer.pixels[index + 3] = color[3];
     } else {
-      this.pixels[y][x] = [...color];
+      layer.pixels[y][x] = [...color];
     }
-
     this.modifiedAt = new Date().toISOString();
     if (typeof this.onChange === "function") {
       this.onChange(this);
@@ -89,79 +270,98 @@ class Sprite {
   }
 
   // Batch pixel updates for better performance
-  setPixels(pixelUpdates) {
+  // Batch pixel updates for a layer
+  setPixels(pixelUpdates, layerIndex = 0) {
     if (!Array.isArray(pixelUpdates)) return false;
-
     const startTime = performance.now();
     let updateCount = 0;
-
     for (const update of pixelUpdates) {
       const { x, y, color } = update;
-      if (this.setPixel(x, y, color)) {
+      if (this.setPixel(x, y, color, layerIndex)) {
         updateCount++;
       }
-
-      // Prevent blocking for too long
       if (performance.now() - startTime > 16) {
-        // 16ms = 60fps
         break;
       }
     }
-
     return updateCount;
   }
 
   // Get the entire pixel array
   // Optimized pixel array access
+  // Get composited pixel array (all layers)
   getPixelArray() {
-    if (this.useTypedArray) {
-      const result = [];
-      for (let y = 0; y < this.height; y++) {
-        result[y] = [];
-        for (let x = 0; x < this.width; x++) {
-          const index = (y * this.width + x) * 4;
-          result[y][x] = [
-            this.pixels[index],
-            this.pixels[index + 1],
-            this.pixels[index + 2],
-            this.pixels[index + 3],
-          ];
-        }
+    const result = [];
+    for (let y = 0; y < this.height; y++) {
+      result[y] = [];
+      for (let x = 0; x < this.width; x++) {
+        result[y][x] = this.getPixel(x, y);
       }
-      return result;
     }
+    return result;
+  }
 
-    return this.pixels.map((row) => row.map((pixel) => [...pixel]));
+  // Get raw pixel arrays for all layers (for saving)
+  getLayersData() {
+    return this.layers.map((layer) => {
+      let pixels;
+      if (layer.useTypedArray) {
+        pixels = Array.from(layer.pixels);
+      } else {
+        pixels = layer.pixels.map((row) => row.map((pixel) => [...pixel]));
+      }
+      return {
+        name: layer.name,
+        visible: layer.visible,
+        opacity: layer.opacity,
+        pixels,
+        useTypedArray: layer.useTypedArray,
+      };
+    });
+  }
+
+  // Set layers from raw data
+  setLayersData(layersData) {
+    if (!Array.isArray(layersData) || layersData.length === 0) return false;
+    this.layers = layersData.map((layer, idx) => this._initLayer(layer, idx));
+    this.pixels = this.layers[0].pixels;
+    this.useTypedArray = this.layers[0].useTypedArray;
+    this.modifiedAt = new Date().toISOString();
+    if (typeof this.onChange === "function") {
+      this.onChange(this);
+    }
+    return true;
   }
 
   // Optimized pixel array setting
+  // Set first layer's pixels (for backward compatibility)
   setPixelArray(pixels) {
     if (!Array.isArray(pixels) || pixels.length !== this.height) {
       console.error("Invalid pixel array dimensions");
       return false;
     }
-
-    if (this.useTypedArray) {
+    const layer = this.layers[0];
+    if (layer.useTypedArray) {
       let index = 0;
       for (let y = 0; y < this.height; y++) {
         if (!Array.isArray(pixels[y]) || pixels[y].length !== this.width) {
           console.error("Invalid pixel array row at", y);
           return false;
         }
-
         for (let x = 0; x < this.width; x++) {
           const pixel = pixels[y][x];
-          this.pixels[index] = pixel[0];
-          this.pixels[index + 1] = pixel[1];
-          this.pixels[index + 2] = pixel[2];
-          this.pixels[index + 3] = pixel[3];
+          layer.pixels[index] = pixel[0];
+          layer.pixels[index + 1] = pixel[1];
+          layer.pixels[index + 2] = pixel[2];
+          layer.pixels[index + 3] = pixel[3];
           index += 4;
         }
       }
     } else {
-      this.pixels = pixels.map((row) => row.map((pixel) => [...pixel]));
+      layer.pixels = pixels.map((row) => row.map((pixel) => [...pixel]));
     }
-
+    this.pixels = layer.pixels;
+    this.useTypedArray = layer.useTypedArray;
     this.modifiedAt = new Date().toISOString();
     if (typeof this.onChange === "function") {
       this.onChange(this);
@@ -416,28 +616,21 @@ class Sprite {
   /**
    * Convert sprite to ImageData for canvas rendering
    */
+  // Composite all layers to ImageData
   toImageData() {
     const imageData = new ImageData(this.width, this.height);
     const data = imageData.data;
-
-    if (this.useTypedArray) {
-      // Direct copy for typed arrays
-      data.set(this.pixels);
-    } else {
-      // Convert 2D array to flat array
-      let index = 0;
-      for (let y = 0; y < this.height; y++) {
-        for (let x = 0; x < this.width; x++) {
-          const [r, g, b, a] = this.pixels[y][x];
-          data[index] = r;
-          data[index + 1] = g;
-          data[index + 2] = b;
-          data[index + 3] = a;
-          index += 4;
-        }
+    let index = 0;
+    for (let y = 0; y < this.height; y++) {
+      for (let x = 0; x < this.width; x++) {
+        const [r, g, b, a] = this.getPixel(x, y);
+        data[index] = r;
+        data[index + 1] = g;
+        data[index + 2] = b;
+        data[index + 3] = a;
+        index += 4;
       }
     }
-
     return imageData;
   }
 
@@ -446,15 +639,15 @@ class Sprite {
    */
   static fromImageData(imageData, name = "Imported Sprite") {
     const sprite = new Sprite(imageData.width, imageData.height, name);
-
-    if (sprite.useTypedArray) {
-      sprite.pixels.set(imageData.data);
+    const layer = sprite.layers[0];
+    if (layer.useTypedArray) {
+      layer.pixels.set(imageData.data);
     } else {
       const data = imageData.data;
       let index = 0;
       for (let y = 0; y < imageData.height; y++) {
         for (let x = 0; x < imageData.width; x++) {
-          sprite.pixels[y][x] = [
+          layer.pixels[y][x] = [
             data[index],
             data[index + 1],
             data[index + 2],
@@ -464,7 +657,8 @@ class Sprite {
         }
       }
     }
-
+    sprite.pixels = layer.pixels;
+    sprite.useTypedArray = layer.useTypedArray;
     sprite.saveToHistory();
     return sprite;
   }
@@ -475,21 +669,16 @@ class Sprite {
   toSVG() {
     let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${this.width}" height="${this.height}" viewBox="0 0 ${this.width} ${this.height}" style="image-rendering: pixelated;">`;
     svg += '<g shape-rendering="crispEdges">';
-
     let hasVisiblePixels = false;
     for (let y = 0; y < this.height; y++) {
       for (let x = 0; x < this.width; x++) {
-        const [r, g, b, a] = this.pixels[y][x];
-
-        // Only include non-transparent pixels
+        const [r, g, b, a] = this.getPixel(x, y);
         if (a > 0) {
           hasVisiblePixels = true;
           if (a === 255) {
-            // Fully opaque pixels
             const color = `rgb(${r},${g},${b})`;
             svg += `<rect x="${x}" y="${y}" width="1" height="1" fill="${color}"/>`;
           } else {
-            // Semi-transparent pixels
             const opacity = (a / 255).toFixed(3);
             const color = `rgba(${r},${g},${b},${opacity})`;
             svg += `<rect x="${x}" y="${y}" width="1" height="1" fill="${color}"/>`;
@@ -497,12 +686,9 @@ class Sprite {
         }
       }
     }
-
-    // If no visible pixels, add a transparent pixel to ensure valid SVG
     if (!hasVisiblePixels) {
       svg += '<rect x="0" y="0" width="1" height="1" fill="rgba(0,0,0,0)"/>';
     }
-
     svg += "</g></svg>";
     return svg;
   }
@@ -514,11 +700,9 @@ class Sprite {
     let transparentPixels = 0;
     let opaquePixels = 0;
     const colorCounts = new Map();
-
     for (let y = 0; y < this.height; y++) {
       for (let x = 0; x < this.width; x++) {
-        const [r, g, b, a] = this.pixels[y][x];
-
+        const [r, g, b, a] = this.getPixel(x, y);
         if (a === 0) {
           transparentPixels++;
         } else {
@@ -528,7 +712,6 @@ class Sprite {
         }
       }
     }
-
     return {
       width: this.width,
       height: this.height,
@@ -539,6 +722,7 @@ class Sprite {
       colorCounts: Object.fromEntries(colorCounts),
       createdAt: this.createdAt,
       modifiedAt: this.modifiedAt,
+      layers: this.layers.length,
     };
   }
 }

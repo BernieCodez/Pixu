@@ -11,28 +11,24 @@ class BrushTool {
 
     // Handle mouse down event
     onMouseDown(x, y, event) {
-        if (!this.editor.currentSprite) return;
-        
+        if (!this.editor.layerManager) return;
         this.isDrawing = true;
         this.drawPixel(x, y);
     }
 
     // Handle mouse drag event
     onMouseDrag(x, y, lastX, lastY, event) {
-        if (!this.editor.currentSprite || !this.isDrawing) return;
-        
+        if (!this.editor.layerManager || !this.isDrawing) return;
         // Draw line from last position to current position
         this.drawLine(lastX, lastY, x, y);
     }
 
     // Handle mouse up event
     onMouseUp(x, y, event) {
-        if (!this.editor.currentSprite || !this.isDrawing) return;
-        
+        if (!this.editor.layerManager || !this.isDrawing) return;
         this.isDrawing = false;
-        
         // Save to history after brush stroke is complete
-        this.editor.currentSprite.saveToHistory();
+        // TODO: Implement layerManager history if needed
         this.editor.updateUI();
     }
 
@@ -45,48 +41,42 @@ class BrushTool {
     onMouseLeave(event) {
         if (this.isDrawing) {
             this.isDrawing = false;
-            this.editor.currentSprite.saveToHistory();
+            // TODO: Implement layerManager history if needed
             this.editor.updateUI();
         }
     }
 
     // Draw a single pixel or brush stroke at position
     drawPixel(x, y) {
-        if (!this.editor.currentSprite) return;
-        
-        const sprite = this.editor.currentSprite;
+        if (!this.editor.layerManager) return;
+        const layerManager = this.editor.layerManager;
         const halfSize = Math.floor(this.size / 2);
-        
         // Apply brush color with opacity
         const color = [...this.color];
         color[3] = Math.round((color[3] * this.opacity) / 100);
-        
         // Draw brush pattern
         for (let dy = -halfSize; dy <= halfSize; dy++) {
             for (let dx = -halfSize; dx <= halfSize; dx++) {
                 const pixelX = x + dx;
                 const pixelY = y + dy;
-                
-                // Check if pixel is within sprite bounds
-                if (pixelX >= 0 && pixelX < sprite.width && pixelY >= 0 && pixelY < sprite.height) {
+                // Check if pixel is within layer bounds
+                if (pixelX >= 0 && pixelX < layerManager.width && pixelY >= 0 && pixelY < layerManager.height) {
                     // For round brushes, check distance
                     if (this.size > 1) {
                         const distance = Math.sqrt(dx * dx + dy * dy);
                         if (distance > this.size / 2) continue;
                     }
-                    
                     // Blend with existing pixel if opacity < 100%
                     if (this.opacity < 100) {
-                        const existingPixel = sprite.getPixel(pixelX, pixelY);
+                        const existingPixel = layerManager.getPixel(pixelX, pixelY);
                         const blendedColor = this.blendColors(existingPixel, color);
-                        sprite.setPixel(pixelX, pixelY, blendedColor);
+                        layerManager.setPixel(pixelX, pixelY, blendedColor);
                     } else {
-                        sprite.setPixel(pixelX, pixelY, color);
+                        layerManager.setPixel(pixelX, pixelY, color);
                     }
                 }
             }
         }
-        
         // Trigger canvas redraw
         this.editor.canvasManager.render();
     }

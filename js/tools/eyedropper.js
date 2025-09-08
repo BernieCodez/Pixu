@@ -42,12 +42,16 @@ class EyedropperTool {
         
         const sprite = this.editor.currentSprite;
         
-        // Check bounds
-        if (x < 0 || x >= sprite.width || y < 0 || y >= sprite.height) {
-            return;
-        }
-        
-        const pickedColor = sprite.getPixel(x, y);
+            // Layer support: use LayerManager composite pixel for picking
+            const layerManager = this.editor.layerManager;
+            if (!layerManager) return;
+            const width = layerManager.width;
+            const height = layerManager.height;
+            if (x < 0 || x >= width || y < 0 || y >= height) {
+                return;
+            }
+            // Pick composite pixel (visible result)
+            const pickedColor = layerManager.getCompositePixel(x, y);
         
         // Fix the primary/secondary pick logic
         const isPrimaryPick = !event.shiftKey && event.button !== 2; // Left click without shift and not right click
@@ -132,22 +136,18 @@ class EyedropperTool {
         }
     }
 
-    // Show color preview at cursor position
+    // Show color preview at cursor position (use LayerManager composite)
     showColorPreview(x, y) {
-        if (!this.editor.currentSprite) return;
-        
-        const sprite = this.editor.currentSprite;
-        
-        // Check bounds
-        if (x < 0 || x >= sprite.width || y < 0 || y >= sprite.height) {
+        const layerManager = this.editor.layerManager;
+        if (!layerManager) return;
+        const width = layerManager.width;
+        const height = layerManager.height;
+        if (x < 0 || x >= width || y < 0 || y >= height) {
             this.hideColorPreview();
             return;
         }
-        
-        const color = sprite.getPixel(x, y);
+        const color = layerManager.getCompositePixel(x, y);
         const hexColor = this.rgbaToHex(color);
-        
-        // Create or update preview element
         let preview = document.getElementById('eyedropper-preview');
         if (!preview) {
             preview = document.createElement('div');
@@ -155,29 +155,23 @@ class EyedropperTool {
             preview.className = 'eyedropper-preview';
             document.body.appendChild(preview);
         }
-        
-        // Position preview near cursor - fix positioning
         let screenPos;
         if (this.editor.canvasManager && this.editor.canvasManager.spriteToScreen) {
             screenPos = this.editor.canvasManager.spriteToScreen(x, y);
         } else {
-            // Fallback positioning
             const canvas = this.editor.canvasManager?.mainCanvas || document.querySelector('canvas');
             if (canvas) {
                 const rect = canvas.getBoundingClientRect();
-                screenPos = { x: rect.left + x * 10, y: rect.top + y * 10 }; // Assume 10px scale as fallback
+                screenPos = { x: rect.left + x * 10, y: rect.top + y * 10 };
             } else {
                 screenPos = { x: 100, y: 100 };
             }
         }
-        
         preview.style.left = `${screenPos.x + 20}px`;
         preview.style.top = `${screenPos.y - 30}px`;
         preview.style.backgroundColor = hexColor;
         preview.textContent = hexColor.toUpperCase();
         preview.style.display = 'block';
-        
-        // Add transparency indication
         const alpha = Array.isArray(color) ? color[3] : (color.a ?? 255);
         if (alpha === 0) {
             preview.textContent = 'Transparent';
@@ -317,20 +311,17 @@ class EyedropperTool {
         return luminance > 0.5 ? '#000000' : '#ffffff';
     }
 
-    // Get color information at position
+    // Get color information at position (use LayerManager composite)
     getColorInfo(x, y) {
-        if (!this.editor.currentSprite) return null;
-        
-        const sprite = this.editor.currentSprite;
-        
-        // Check bounds
-        if (x < 0 || x >= sprite.width || y < 0 || y >= sprite.height) {
+        const layerManager = this.editor.layerManager;
+        if (!layerManager) return null;
+        const width = layerManager.width;
+        const height = layerManager.height;
+        if (x < 0 || x >= width || y < 0 || y >= height) {
             return null;
         }
-        
-        const color = sprite.getPixel(x, y);
+        const color = layerManager.getCompositePixel(x, y);
         let r, g, b, a;
-        
         if (Array.isArray(color)) {
             [r, g, b, a] = color;
         } else if (color && typeof color === 'object') {
@@ -341,7 +332,6 @@ class EyedropperTool {
         } else {
             return null;
         }
-        
         return {
             rgba: [r, g, b, a],
             hex: this.rgbaToHex([r, g, b, a]),

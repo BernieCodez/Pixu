@@ -12,16 +12,13 @@ class BucketTool {
 
   // Handle mouse down event
   onMouseDown(x, y, event) {
-    if (!this.editor.currentSprite) return;
-
+    if (!this.editor.layerManager) return;
     if (this.fillAll) {
       this.fillAllPixels(x, y);
     } else {
       this.floodFill(x, y);
     }
-
-    // Save to history after fill operation
-    this.editor.currentSprite.saveToHistory();
+    // TODO: Implement layerManager history if needed
     this.editor.updateUI();
   }
 
@@ -44,88 +41,70 @@ class BucketTool {
 
   // Traditional flood fill algorithm - FIXED VERSION
   floodFill(startX, startY) {
-    if (!this.editor.currentSprite) return;
-    const sprite = this.editor.currentSprite;
-    const targetColor = sprite.getPixel(startX, startY);
-
-    // Only skip if we're not erasing (opacity > 0) and colors match
+    if (!this.editor.layerManager) return;
+    const layerManager = this.editor.layerManager;
+    const targetColor = layerManager.getPixel(startX, startY);
     if (this.opacity > 0 && this.colorsEqual(targetColor, this.color)) return;
-
     const stack = [[startX, startY]];
     const visited = new Set();
-    // Prepare fill color with opacity
     const fillColor = [...this.color];
     fillColor[3] = Math.round((fillColor[3] * this.opacity) / 100);
     while (stack.length > 0) {
       const [x, y] = stack.pop();
       const key = `${x},${y}`;
-      // Skip if already visited or out of bounds
       if (
         visited.has(key) ||
         x < 0 ||
-        x >= sprite.width ||
+        x >= layerManager.width ||
         y < 0 ||
-        y >= sprite.height
+        y >= layerManager.height
       ) {
         continue;
       }
-      const currentColor = sprite.getPixel(x, y);
-      // Skip if color doesn't match target within tolerance
+      const currentColor = layerManager.getPixel(x, y);
       if (!this.colorMatches(currentColor, targetColor)) {
         continue;
       }
-      // Fill this pixel (blend if opacity < 100)
       visited.add(key);
       if (this.opacity === 0) {
-        // Erase pixel (set alpha to 0)
-        sprite.setPixel(x, y, [0, 0, 0, 0]);
+        layerManager.setPixel(x, y, [0, 0, 0, 0]);
       } else if (this.opacity < 100) {
         const blendedColor = this.blendColors(currentColor, fillColor);
-        sprite.setPixel(x, y, blendedColor);
+        layerManager.setPixel(x, y, blendedColor);
       } else {
-        sprite.setPixel(x, y, fillColor);
+        layerManager.setPixel(x, y, fillColor);
       }
-      // Add neighboring pixels to stack
       stack.push([x + 1, y]);
       stack.push([x - 1, y]);
       stack.push([x, y + 1]);
       stack.push([x, y - 1]);
     }
-    // Trigger canvas redraw
     this.editor.canvasManager.render();
   }
 
   // Fill all pixels of matching color regardless of connectivity - FIXED VERSION
   fillAllPixels(startX, startY) {
-    if (!this.editor.currentSprite) return;
-    const sprite = this.editor.currentSprite;
-    const targetColor = sprite.getPixel(startX, startY);
-
-    // Only skip if we're not erasing (opacity > 0) and colors match
+    if (!this.editor.layerManager) return;
+    const layerManager = this.editor.layerManager;
+    const targetColor = layerManager.getPixel(startX, startY);
     if (this.opacity > 0 && this.colorsEqual(targetColor, this.color)) return;
-
-    // Prepare fill color with opacity
     const fillColor = [...this.color];
     fillColor[3] = Math.round((fillColor[3] * this.opacity) / 100);
-    // Iterate through all pixels in the sprite
-    for (let y = 0; y < sprite.height; y++) {
-      for (let x = 0; x < sprite.width; x++) {
-        const currentColor = sprite.getPixel(x, y);
-        // Fill pixel if color matches target within tolerance
+    for (let y = 0; y < layerManager.height; y++) {
+      for (let x = 0; x < layerManager.width; x++) {
+        const currentColor = layerManager.getPixel(x, y);
         if (this.colorMatches(currentColor, targetColor)) {
           if (this.opacity === 0) {
-            // Erase pixel (set alpha to 0)
-            sprite.setPixel(x, y, [0, 0, 0, 0]);
+            layerManager.setPixel(x, y, [0, 0, 0, 0]);
           } else if (this.opacity < 100) {
             const blendedColor = this.blendColors(currentColor, fillColor);
-            sprite.setPixel(x, y, blendedColor);
+            layerManager.setPixel(x, y, blendedColor);
           } else {
-            sprite.setPixel(x, y, fillColor);
+            layerManager.setPixel(x, y, fillColor);
           }
         }
       }
     }
-    // Trigger canvas redraw
     this.editor.canvasManager.render();
   }
 

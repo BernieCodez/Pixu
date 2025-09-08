@@ -242,61 +242,76 @@ class UIController {
 
     layersList.innerHTML = "";
 
-    if (this.editor.layerManager) {
+    // CRITICAL FIX: Check if layerManager exists and has layers
+    if (
+      this.editor.layerManager &&
+      this.editor.layerManager.layers &&
+      this.editor.layerManager.layers.length > 0
+    ) {
       const layers = this.editor.layerManager.layers;
       const activeIndex = this.editor.layerManager.activeLayerIndex;
 
       // Add layers in reverse order (top to bottom in UI)
       for (let i = layers.length - 1; i >= 0; i--) {
         const layer = layers[i];
+
+        // SAFETY CHECK: Ensure layer exists
+        if (!layer) continue;
+
         const layerItem = document.createElement("div");
         layerItem.className = `layer-item ${i === activeIndex ? "active" : ""}`;
         layerItem.setAttribute("draggable", "true");
         layerItem.dataset.index = i;
         layerItem.style.cssText = `
-          display: flex;
-          align-items: center;
-          padding: 8px 12px;
-          margin-bottom: 4px;
-          background: ${
-            i === activeIndex
-              ? "rgba(74, 144, 226, 0.2)"
-              : "rgba(255, 255, 255, 0.05)"
-          };
-          border: 1px solid ${i === activeIndex ? "#4a90e2" : "transparent"};
-          border-radius: 6px;
-          cursor: pointer;
-          transition: all 0.15s ease;
-        `;
+        display: flex;
+        align-items: center;
+        padding: 8px 12px;
+        margin-bottom: 4px;
+        background: ${
+          i === activeIndex
+            ? "rgba(74, 144, 226, 0.2)"
+            : "rgba(255, 255, 255, 0.05)"
+        };
+        border: 1px solid ${i === activeIndex ? "#4a90e2" : "transparent"};
+        border-radius: 6px;
+        cursor: pointer;
+        transition: all 0.15s ease;
+      `;
 
         layerItem.innerHTML = `
-          <span class="drag-handle" title="Drag to reorder" style="cursor: grab; margin-right: 8px; color: #aaa;">
-            <i class="fas fa-grip-vertical"></i>
-          </span>
-          <span class="layer-name" style="flex: 1; color: white;">${
-            layer.name
-          }</span>
-          <input type="range" class="layer-opacity-slider" min="0" max="100" value="${Math.round(
-            layer.opacity * 100
-          )}" title="Opacity" style="width: 70px; margin-left: 8px;" />
-          <span class="layer-opacity-value" style="font-size: 12px; color: #999; margin-left: 4px;">${Math.round(
-            layer.opacity * 100
-          )}%</span>
-          <button class="btn btn-sm layer-visibility" title="Toggle Visibility" style="margin-left: 8px;">
-            <i class="fas ${layer.visible ? "fa-eye" : "fa-eye-slash"}"></i>
-          </button>
-        `;
+        <span class="drag-handle" title="Drag to reorder" style="cursor: grab; margin-right: 8px; color: #aaa;">
+          <i class="fas fa-grip-vertical"></i>
+        </span>
+        <span class="layer-name" style="flex: 1; color: white;">${
+          layer.name || `Layer ${i + 1}`
+        }</span>
+        <input type="range" class="layer-opacity-slider" min="0" max="100" value="${Math.round(
+          (layer.opacity || 1) * 100
+        )}" title="Opacity" style="width: 70px; margin-left: 8px;" />
+        <span class="layer-opacity-value" style="font-size: 12px; color: #999; margin-left: 4px;">${Math.round(
+          (layer.opacity || 1) * 100
+        )}%</span>
+        <button class="btn btn-sm layer-visibility" title="Toggle Visibility" style="margin-left: 8px;">
+          <i class="fas ${
+            layer.visible !== false ? "fa-eye" : "fa-eye-slash"
+          }"></i>
+        </button>
+      `;
 
         // Click to select layer
         layerItem.addEventListener("click", (e) => {
           // Only select if not clicking slider or button
           if (
             !e.target.classList.contains("layer-opacity-slider") &&
-            !e.target.classList.contains("layer-visibility")
+            !e.target.classList.contains("layer-visibility") &&
+            !e.target.closest(".layer-visibility")
           ) {
             this.editor.layerManager.setActiveLayer(i);
             this.updateLayersList();
-            this.showNotification(`Selected ${layer.name}`, "info");
+            this.showNotification(
+              `Selected ${layer.name || `Layer ${i + 1}`}`,
+              "info"
+            );
           }
         });
 
@@ -353,20 +368,28 @@ class UIController {
         layersList.appendChild(layerItem);
       }
     } else {
-      // Fallback for when layer manager is not available
+      // Fallback for when layer manager is not available or has no layers
       layersList.innerHTML = `
-                <div class="layer-item active" style="
-                    display: flex;
-                    align-items: center;
-                    padding: 8px 12px;
-                    background: rgba(74, 144, 226, 0.2);
-                    border: 1px solid #4a90e2;
-                    border-radius: 6px;
-                ">
-                    <span style="color: white;">Layer 1 (Basic)</span>
-                </div>
-            `;
+      <div class="layer-item active" style="
+          display: flex;
+          align-items: center;
+          padding: 8px 12px;
+          background: rgba(74, 144, 226, 0.2);
+          border: 1px solid #4a90e2;
+          border-radius: 6px;
+      ">
+          <span style="color: white;">Layer 1 (Basic)</span>
+      </div>
+    `;
     }
+  }
+
+  // Add this method to UIController class to force layer UI update
+  forceLayerUIUpdate() {
+    // Force update layers list after a short delay to ensure layer manager is ready
+    setTimeout(() => {
+      this.updateLayersList();
+    }, 50);
   }
 
   showLayerContextMenu(event, layer, index) {
@@ -523,95 +546,190 @@ class UIController {
   }
 
   showLayerRenameDialog(layer, index) {
+    // Create modal overlay
     const modal = document.createElement("div");
+    modal.className = "rename-modal-overlay";
     modal.style.cssText = `
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.8);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 10000;
-        `;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.7);
+        backdrop-filter: blur(3px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10000;
+        animation: fadeIn 0.2s ease-out;
+    `;
 
-    modal.innerHTML = `
-            <div class="modal rename-modal" style="
-                background: #2d2d2d;
-                color: white;
-                padding: 30px;
-                border-radius: 12px;
-                max-width: 400px;
-                width: 90%;
-                text-align: center;
+    // Create modal content
+    const modalContent = document.createElement("div");
+    modalContent.className = "rename-modal-content";
+    modalContent.style.cssText = `
+        background: #2d2d2d;
+        border: 1px solid #444;
+        border-radius: 12px;
+        padding: 24px;
+        min-width: 320px;
+        max-width: 90vw;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+        color: #fff;
+        animation: slideIn 0.2s ease-out;
+    `;
+
+    modalContent.innerHTML = `
+        <h3 style="
+            color: #00d4ff;
+            font-size: 18px;
+            margin: 0 0 20px 0;
+            text-align: center;
+        ">Rename Layer</h3>
+        
+        <div class="input-group" style="margin-bottom: 20px;">
+            <label for="layer-name-input" style="
+                display: block;
+                color: #ccc;
+                font-size: 14px;
+                font-weight: 500;
+                margin-bottom: 8px;
+            ">Layer Name:</label>
+            <input type="text" id="layer-name-input" value="${layer.name}" style="
+                width: 100%;
+                padding: 10px 12px;
+                border: 1px solid #444;
+                border-radius: 6px;
+                background: #1a1a1a;
+                color: #fff;
+                font-size: 14px;
+                box-sizing: border-box;
+                transition: border-color 0.2s, box-shadow 0.2s;
             ">
-                <h3 style="margin-bottom: 20px;">Rename Layer</h3>
-                <input type="text" id="layer-name-input" value="${layer.name}" style="
-                    width: 100%;
-                    padding: 10px;
-                    border: 1px solid #444;
-                    border-radius: 6px;
-                    background: #1a1a1a;
-                    color: white;
-                    font-size: 16px;
-                    margin-bottom: 20px;
-                    box-sizing: border-box;
-                ">
-                <div style="display: flex; gap: 10px; justify-content: center;">
-                    <button id="layer-rename-cancel" style="
-                        background: #666;
-                        color: white;
-                        border: none;
-                        padding: 10px 20px;
-                        border-radius: 6px;
-                        cursor: pointer;
-                    ">Cancel</button>
-                    <button id="layer-rename-confirm" style="
-                        background: #4a90e2;
-                        color: white;
-                        border: none;
-                        padding: 10px 20px;
-                        border-radius: 6px;
-                        cursor: pointer;
-                    ">Rename</button>
-                </div>
-            </div>
-        `;
+        </div>
+        
+        <div style="
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        ">
+            <button id="layer-rename-cancel" class="btn btn-secondary" style="
+                background: #444;
+                color: #fff;
+                border: 1px solid #555;
+                border-radius: 6px;
+                padding: 8px 16px;
+                font-size: 14px;
+                font-weight: 500;
+                cursor: pointer;
+                transition: all 0.2s ease;
+                display: flex;
+                align-items: center;
+                gap: 6px;
+            ">Cancel</button>
+            <button id="layer-rename-confirm" class="btn btn-primary" style="
+                background: #00d4ff;
+                color: #1a1a1a;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 16px;
+                font-size: 14px;
+                font-weight: 500;
+                cursor: pointer;
+                transition: all 0.2s ease;
+                display: flex;
+                align-items: center;
+                gap: 6px;
+            ">Rename</button>
+        </div>
+    `;
 
+    // Add CSS animations
+    const style = document.createElement("style");
+    style.textContent = `
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        
+        @keyframes slideIn {
+            from { 
+                opacity: 0;
+                transform: translateY(-10px) scale(0.95);
+            }
+            to { 
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+        
+        .rename-modal-content input:focus {
+            outline: none;
+            border-color: #00d4ff !important;
+            box-shadow: 0 0 0 2px rgba(0, 212, 255, 0.3) !important;
+        }
+        
+        .rename-modal-content .btn:hover {
+            transform: translateY(-1px);
+        }
+        
+        .rename-modal-content .btn-secondary:hover {
+            background: #555 !important;
+            border-color: #666 !important;
+        }
+        
+        .rename-modal-content .btn-primary:hover {
+            background: #00bae6 !important;
+        }
+    `;
+
+    document.head.appendChild(style);
+    modal.appendChild(modalContent);
     document.body.appendChild(modal);
 
+    // Get elements
     const input = modal.querySelector("#layer-name-input");
     const cancelBtn = modal.querySelector("#layer-rename-cancel");
     const confirmBtn = modal.querySelector("#layer-rename-confirm");
 
-    // Focus and select text
-    input.focus();
-    input.select();
+    // Focus and select text after a brief delay to ensure visibility
+    setTimeout(() => {
+      input.focus();
+      input.select();
+    }, 50);
+
+    const cleanup = () => {
+      document.head.removeChild(style);
+      document.body.removeChild(modal);
+    };
 
     const handleRename = () => {
       const newName = input.value.trim();
       if (newName && newName !== layer.name) {
         layer.name = newName;
         this.updateLayersList();
-        this.showNotification(`Renamed layer to "${newName}"`, "success");
+        if (this.showNotification) {
+          this.showNotification(`Renamed layer to "${newName}"`, "success");
+        }
       }
-      modal.remove();
+      cleanup();
     };
 
     const handleCancel = () => {
-      modal.remove();
+      cleanup();
     };
 
+    // Event listeners
     confirmBtn.addEventListener("click", handleRename);
     cancelBtn.addEventListener("click", handleCancel);
 
-    // Handle Enter and Escape keys
+    // Handle keyboard events
     input.addEventListener("keydown", (e) => {
       if (e.key === "Enter") {
+        e.preventDefault();
         handleRename();
       } else if (e.key === "Escape") {
+        e.preventDefault();
         handleCancel();
       }
     });
@@ -621,6 +739,11 @@ class UIController {
       if (e.target === modal) {
         handleCancel();
       }
+    });
+
+    // Prevent modal content clicks from closing
+    modalContent.addEventListener("click", (e) => {
+      e.stopPropagation();
     });
   }
 
@@ -1595,6 +1718,18 @@ class UIController {
         action: () => {
           if (confirm(`Are you sure you want to delete "${sprite.name}"?`)) {
             this.editor.deleteSprite(index);
+            //set current sprite to another if available
+            if (this.editor.sprites.length > 0) {
+              this.editor.setCurrentSprite(
+                this.editor.sprites[
+                  Math.min(index, this.editor.sprites.length - 1)
+                ]
+              );
+            } else {
+              this.editor.currentSprite = null;
+            }
+            this.editor.updateUI();
+            this.showNotification(`Deleted: ${sprite.name}`, "success");
           }
           this.hideContextMenu();
         },
@@ -1955,109 +2090,230 @@ class UIController {
   }
 
   // Show rename dialog
-  showRenameDialog(sprite) {
+  showLayerRenameDialog(layer, index) {
+    // Create modal overlay
     const modal = document.createElement("div");
+    modal.className = "rename-modal-overlay";
     modal.style.cssText = `
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.8);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 10000;
-        `;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.7);
+        backdrop-filter: blur(3px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10000;
+        animation: fadeIn 0.2s ease-out;
+    `;
 
-    modal.innerHTML = `
-            <div class="modal rename-modal" style="
-                background: #2d2d2d;
-                color: white;
-                padding: 30px;
-                border-radius: 12px;
-                max-width: 400px;
-                width: 90%;
-                text-align: center;
+    // Create modal content
+    const modalContent = document.createElement("div");
+    modalContent.className = "rename-modal-content";
+    modalContent.style.cssText = `
+        background: #2d2d2d;
+        border: 1px solid #444;
+        border-radius: 12px;
+        padding: 24px;
+        min-width: 320px;
+        max-width: 90vw;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+        color: #fff;
+        animation: slideIn 0.2s ease-out;
+    `;
+
+    modalContent.innerHTML = `
+        <h3 style="
+            color: #00d4ff;
+            font-size: 18px;
+            margin: 0 0 20px 0;
+            text-align: center;
+        ">Rename Layer</h3>
+        
+        <div class="input-group" style="margin-bottom: 20px;">
+            <label for="layer-name-input" style="
+                display: block;
+                color: #ccc;
+                font-size: 14px;
+                font-weight: 500;
+                margin-bottom: 8px;
+            ">Layer Name:</label>
+            <input type="text" id="layer-name-input" value="${layer.name}" style="
+                width: 100%;
+                padding: 10px 12px;
+                border: 1px solid #444;
+                border-radius: 6px;
+                background: #1a1a1a;
+                color: #fff;
+                font-size: 14px;
+                box-sizing: border-box;
+                transition: border-color 0.2s, box-shadow 0.2s;
             ">
-                <h3 style="margin-bottom: 20px;">Rename Sprite</h3>
-                <input type="text" id="sprite-name-input" value="${sprite.name}" style="
-                    width: 100%;
-                    padding: 10px;
-                    border: 1px solid #444;
-                    border-radius: 6px;
-                    background: #1a1a1a;
-                    color: white;
-                    font-size: 16px;
-                    margin-bottom: 20px;
-                    box-sizing: border-box;
-                ">
-                <div style="display: flex; gap: 10px; justify-content: center;">
-                    <button id="rename-cancel" style="
-                        background: #666;
-                        color: white;
-                        border: none;
-                        padding: 10px 20px;
-                        border-radius: 6px;
-                        cursor: pointer;
-                    ">Cancel</button>
-                    <button id="rename-confirm" style="
-                        background: #4a90e2;
-                        color: white;
-                        border: none;
-                        padding: 10px 20px;
-                        border-radius: 6px;
-                        cursor: pointer;
-                    ">Rename</button>
-                </div>
-            </div>
-        `;
+        </div>
+        
+        <div style="
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        ">
+            <button id="layer-rename-cancel" class="btn btn-secondary" style="
+                background: #444;
+                color: #fff;
+                border: 1px solid #555;
+                border-radius: 6px;
+                padding: 8px 16px;
+                font-size: 14px;
+                font-weight: 500;
+                cursor: pointer;
+                transition: all 0.2s ease;
+                display: flex;
+                align-items: center;
+                gap: 6px;
+            ">Cancel</button>
+            <button id="layer-rename-confirm" class="btn btn-primary" style="
+                background: #00d4ff;
+                color: #1a1a1a;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 16px;
+                font-size: 14px;
+                font-weight: 500;
+                cursor: pointer;
+                transition: all 0.2s ease;
+                display: flex;
+                align-items: center;
+                gap: 6px;
+            ">Rename</button>
+        </div>
+    `;
 
+    // Add CSS animations
+    const style = document.createElement('style');
+    style.textContent = `
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        
+        @keyframes slideIn {
+            from { 
+                opacity: 0;
+                transform: translateY(-10px) scale(0.95);
+            }
+            to { 
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+        
+        .rename-modal-content input:focus {
+            outline: none;
+            border-color: #00d4ff !important;
+            box-shadow: 0 0 0 2px rgba(0, 212, 255, 0.3) !important;
+        }
+        
+        .rename-modal-content .btn:hover {
+            transform: translateY(-1px);
+        }
+        
+        .rename-modal-content .btn-secondary:hover {
+            background: #555 !important;
+            border-color: #666 !important;
+        }
+        
+        .rename-modal-content .btn-primary:hover {
+            background: #00bae6 !important;
+        }
+    `;
+    
+    document.head.appendChild(style);
+    modal.appendChild(modalContent);
     document.body.appendChild(modal);
 
-    const input = modal.querySelector("#sprite-name-input");
-    const cancelBtn = modal.querySelector("#rename-cancel");
-    const confirmBtn = modal.querySelector("#rename-confirm");
+    // Get elements
+    const input = modal.querySelector("#layer-name-input");
+    const cancelBtn = modal.querySelector("#layer-rename-cancel");
+    const confirmBtn = modal.querySelector("#layer-rename-confirm");
 
-    // Focus and select text
-    input.focus();
-    input.select();
+    // Focus and select text after a brief delay to ensure visibility
+    setTimeout(() => {
+        input.focus();
+        input.select();
+    }, 50);
+
+    const cleanup = () => {
+        document.head.removeChild(style);
+        document.body.removeChild(modal);
+    };
 
     const handleRename = () => {
-      const newName = input.value.trim();
-      if (newName && newName !== sprite.name) {
-        sprite.name = newName;
-        sprite.modifiedAt = new Date().toISOString();
-        this.editor.saveSprites();
-        this.updateSpritesList();
-        this.showNotification(`Renamed sprite to "${newName}"`, "success");
-      }
-      modal.remove();
+        const newName = input.value.trim();
+        if (newName && newName !== layer.name) {
+            // FIXED: Use LayerManager method instead of direct property modification
+            if (this.editor && this.editor.layerManager) {
+                const success = this.editor.layerManager.setLayerName(index, newName);
+                if (success) {
+                    // FIXED: Force sprite save after layer rename
+                    if (this.editor.saveLayersToSprite) {
+                        this.editor.saveLayersToSprite();
+                    }
+                    
+                    // Update UI
+                    this.updateLayersList();
+                    
+                    if (this.showNotification) {
+                        this.showNotification(`Renamed layer to "${newName}"`, "success");
+                    }
+                } else {
+                    if (this.showNotification) {
+                        this.showNotification("Failed to rename layer", "error");
+                    }
+                }
+            } else {
+                // Fallback to direct modification if layerManager not available
+                layer.name = newName;
+                this.updateLayersList();
+                if (this.showNotification) {
+                    this.showNotification(`Renamed layer to "${newName}"`, "success");
+                }
+            }
+        }
+        cleanup();
     };
 
     const handleCancel = () => {
-      modal.remove();
+        cleanup();
     };
 
+    // Event listeners
     confirmBtn.addEventListener("click", handleRename);
     cancelBtn.addEventListener("click", handleCancel);
 
-    // Handle Enter and Escape keys
+    // Handle keyboard events
     input.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") {
-        handleRename();
-      } else if (e.key === "Escape") {
-        handleCancel();
-      }
+        if (e.key === "Enter") {
+            e.preventDefault();
+            handleRename();
+        } else if (e.key === "Escape") {
+            e.preventDefault();
+            handleCancel();
+        }
     });
 
     // Close on outside click
     modal.addEventListener("click", (e) => {
-      if (e.target === modal) {
-        handleCancel();
-      }
+        if (e.target === modal) {
+            handleCancel();
+        }
     });
-  }
+
+    // Prevent modal content clicks from closing
+    modalContent.addEventListener("click", (e) => {
+        e.stopPropagation();
+    });
+}
 
   // Update selected color from input value (HEX or RGB)
   updateSelectedColor(value, type = "hex") {

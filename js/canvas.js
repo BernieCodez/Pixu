@@ -313,6 +313,11 @@ class CanvasManager {
    */
   setSprite(sprite) {
     this.currentSprite = sprite;
+    
+    if (window.editor && window.editor.layerManager) {
+      this.layerManager = window.editor.layerManager;
+    }
+    
     this.updateCanvasSize();
     this.render();
   }
@@ -323,6 +328,7 @@ class CanvasManager {
   /**
    * Render the current sprite to canvas with optimizations
    */
+  // Replace the existing render() method in CanvasManager
   render() {
     if (!this.currentSprite) {
       this.clearCanvas();
@@ -332,20 +338,72 @@ class CanvasManager {
     // Clear canvas
     this.mainCtx.clearRect(0, 0, this.mainCanvas.width, this.mainCanvas.height);
 
-    // For large sprites, use ImageData for better performance
-    if (this.currentSprite.width * this.currentSprite.height > 10000) {
-      this.renderLargeSprite();
+    // Use layer manager if available
+    if (window.editor && window.editor.layerManager) {
+      this.renderWithLayers();
     } else {
-      // Render checkerboard background for transparency
+      // Fallback to original rendering
       this.renderTransparencyBackground();
-      // Render sprite pixels
       this.renderSprite();
     }
 
     // Render grid if enabled
     if (this.showGrid && this.zoomLevel >= 4) {
-      // Only show grid at higher zoom levels
       this.renderGrid();
+    }
+  }
+
+  // Add new method for layer-based rendering
+  renderWithLayers() {
+    // Render checkerboard background
+    this.renderTransparencyBackground();
+
+    // Get composite image data from layer manager
+    const imageData = window.editor.layerManager.getCompositeImageData();
+
+    // Use createImageBitmap for better performance if available
+    if (
+      window.createImageBitmap &&
+      this.currentSprite.width * this.currentSprite.height > 10000
+    ) {
+      createImageBitmap(imageData).then((bitmap) => {
+        this.mainCtx.imageSmoothingEnabled = false;
+        this.mainCtx.drawImage(
+          bitmap,
+          0,
+          0,
+          imageData.width,
+          imageData.height,
+          0,
+          0,
+          this.mainCanvas.width,
+          this.mainCanvas.height
+        );
+        bitmap.close();
+      });
+    } else {
+      // Create temporary canvas for scaling
+      const tempCanvas = document.createElement("canvas");
+      tempCanvas.width = imageData.width;
+      tempCanvas.height = imageData.height;
+      const tempCtx = tempCanvas.getContext("2d");
+      tempCtx.putImageData(imageData, 0, 0);
+
+      // Disable smoothing for pixel-perfect scaling
+      this.mainCtx.imageSmoothingEnabled = false;
+
+      // Draw scaled composite
+      this.mainCtx.drawImage(
+        tempCanvas,
+        0,
+        0,
+        imageData.width,
+        imageData.height,
+        0,
+        0,
+        this.mainCanvas.width,
+        this.mainCanvas.height
+      );
     }
   }
   /**

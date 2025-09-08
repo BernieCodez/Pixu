@@ -1,406 +1,751 @@
-// Layer Manager - Handles layer functionality using Konva.js
+// Lightweight Layer Manager - Canvas-based implementation for better performance
 class LayerManager {
-    constructor(containerId, width, height) {
-        this.containerId = containerId;
-        this.width = width;
-        this.height = height;
-        this.layers = [];
-        this.activeLayerIndex = 0;
-        this.pixelSize = 20; // Size of each pixel in the layer view
-        
-        this.initializeStage();
-        this.createDefaultLayer();
+  constructor(width, height) {
+    this.width = width;
+    this.height = height;
+    this.layers = [];
+    this.activeLayerIndex = 0;
+    this.onChange = null;
+
+    // Performance optimizations
+    this.compositeDirty = true;
+    this.compositeCache = null;
+    this.batchMode = false;
+    this.pendingUpdates = false;
+
+    this.createDefaultLayer();
+  }
+
+  createDefaultLayer() {
+    this.addLayer("Background");
+  }
+
+  addLayer(name = null, insertAt = null) {
+    const layerName = name || `Layer ${this.layers.length + 1}`;
+
+    // Create layer data structure
+    const layerData = {
+      id: Date.now() + Math.random(),
+      name: layerName,
+      visible: true,
+      opacity: 1,
+      pixels: this.createEmptyPixelArray(),
+      locked: false,
+      blendMode: "normal", // For future blend mode support
+    };
+
+    // Insert at specific position or at the end
+    if (insertAt !== null && insertAt >= 0 && insertAt <= this.layers.length) {
+      this.layers.splice(insertAt, 0, layerData);
+      if (insertAt <= this.activeLayerIndex) {
+        this.activeLayerIndex++;
+      }
+    } else {
+      this.layers.push(layerData);
+      this.activeLayerIndex = this.layers.length - 1;
     }
 
-    initializeStage() {
-        // Create Konva stage
-        this.stage = new Konva.Stage({
-            container: this.containerId,
-            width: this.width * this.pixelSize,
-            height: this.height * this.pixelSize
-        });
+    this.notifyChange();
+    return layerData;
+  }
 
-        // Add grid layer (lowest layer)
-        this.gridLayer = new Konva.Layer();
-        this.stage.add(this.gridLayer);
-        this.createGrid();
+  createEmptyPixelArray() {
+    const pixels = [];
+    for (let y = 0; y < this.height; y++) {
+      pixels[y] = [];
+      for (let x = 0; x < this.width; x++) {
+        pixels[y][x] = [0, 0, 0, 0]; // Transparent
+      }
+    }
+    return pixels;
+  }
+
+  deleteLayer(index) {
+    if (this.layers.length <= 1) {
+      return false; // Can't delete the last layer
     }
 
-    createGrid() {
-        const gridSize = this.pixelSize;
-        const stageWidth = this.stage.width();
-        const stageHeight = this.stage.height();
+    if (index < 0 || index >= this.layers.length) {
+      return false; // Invalid index
+    }
 
-        // Vertical lines
-        for (let x = 0; x <= stageWidth; x += gridSize) {
-            const line = new Konva.Line({
-                points: [x, 0, x, stageHeight],
-                stroke: '#333',
-                strokeWidth: 1,
-                opacity: 0.3
-            });
-            this.gridLayer.add(line);
+    // Remove from array
+    this.layers.splice(index, 1);
+
+    // Adjust active layer index
+    if (this.activeLayerIndex >= this.layers.length) {
+      this.activeLayerIndex = this.layers.length - 1;
+    } else if (this.activeLayerIndex > index) {
+      this.activeLayerIndex--;
+    }
+
+    this.notifyChange();
+    return true;
+  }
+
+  duplicateLayer(index) {
+    if (index < 0 || index >= this.layers.length) {
+      return null;
+    }
+
+    const sourceLayer = this.layers[index];
+    const newLayer = this.addLayer(`${sourceLayer.name} Copy`, index + 1);
+
+    // Deep copy pixel data
+    newLayer.pixels = sourceLayer.pixels.map((row) =>
+      row.map((pixel) => [...pixel])
+    );
+
+    // Copy properties
+    newLayer.opacity = sourceLayer.opacity;
+    newLayer.visible = sourceLayer.visible;
+    newLayer.blendMode = sourceLayer.blendMode;
+
+    this.notifyChange();
+    return newLayer;
+  }
+
+  moveLayer(fromIndex, toIndex) {
+    if (
+      fromIndex < 0 ||
+      fromIndex >= this.layers.length ||
+      toIndex < 0 ||
+      toIndex >= this.layers.length ||
+      fromIndex === toIndex
+    ) {
+      return false;
+    }
+
+    const layer = this.layers.splice(fromIndex, 1)[0];
+    this.layers.splice(toIndex, 0, layer);
+
+    // Update active layer index
+    if (this.activeLayerIndex === fromIndex) {
+      this.activeLayerIndex = toIndex;
+    } else if (
+      fromIndex < this.activeLayerIndex &&
+      toIndex >= this.activeLayerIndex
+    ) {
+      this.activeLayerIndex--;
+    } else if (
+      fromIndex > this.activeLayerIndex &&
+      toIndex <= this.activeLayerIndex
+    ) {
+      this.activeLayerIndex++;
+    }
+
+    this.notifyChange();
+    return true;
+  }
+
+  setLayerVisibility(index, visible) {
+    if (index < 0 || index >= this.layers.length) {
+      return false;
+    }
+
+    this.layers[index].visible = visible;
+    this.notifyChange();
+    return true;
+  }
+
+  setLayerOpacity(index, opacity) {
+    if (index < 0 || index >= this.layers.length) {
+      return false;
+    }
+
+    this.layers[index].opacity = Math.max(0, Math.min(1, opacity));
+    this.notifyChange();
+    return true;
+  }
+
+  setLayerName(index, name) {
+    if (index < 0 || index >= this.layers.length || !name.trim()) {
+        return false;
+    }
+
+    this.layers[index].name = name.trim();
+    this.notifyChange(); // CRITICAL: This must be called
+    return true;
+}
+
+  setLayerLocked(index, locked) {
+    if (index < 0 || index >= this.layers.length) {
+      return false;
+    }
+
+    this.layers[index].locked = locked;
+    this.notifyChange();
+    return true;
+  }
+
+  setActiveLayer(index) {
+    if (index < 0 || index >= this.layers.length) {
+      return false;
+    }
+
+    this.activeLayerIndex = index;
+    this.notifyChange();
+    return true;
+  }
+
+  getActiveLayer() {
+    return this.layers[this.activeLayerIndex] || null;
+  }
+
+  getLayer(index) {
+    return this.layers[index] || null;
+  }
+
+  setPixel(x, y, color, layerIndex = null) {
+    const targetIndex =
+      layerIndex !== null ? layerIndex : this.activeLayerIndex;
+    const layer = this.layers[targetIndex];
+
+    if (!layer || layer.locked) {
+      return false;
+    }
+
+    if (x < 0 || x >= this.width || y < 0 || y >= this.height) {
+      return false;
+    }
+
+    // Update pixel data
+    layer.pixels[y][x] = [...color];
+
+    if (this.batchMode) {
+      this.pendingUpdates = true;
+    } else {
+      this.notifyChange();
+    }
+    return true;
+  }
+
+  getPixel(x, y, layerIndex = null) {
+    const targetIndex =
+      layerIndex !== null ? layerIndex : this.activeLayerIndex;
+    const layer = this.layers[targetIndex];
+
+    if (!layer || x < 0 || x >= this.width || y < 0 || y >= this.height) {
+      return [0, 0, 0, 0];
+    }
+
+    return [...layer.pixels[y][x]];
+  }
+
+  // Get composite pixel at position (all visible layers combined)
+  getCompositePixel(x, y) {
+    if (x < 0 || x >= this.width || y < 0 || y >= this.height) {
+      return [0, 0, 0, 0];
+    }
+
+    let result = [0, 0, 0, 0];
+
+    // Composite from bottom layer to top
+    for (let i = 0; i < this.layers.length; i++) {
+      const layer = this.layers[i];
+      if (!layer.visible) continue;
+
+      const layerPixel = layer.pixels[y][x];
+      const [lr, lg, lb, la] = layerPixel;
+
+      if (la === 0) continue; // Skip transparent pixels
+
+      const layerAlpha = (la / 255) * layer.opacity;
+
+      if (result[3] === 0) {
+        // First non-transparent pixel
+        result = [lr, lg, lb, la * layer.opacity];
+      } else {
+        // Alpha blend
+        const resultAlpha = result[3] / 255;
+        const combinedAlpha = layerAlpha + resultAlpha * (1 - layerAlpha);
+
+        if (combinedAlpha > 0) {
+          result[0] =
+            (lr * layerAlpha + result[0] * resultAlpha * (1 - layerAlpha)) /
+            combinedAlpha;
+          result[1] =
+            (lg * layerAlpha + result[1] * resultAlpha * (1 - layerAlpha)) /
+            combinedAlpha;
+          result[2] =
+            (lb * layerAlpha + result[2] * resultAlpha * (1 - layerAlpha)) /
+            combinedAlpha;
+          result[3] = combinedAlpha * 255;
         }
-
-        // Horizontal lines
-        for (let y = 0; y <= stageHeight; y += gridSize) {
-            const line = new Konva.Line({
-                points: [0, y, stageWidth, y],
-                stroke: '#333',
-                strokeWidth: 1,
-                opacity: 0.3
-            });
-            this.gridLayer.add(line);
-        }
-
-        this.gridLayer.draw();
+      }
     }
 
-    createDefaultLayer() {
-        this.addLayer('Layer 1');
+    return result.map((c) => Math.round(c));
+  }
+  markRegionDirty(x, y, width, height) {
+    if (!this.dirtyRegions) {
+      this.dirtyRegions = [];
     }
 
-    addLayer(name = null) {
-        const layerName = name || `Layer ${this.layers.length + 1}`;
-        
-        // Create Konva layer
-        const konvaLayer = new Konva.Layer();
-        this.stage.add(konvaLayer);
+    this.dirtyRegions.push({
+      x: Math.max(0, x),
+      y: Math.max(0, y),
+      width: Math.min(width, this.width - x),
+      height: Math.min(height, this.height - y),
+    });
+  }
 
-        // Create layer data structure
-        const layerData = {
-            id: Date.now() + Math.random(),
-            name: layerName,
-            visible: true,
-            opacity: 1,
-            konvaLayer: konvaLayer,
-            pixels: this.createEmptyPixelArray(),
-            locked: false
-        };
+  // Generate composite ImageData for the entire canvas
+  getCompositeImageData() {
+    const canvas = document.createElement("canvas");
+    canvas.width = this.width;
+    canvas.height = this.height;
+    const ctx = canvas.getContext("2d");
+    const imageData = ctx.createImageData(this.width, this.height);
+    const data = imageData.data;
 
-        this.layers.push(layerData);
-        this.activeLayerIndex = this.layers.length - 1;
+    for (let y = 0; y < this.height; y++) {
+      for (let x = 0; x < this.width; x++) {
+        const [r, g, b, a] = this.getCompositePixel(x, y);
+        const index = (y * this.width + x) * 4;
 
-        // Redraw stage
-        this.stage.draw();
-
-        return layerData;
+        data[index] = r;
+        data[index + 1] = g;
+        data[index + 2] = b;
+        data[index + 3] = a;
+      }
     }
 
-    createEmptyPixelArray() {
-        const pixels = [];
-        for (let y = 0; y < this.height; y++) {
-            pixels[y] = [];
-            for (let x = 0; x < this.width; x++) {
-                pixels[y][x] = [0, 0, 0, 0]; // Transparent
+    return imageData;
+  }
+
+  // Add to LayerManager class - optimized composite rendering
+  getCompositeImageDataOptimized() {
+    // Use cached result if no layers have changed
+    if (this.compositeCache && !this.compositeDirty) {
+      return this.compositeCache;
+    }
+
+    const canvas = document.createElement("canvas");
+    canvas.width = this.width;
+    canvas.height = this.height;
+    const ctx = canvas.getContext("2d");
+    const imageData = ctx.createImageData(this.width, this.height);
+    const data = imageData.data;
+
+    // Only composite visible layers
+    const visibleLayers = this.layers.filter((layer) => layer.visible);
+
+    for (let y = 0; y < this.height; y++) {
+      for (let x = 0; x < this.width; x++) {
+        const index = (y * this.width + x) * 4;
+        let result = [0, 0, 0, 0];
+
+        // Composite visible layers only
+        for (let i = 0; i < visibleLayers.length; i++) {
+          const layer = visibleLayers[i];
+          const layerPixel = layer.pixels[y][x];
+          const [lr, lg, lb, la] = layerPixel;
+
+          if (la === 0) continue;
+
+          const layerAlpha = (la / 255) * layer.opacity;
+
+          if (result[3] === 0) {
+            result = [lr, lg, lb, la * layer.opacity];
+          } else {
+            const resultAlpha = result[3] / 255;
+            const combinedAlpha = layerAlpha + resultAlpha * (1 - layerAlpha);
+
+            if (combinedAlpha > 0) {
+              result[0] =
+                (lr * layerAlpha + result[0] * resultAlpha * (1 - layerAlpha)) /
+                combinedAlpha;
+              result[1] =
+                (lg * layerAlpha + result[1] * resultAlpha * (1 - layerAlpha)) /
+                combinedAlpha;
+              result[2] =
+                (lb * layerAlpha + result[2] * resultAlpha * (1 - layerAlpha)) /
+                combinedAlpha;
+              result[3] = combinedAlpha * 255;
             }
+          }
         }
-        return pixels;
+
+        data[index] = Math.round(result[0]);
+        data[index + 1] = Math.round(result[1]);
+        data[index + 2] = Math.round(result[2]);
+        data[index + 3] = Math.round(result[3]);
+      }
     }
 
-    deleteLayer(index) {
-        if (this.layers.length <= 1) {
-            return false; // Can't delete the last layer
-        }
+    this.compositeCache = imageData;
+    this.compositeDirty = false;
+    return imageData;
+  }
+  // In LayerManager, add batch mode
+  setBatchMode(enabled) {
+    this.batchMode = enabled;
+    if (!enabled && this.pendingUpdates) {
+      this.notifyChange();
+      this.pendingUpdates = false;
+    }
+  }
 
-        if (index < 0 || index >= this.layers.length) {
-            return false; // Invalid index
-        }
-
-        const layer = this.layers[index];
-        
-        // Remove from Konva stage
-        layer.konvaLayer.destroy();
-        
-        // Remove from array
-        this.layers.splice(index, 1);
-
-        // Adjust active layer index
-        if (this.activeLayerIndex >= this.layers.length) {
-            this.activeLayerIndex = this.layers.length - 1;
-        } else if (this.activeLayerIndex > index) {
-            this.activeLayerIndex--;
-        }
-
-        this.stage.draw();
-        return true;
+  // Modified notifyChange
+  // Optimized notifyChange:
+  notifyChange() {
+    if (this.batchMode) {
+      this.pendingUpdates = true;
+      return;
     }
 
-    duplicateLayer(index) {
-        if (index < 0 || index >= this.layers.length) {
-            return null;
-        }
+    this.compositeDirty = true;
 
-        const sourceLayer = this.layers[index];
-        const newLayer = this.addLayer(`${sourceLayer.name} Copy`);
-
-        // Copy pixel data
-        newLayer.pixels = sourceLayer.pixels.map(row => 
-            row.map(pixel => [...pixel])
-        );
-
-        // Copy properties
-        newLayer.opacity = sourceLayer.opacity;
-        newLayer.visible = sourceLayer.visible;
-
-        // Redraw the new layer
-        this.redrawLayer(this.layers.length - 1);
-
-        return newLayer;
+    // Save layer changes back to sprite
+    if (
+      window.editor &&
+      typeof window.editor.saveLayersToSprite === "function"
+    ) {
+      window.editor.saveLayersToSprite();
     }
 
-    moveLayer(fromIndex, toIndex) {
-        if (fromIndex < 0 || fromIndex >= this.layers.length ||
-            toIndex < 0 || toIndex >= this.layers.length) {
-            return false;
-        }
-
-        const layer = this.layers.splice(fromIndex, 1)[0];
-        this.layers.splice(toIndex, 0, layer);
-
-        // Update Konva layer order
-        this.reorderKonvaLayers();
-
-        // Update active layer index
-        if (this.activeLayerIndex === fromIndex) {
-            this.activeLayerIndex = toIndex;
-        } else if (this.activeLayerIndex > fromIndex && this.activeLayerIndex <= toIndex) {
-            this.activeLayerIndex--;
-        } else if (this.activeLayerIndex < fromIndex && this.activeLayerIndex >= toIndex) {
-            this.activeLayerIndex++;
-        }
-
-        return true;
-    }
-
-    reorderKonvaLayers() {
-        // Remove all layers except grid
-        this.layers.forEach(layer => {
-            layer.konvaLayer.remove();
+    if (this.onChange) {
+      // Use requestAnimationFrame to batch updates
+      if (!this.updateScheduled) {
+        this.updateScheduled = true;
+        requestAnimationFrame(() => {
+          this.onChange(this);
+          this.updateScheduled = false;
         });
+      }
+    }
+  }
 
-        // Re-add in correct order
-        this.layers.forEach(layer => {
-            this.stage.add(layer.konvaLayer);
+  // Resize all layers
+  resize(newWidth, newHeight) {
+    const oldWidth = this.width;
+    const oldHeight = this.height;
+
+    this.width = newWidth;
+    this.height = newHeight;
+
+    this.layers.forEach((layer) => {
+      const newPixels = this.createEmptyPixelArray();
+
+      // Copy existing pixels
+      for (let y = 0; y < Math.min(oldHeight, newHeight); y++) {
+        for (let x = 0; x < Math.min(oldWidth, newWidth); x++) {
+          newPixels[y][x] = [...layer.pixels[y][x]];
+        }
+      }
+
+      layer.pixels = newPixels;
+    });
+
+    this.notifyChange();
+  }
+
+  // Clear a layer
+  clearLayer(index = null) {
+    const targetIndex = index !== null ? index : this.activeLayerIndex;
+    const layer = this.layers[targetIndex];
+
+    if (!layer || layer.locked) {
+      return false;
+    }
+
+    layer.pixels = this.createEmptyPixelArray();
+    this.notifyChange();
+    return true;
+  }
+
+  // Fill a layer with a color
+  fillLayer(color, index = null) {
+    const targetIndex = index !== null ? index : this.activeLayerIndex;
+    const layer = this.layers[targetIndex];
+
+    if (!layer || layer.locked) {
+      return false;
+    }
+
+    for (let y = 0; y < this.height; y++) {
+      for (let x = 0; x < this.width; x++) {
+        layer.pixels[y][x] = [...color];
+      }
+    }
+
+    this.notifyChange();
+    return true;
+  }
+
+  // Merge layer down
+  mergeDown(index) {
+    if (index <= 0 || index >= this.layers.length) {
+      return false; // Can't merge bottom layer or invalid index
+    }
+
+    const upperLayer = this.layers[index];
+    const lowerLayer = this.layers[index - 1];
+
+    if (lowerLayer.locked) {
+      return false;
+    }
+
+    // Merge pixels
+    for (let y = 0; y < this.height; y++) {
+      for (let x = 0; x < this.width; x++) {
+        const upperPixel = upperLayer.pixels[y][x];
+        const lowerPixel = lowerLayer.pixels[y][x];
+
+        if (upperPixel[3] > 0) {
+          // Upper pixel has alpha
+          const upperAlpha = (upperPixel[3] / 255) * upperLayer.opacity;
+          const lowerAlpha = lowerPixel[3] / 255;
+
+          const combinedAlpha = upperAlpha + lowerAlpha * (1 - upperAlpha);
+
+          if (combinedAlpha > 0) {
+            lowerLayer.pixels[y][x] = [
+              Math.round(
+                (upperPixel[0] * upperAlpha +
+                  lowerPixel[0] * lowerAlpha * (1 - upperAlpha)) /
+                  combinedAlpha
+              ),
+              Math.round(
+                (upperPixel[1] * upperAlpha +
+                  lowerPixel[1] * lowerAlpha * (1 - upperAlpha)) /
+                  combinedAlpha
+              ),
+              Math.round(
+                (upperPixel[2] * upperAlpha +
+                  lowerPixel[2] * lowerAlpha * (1 - upperAlpha)) /
+                  combinedAlpha
+              ),
+              Math.round(combinedAlpha * 255),
+            ];
+          }
+        }
+      }
+    }
+
+    // Remove upper layer
+    this.deleteLayer(index);
+    return true;
+  }
+
+  // Export layer as sprite
+  exportLayerAsSprite(index = null) {
+    const targetIndex = index !== null ? index : this.activeLayerIndex;
+    const layer = this.layers[targetIndex];
+
+    if (!layer) return null;
+
+    const sprite = new Sprite(this.width, this.height, layer.name);
+    sprite.setPixelArray(
+      layer.pixels.map((row) => row.map((pixel) => [...pixel]))
+    );
+    return sprite;
+  }
+
+  // Load from sprite
+  loadFromSprite(sprite, replaceAll = true) {
+    if (replaceAll) {
+      this.layers = [];
+      this.activeLayerIndex = 0;
+    }
+
+    // Resize if necessary
+    if (sprite.width !== this.width || sprite.height !== this.height) {
+      this.resize(sprite.width, sprite.height);
+    }
+
+    const layer = this.addLayer(sprite.name || "Imported Layer");
+    const spritePixels = sprite.getPixelArray();
+
+    layer.pixels = spritePixels.map((row) => row.map((pixel) => [...pixel]));
+    this.notifyChange();
+
+    return layer;
+  }
+
+  // Get layer statistics
+  getLayerStats(index = null) {
+    const targetIndex = index !== null ? index : this.activeLayerIndex;
+    const layer = this.layers[targetIndex];
+
+    if (!layer) return null;
+
+    let transparentPixels = 0;
+    let opaquePixels = 0;
+    let semiTransparentPixels = 0;
+
+    for (let y = 0; y < this.height; y++) {
+      for (let x = 0; x < this.width; x++) {
+        const alpha = layer.pixels[y][x][3];
+        if (alpha === 0) {
+          transparentPixels++;
+        } else if (alpha === 255) {
+          opaquePixels++;
+        } else {
+          semiTransparentPixels++;
+        }
+      }
+    }
+
+    return {
+      name: layer.name,
+      visible: layer.visible,
+      opacity: layer.opacity,
+      locked: layer.locked,
+      transparentPixels,
+      opaquePixels,
+      semiTransparentPixels,
+      totalPixels: this.width * this.height,
+    };
+  }
+
+  // Set change callback
+  setOnChange(callback) {
+    this.onChange = callback;
+  }
+
+  // Notify change
+  // Optimized notifyChange - prevent infinite loops
+  notifyChange() {
+    if (this.batchMode) {
+      this.pendingUpdates = true;
+      return;
+    }
+
+    this.compositeDirty = true;
+
+    // CRITICAL FIX: Only save if we're not already in a save operation
+    if (
+      !this.saving &&
+      window.editor &&
+      typeof window.editor.saveLayersToSprite === "function"
+    ) {
+      this.saving = true;
+      window.editor.saveLayersToSprite();
+      this.saving = false;
+    }
+
+    if (this.onChange) {
+      // Use requestAnimationFrame to batch updates
+      if (!this.updateScheduled) {
+        this.updateScheduled = true;
+        requestAnimationFrame(() => {
+          this.onChange(this);
+          this.updateScheduled = false;
         });
+      }
+    }
+  }
 
-        this.stage.draw();
+  // Get serializable data
+  serialize() {
+    return {
+      width: this.width,
+      height: this.height,
+      activeLayerIndex: this.activeLayerIndex,
+      layers: this.layers.map((layer) => ({
+        id: layer.id,
+        name: layer.name,
+        visible: layer.visible,
+        opacity: layer.opacity,
+        locked: layer.locked,
+        blendMode: layer.blendMode,
+        pixels: layer.pixels,
+      })),
+    };
+  }
+
+  // Load from serialized data
+  deserialize(data) {
+    this.width = data.width;
+    this.height = data.height;
+    this.activeLayerIndex = data.activeLayerIndex;
+    this.layers = data.layers.map((layerData) => ({
+      id: layerData.id,
+      name: layerData.name,
+      visible: layerData.visible,
+      opacity: layerData.opacity,
+      locked: layerData.locked || false,
+      blendMode: layerData.blendMode || "normal",
+      pixels: layerData.pixels,
+    }));
+
+    this.notifyChange();
+  }
+  // Add to LayerManager class - save to sprite format
+  toSprite(spriteName = "Layered Sprite") {
+    const sprite = new Sprite(this.width, this.height, spriteName);
+
+    // Convert layers to sprite format
+    const layersData = this.layers.map((layer) => ({
+      name: layer.name,
+      visible: layer.visible,
+      opacity: layer.opacity,
+      pixels: layer.pixels.map((row) => row.map((pixel) => [...pixel])),
+      useTypedArray: false,
+    }));
+
+    sprite.setLayersData(layersData);
+    return sprite;
+  }
+
+  // Add to LayerManager class - load from sprite
+  // Add to LayerManager class - load from sprite
+  fromSprite(sprite) {
+    this.width = sprite.width;
+    this.height = sprite.height;
+
+    // Get layers data from sprite
+    const layersData = sprite.getLayersData();
+
+    this.layers = layersData.map((layerData) => ({
+      id: Date.now() + Math.random(),
+      name: layerData.name,
+      visible: layerData.visible !== false,
+      opacity: typeof layerData.opacity === "number" ? layerData.opacity : 1,
+      pixels: layerData.useTypedArray
+        ? this.convertTypedArrayTo2D(layerData.pixels)
+        : layerData.pixels.map((row) => row.map((pixel) => [...pixel])),
+      locked: false,
+      blendMode: "normal",
+    }));
+
+    this.activeLayerIndex = Math.min(
+      this.activeLayerIndex,
+      this.layers.length - 1
+    );
+
+    // CRITICAL FIX: Mark composite as dirty and trigger immediate render
+    this.compositeDirty = true;
+    this.compositeCache = null; // Clear cache to force regeneration
+
+    // Force immediate change notification without saving back to sprite (prevent loop)
+    if (this.onChange) {
+      this.onChange(this);
+    }
+  }
+
+  // Helper method for TypedArray conversion
+  convertTypedArrayTo2D(typedArray) {
+    const pixels = [];
+    let index = 0;
+
+    for (let y = 0; y < this.height; y++) {
+      pixels[y] = [];
+      for (let x = 0; x < this.width; x++) {
+        pixels[y][x] = [
+          typedArray[index],
+          typedArray[index + 1],
+          typedArray[index + 2],
+          typedArray[index + 3],
+        ];
+        index += 4;
+      }
     }
 
-    setLayerVisibility(index, visible) {
-        if (index < 0 || index >= this.layers.length) {
-            return false;
-        }
-
-        const layer = this.layers[index];
-        layer.visible = visible;
-        layer.konvaLayer.visible(visible);
-        this.stage.draw();
-
-        return true;
-    }
-
-    setLayerOpacity(index, opacity) {
-        if (index < 0 || index >= this.layers.length) {
-            return false;
-        }
-
-        const layer = this.layers[index];
-        layer.opacity = Math.max(0, Math.min(1, opacity));
-        layer.konvaLayer.opacity(layer.opacity);
-        this.stage.draw();
-
-        return true;
-    }
-
-    setActiveLayer(index) {
-        if (index < 0 || index >= this.layers.length) {
-            return false;
-        }
-
-        this.activeLayerIndex = index;
-        return true;
-    }
-
-    getActiveLayer() {
-        return this.layers[this.activeLayerIndex] || null;
-    }
-
-    setPixel(x, y, color) {
-        const activeLayer = this.getActiveLayer();
-        if (!activeLayer || activeLayer.locked) {
-            return false;
-        }
-
-        if (x < 0 || x >= this.width || y < 0 || y >= this.height) {
-            return false;
-        }
-
-        // Update pixel data
-        activeLayer.pixels[y][x] = [...color];
-
-        // Update Konva layer
-        this.updateKonvaPixel(activeLayer, x, y, color);
-
-        return true;
-    }
-
-    updateKonvaPixel(layer, x, y, color) {
-        const [r, g, b, a] = color;
-        
-        // Remove existing pixel if it exists
-        const existingPixel = layer.konvaLayer.findOne(`#pixel_${x}_${y}`);
-        if (existingPixel) {
-            existingPixel.destroy();
-        }
-
-        // Add new pixel if not transparent
-        if (a > 0) {
-            const rect = new Konva.Rect({
-                id: `pixel_${x}_${y}`,
-                x: x * this.pixelSize,
-                y: y * this.pixelSize,
-                width: this.pixelSize,
-                height: this.pixelSize,
-                fill: `rgba(${r}, ${g}, ${b}, ${a / 255})`,
-                stroke: null
-            });
-
-            layer.konvaLayer.add(rect);
-        }
-
-        layer.konvaLayer.draw();
-    }
-
-    redrawLayer(index) {
-        if (index < 0 || index >= this.layers.length) {
-            return false;
-        }
-
-        const layer = this.layers[index];
-        
-        // Clear the layer
-        layer.konvaLayer.destroyChildren();
-
-        // Redraw all pixels
-        for (let y = 0; y < this.height; y++) {
-            for (let x = 0; x < this.width; x++) {
-                const color = layer.pixels[y][x];
-                if (color[3] > 0) { // Not transparent
-                    this.updateKonvaPixel(layer, x, y, color);
-                }
-            }
-        }
-
-        return true;
-    }
-
-    getCompositeImageData() {
-        // Create a temporary canvas to composite all visible layers
-        const canvas = document.createElement('canvas');
-        canvas.width = this.width;
-        canvas.height = this.height;
-        const ctx = canvas.getContext('2d');
-
-        // Composite layers from bottom to top
-        this.layers.forEach(layer => {
-            if (!layer.visible) return;
-
-            const layerCanvas = document.createElement('canvas');
-            layerCanvas.width = this.width;
-            layerCanvas.height = this.height;
-            const layerCtx = layerCanvas.getContext('2d');
-
-            // Draw layer pixels
-            for (let y = 0; y < this.height; y++) {
-                for (let x = 0; x < this.width; x++) {
-                    const [r, g, b, a] = layer.pixels[y][x];
-                    if (a > 0) {
-                        layerCtx.fillStyle = `rgba(${r}, ${g}, ${b}, ${a / 255})`;
-                        layerCtx.fillRect(x, y, 1, 1);
-                    }
-                }
-            }
-
-            // Composite onto main canvas
-            ctx.globalAlpha = layer.opacity;
-            ctx.drawImage(layerCanvas, 0, 0);
-            ctx.globalAlpha = 1;
-        });
-
-        return ctx.getImageData(0, 0, this.width, this.height);
-    }
-
-    resize(newWidth, newHeight) {
-        this.width = newWidth;
-        this.height = newHeight;
-
-        // Resize stage
-        this.stage.width(newWidth * this.pixelSize);
-        this.stage.height(newHeight * this.pixelSize);
-
-        // Recreate grid
-        this.gridLayer.destroyChildren();
-        this.createGrid();
-
-        // Resize all layers
-        this.layers.forEach((layer, index) => {
-            // Resize pixel array
-            const newPixels = this.createEmptyPixelArray();
-            
-            // Copy existing pixels
-            for (let y = 0; y < Math.min(layer.pixels.length, newHeight); y++) {
-                for (let x = 0; x < Math.min(layer.pixels[y].length, newWidth); x++) {
-                    newPixels[y][x] = [...layer.pixels[y][x]];
-                }
-            }
-
-            layer.pixels = newPixels;
-            this.redrawLayer(index);
-        });
-
-        this.stage.draw();
-    }
-
-    toggleGridVisibility() {
-        this.gridLayer.visible(!this.gridLayer.visible());
-        this.stage.draw();
-    }
-
-    exportAsSprite() {
-        // Convert the composite to a Sprite object
-        const imageData = this.getCompositeImageData();
-        return Sprite.fromImageData(imageData, 'Layered Sprite');
-    }
-
-    loadFromSprite(sprite) {
-        // Clear existing layers except the first one
-        while (this.layers.length > 1) {
-            this.deleteLayer(1);
-        }
-
-        // Load sprite data into the first layer
-        const firstLayer = this.layers[0];
-        const spritePixels = sprite.getPixelArray();
-        
-        // Resize if necessary
-        if (sprite.width !== this.width || sprite.height !== this.height) {
-            this.resize(sprite.width, sprite.height);
-        }
-
-        // Copy pixels
-        firstLayer.pixels = spritePixels.map(row => 
-            row.map(pixel => [...pixel])
-        );
-
-        this.redrawLayer(0);
-    }
-
-    destroy() {
-        if (this.stage) {
-            this.stage.destroy();
-        }
-    }
+    return pixels;
+  }
 }
 
 // Make LayerManager globally available

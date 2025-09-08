@@ -48,22 +48,24 @@ class PixelEditor {
   /**
    * Initialize the editor
    */
-  /**
-   * Initialize the editor
-   */
-  /**
-   * Initialize the editor
-   */
+  // Update the initialize method to set up layer manager callback correctly
+  // Update the initialize method to set up layer manager callback correctly
   async initialize() {
     // Initialize canvas manager
     this.canvasManager = new CanvasManager("main-canvas", "overlay-canvas");
 
-    // Initialize layer manager
-    if (window.LayerManager) {
-      this.layerManager = new LayerManager("konva-container", 16, 16);
-    }
+    // Initialize layer manager BEFORE loading settings
+    this.layerManager = new LayerManager(16, 16);
 
-    // Load settings BEFORE initializing tools
+    // Set up layer change callback AFTER layer manager is created
+    this.layerManager.setOnChange(() => {
+      if (this.canvasManager) {
+        this.canvasManager.render();
+      }
+      this.updateUI();
+    });
+
+    // Load settings AFTER initializing layer manager
     this.settings = await this.storageManager.loadSettings();
 
     // Initialize tools (now that settings are loaded)
@@ -87,6 +89,12 @@ class PixelEditor {
       this.createNewSprite();
     } else {
       this.setCurrentSprite(this.sprites[0]);
+      // CRITICAL FIX: Force render after setting current sprite
+      setTimeout(() => {
+        if (this.canvasManager) {
+          this.canvasManager.render();
+        }
+      }, 0);
     }
 
     // Update UI
@@ -109,6 +117,91 @@ class PixelEditor {
     // Set tool colors and settings from saved preferences
     this.updateToolColors();
     this.applyToolSettings();
+  }
+
+  // Replace the syncSpriteWithLayers method in PixelEditor
+  syncSpriteWithLayers() {
+    if (!this.currentSprite || !this.layerManager) return;
+
+    // Resize layer manager if needed
+    if (
+      this.layerManager.width !== this.currentSprite.width ||
+      this.layerManager.height !== this.currentSprite.height
+    ) {
+      this.layerManager.resize(
+        this.currentSprite.width,
+        this.currentSprite.height
+      );
+    }
+
+    // Load sprite layers into layer manager
+    if (this.currentSprite.layers && this.currentSprite.layers.length > 0) {
+      // Sprite has layer data, load it into layer manager
+      this.layerManager.fromSprite(this.currentSprite);
+    } else {
+      // No layer data, create from main pixels (backward compatibility)
+      if (this.layerManager.layers.length === 1) {
+        const activeLayer = this.layerManager.getActiveLayer();
+        activeLayer.pixels = this.currentSprite.getPixelArray();
+        this.layerManager.notifyChange();
+      }
+    }
+  }
+
+  // Add this new method to save layer changes back to sprite
+  saveLayersToSprite() {
+    if (!this.currentSprite || !this.layerManager) return;
+
+    // Convert LayerManager data to Sprite format and save
+    this.currentSprite.loadFromLayerManager(this.layerManager);
+
+    // CRITICAL: Force immediate save, don't just debounce
+    if (
+      this.storageManager &&
+      typeof this.storageManager.saveSprite === "function"
+    ) {
+      this.storageManager.saveSprite(this.currentSprite);
+    }
+  }
+
+  // Replace the setCurrentSprite method
+  // Replace the setCurrentSprite method
+  setCurrentSprite(sprite) {
+    this.currentSprite = sprite;
+    if (sprite) {
+      sprite.onChange = (s) => this.debouncedSave(s);
+
+      // Load layers properly
+      if (this.layerManager) {
+        if (sprite.layers && sprite.layers.length > 0) {
+          // Load existing layers
+          this.layerManager.fromSprite(sprite);
+        } else {
+          // Create default layer from sprite pixels (backward compatibility)
+          this.layerManager.resize(sprite.width, sprite.height);
+          const activeLayer = this.layerManager.getActiveLayer();
+          if (activeLayer) {
+            activeLayer.pixels = sprite.getPixelArray();
+            this.layerManager.notifyChange();
+          }
+        }
+      }
+    }
+
+    // Set sprite in canvas manager and force immediate render
+    this.canvasManager.setSprite(sprite);
+
+    // Force immediate canvas render after setting sprite and layers
+    if (this.canvasManager) {
+      this.canvasManager.render();
+    }
+
+    this.updateUI();
+
+    // CRITICAL FIX: Force layer UI update after everything is set
+    if (this.uiManager && this.uiManager.forceLayerUIUpdate) {
+      this.uiManager.forceLayerUIUpdate();
+    }
   }
 
   // Apply saved tool settings
@@ -198,14 +291,7 @@ class PixelEditor {
   }
 
   // Set current sprite
-  setCurrentSprite(sprite) {
-    this.currentSprite = sprite;
-    if (sprite) {
-      sprite.onChange = (s) => this.debouncedSave(s);
-    }
-    this.canvasManager.setSprite(sprite);
-    this.updateUI();
-  }
+
   /**
    * Create optimized canvas setup for large sprites
    */
@@ -501,11 +587,7 @@ class PixelEditor {
       if (img.width > 64 || img.height > 64) {
         // Show downscale modal
         const imageData = ctx.getImageData(0, 0, img.width, img.height);
-        editor.uiManager.showDownscaleModal(
-          imageData,
-          img.width,
-          img.height
-        );
+        editor.uiManager.showDownscaleModal(imageData, img.width, img.height);
         return;
       }
 

@@ -9,28 +9,23 @@ class EraserTool {
 
     // Handle mouse down event
     onMouseDown(x, y, event) {
-        if (!this.editor.currentSprite) return;
-        
+        if (!this.editor.layerManager) return;
         this.isDrawing = true;
         this.erasePixel(x, y);
     }
 
     // Handle mouse drag event
     onMouseDrag(x, y, lastX, lastY, event) {
-        if (!this.editor.currentSprite || !this.isDrawing) return;
-        
+        if (!this.editor.layerManager || !this.isDrawing) return;
         // Erase line from last position to current position
         this.eraseLine(lastX, lastY, x, y);
     }
 
     // Handle mouse up event
     onMouseUp(x, y, event) {
-        if (!this.editor.currentSprite || !this.isDrawing) return;
-        
+        if (!this.editor.layerManager || !this.isDrawing) return;
         this.isDrawing = false;
-        
-        // Save to history after erase stroke is complete
-        this.editor.currentSprite.saveToHistory();
+        // TODO: Implement layerManager history if needed
         this.editor.updateUI();
     }
 
@@ -43,39 +38,30 @@ class EraserTool {
     onMouseLeave(event) {
         if (this.isDrawing) {
             this.isDrawing = false;
-            this.editor.currentSprite.saveToHistory();
+            // TODO: Implement layerManager history if needed
             this.editor.updateUI();
         }
     }
 
     // Erase pixels at position
     erasePixel(x, y) {
-        if (!this.editor.currentSprite) return;
-        
-        const sprite = this.editor.currentSprite;
+        if (!this.editor.layerManager) return;
+        const layerManager = this.editor.layerManager;
         const halfSize = Math.floor(this.size / 2);
-        const transparentColor = [0, 0, 0, 0]; // Transparent
-        
-        // Erase in brush pattern
+        const transparentColor = [0, 0, 0, 0];
         for (let dy = -halfSize; dy <= halfSize; dy++) {
             for (let dx = -halfSize; dx <= halfSize; dx++) {
                 const pixelX = x + dx;
                 const pixelY = y + dy;
-                
-                // Check if pixel is within sprite bounds
-                if (pixelX >= 0 && pixelX < sprite.width && pixelY >= 0 && pixelY < sprite.height) {
-                    // For round erasers, check distance
+                if (pixelX >= 0 && pixelX < layerManager.width && pixelY >= 0 && pixelY < layerManager.height) {
                     if (this.size > 1) {
                         const distance = Math.sqrt(dx * dx + dy * dy);
                         if (distance > this.size / 2) continue;
                     }
-                    
-                    sprite.setPixel(pixelX, pixelY, transparentColor);
+                    layerManager.setPixel(pixelX, pixelY, transparentColor);
                 }
             }
         }
-        
-        // Trigger canvas redraw
         this.editor.canvasManager.render();
     }
 

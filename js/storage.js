@@ -7,7 +7,7 @@ class StorageManager {
     this.settingsStore = "settings";
     this.db = null;
     this.initPromise = this.initDB();
-    
+
     // Compression and chunking for large sprites
     this.compressionThreshold = 100000; // Pixels threshold for compression
     this.chunkSize = 50000; // Size of chunks for very large sprites
@@ -48,7 +48,7 @@ class StorageManager {
         // Add chunks store for very large sprites
         if (!db.objectStoreNames.contains("spriteChunks")) {
           const chunksStore = db.createObjectStore("spriteChunks", {
-            keyPath: ["spriteId", "chunkIndex"]
+            keyPath: ["spriteId", "chunkIndex"],
           });
           chunksStore.createIndex("spriteId", "spriteId", { unique: false });
         }
@@ -60,20 +60,26 @@ class StorageManager {
   compressPixelData(pixels) {
     // Simple run-length encoding for transparent areas
     if (!Array.isArray(pixels)) return pixels;
-    
+
     const compressed = [];
     let currentRun = null;
     let runLength = 0;
-    
+
     for (let y = 0; y < pixels.length; y++) {
       for (let x = 0; x < pixels[y].length; x++) {
         const pixel = pixels[y][x];
         const isTransparent = pixel[3] === 0;
-        
+
         if (currentRun === null) {
-          currentRun = { transparent: isTransparent, pixels: isTransparent ? [] : [pixel] };
+          currentRun = {
+            transparent: isTransparent,
+            pixels: isTransparent ? [] : [pixel],
+          };
           runLength = 1;
-        } else if (currentRun.transparent === isTransparent && runLength < 65535) {
+        } else if (
+          currentRun.transparent === isTransparent &&
+          runLength < 65535
+        ) {
           if (!isTransparent) {
             currentRun.pixels.push(pixel);
           }
@@ -81,44 +87,49 @@ class StorageManager {
         } else {
           // Save current run
           if (currentRun.transparent) {
-            compressed.push({ type: 'transparent', count: runLength });
+            compressed.push({ type: "transparent", count: runLength });
           } else {
-            compressed.push({ type: 'pixels', pixels: currentRun.pixels });
+            compressed.push({ type: "pixels", pixels: currentRun.pixels });
           }
-          
+
           // Start new run
-          currentRun = { transparent: isTransparent, pixels: isTransparent ? [] : [pixel] };
+          currentRun = {
+            transparent: isTransparent,
+            pixels: isTransparent ? [] : [pixel],
+          };
           runLength = 1;
         }
       }
     }
-    
+
     // Save final run
     if (currentRun) {
       if (currentRun.transparent) {
-        compressed.push({ type: 'transparent', count: runLength });
+        compressed.push({ type: "transparent", count: runLength });
       } else {
-        compressed.push({ type: 'pixels', pixels: currentRun.pixels });
+        compressed.push({ type: "pixels", pixels: currentRun.pixels });
       }
     }
-    
+
     return compressed;
   }
 
   // Decompress pixel data
   decompressPixelData(compressed, width, height) {
-    if (!Array.isArray(compressed) || compressed.length === 0) return compressed;
-    
+    if (!Array.isArray(compressed) || compressed.length === 0)
+      return compressed;
+
     const pixels = [];
-    let x = 0, y = 0;
-    
+    let x = 0,
+      y = 0;
+
     // Initialize array
     for (let row = 0; row < height; row++) {
       pixels[row] = [];
     }
-    
+
     for (const run of compressed) {
-      if (run.type === 'transparent') {
+      if (run.type === "transparent") {
         for (let i = 0; i < run.count; i++) {
           pixels[y][x] = [0, 0, 0, 0];
           x++;
@@ -127,7 +138,7 @@ class StorageManager {
             y++;
           }
         }
-      } else if (run.type === 'pixels') {
+      } else if (run.type === "pixels") {
         for (const pixel of run.pixels) {
           pixels[y][x] = pixel;
           x++;
@@ -138,18 +149,18 @@ class StorageManager {
         }
       }
     }
-    
+
     return pixels;
   }
 
   // Save large sprite in chunks if necessary
   async saveLargeSprite(sprite) {
     const pixelCount = sprite.width * sprite.height;
-    
+
     if (pixelCount <= this.chunkSize) {
       return this.saveRegularSprite(sprite);
     }
-    
+
     // Save sprite metadata
     const spriteData = {
       id: sprite.id,
@@ -160,11 +171,11 @@ class StorageManager {
       modifiedAt: sprite.modifiedAt,
       size: pixelCount,
       chunked: true,
-      chunkCount: Math.ceil(pixelCount / this.chunkSize)
+      chunkCount: Math.ceil(pixelCount / this.chunkSize),
     };
-    
+
     await this.ensureDB();
-    
+
     // Save metadata
     const transaction = this.db.transaction([this.spritesStore], "readwrite");
     const store = transaction.objectStore(this.spritesStore);
@@ -173,50 +184,63 @@ class StorageManager {
       request.onsuccess = () => resolve();
       request.onerror = () => reject(request.error);
     });
-    
+
     // Save chunks
     const pixels = sprite.getPixelArray();
     const flatPixels = pixels.flat();
-    
+
     for (let i = 0; i < flatPixels.length; i += this.chunkSize) {
       const chunk = flatPixels.slice(i, i + this.chunkSize);
       const chunkIndex = Math.floor(i / this.chunkSize);
-      
+
       await this.saveChunk(sprite.id, chunkIndex, chunk);
     }
-    
+
     return true;
   }
 
   // Save regular sized sprite with optional compression
+  // Save regular sized sprite with optional compression
   async saveRegularSprite(sprite) {
     await this.ensureDB();
-    
-    let pixelData = sprite.getPixelArray();
+
+    // CRITICAL FIX: Always save layers data, not just pixels
+    let layersData = sprite.getLayersData();
     let compressed = false;
-    
-    // Compress if sprite is large enough
+
+    // Optionally compress each layer if large enough
     if (sprite.width * sprite.height > this.compressionThreshold) {
-      pixelData = this.compressPixelData(pixelData);
+      layersData = layersData.map((layer) => {
+        if (
+          Array.isArray(layer.pixels) &&
+          layer.pixels.length === sprite.height
+        ) {
+          return {
+            ...layer,
+            pixels: this.compressPixelData(layer.pixels),
+            compressed: true,
+          };
+        }
+        return layer;
+      });
       compressed = true;
     }
-    
+
     const spriteData = {
       id: sprite.id,
       name: sprite.name,
       width: sprite.width,
       height: sprite.height,
-      pixels: pixelData,
+      layers: layersData, // SAVE LAYERS DATA
       createdAt: sprite.createdAt,
       modifiedAt: sprite.modifiedAt,
       size: sprite.width * sprite.height,
       compressed: compressed,
-      chunked: false
+      chunked: false,
     };
-    
+
     const transaction = this.db.transaction([this.spritesStore], "readwrite");
     const store = transaction.objectStore(this.spritesStore);
-    
     return new Promise((resolve, reject) => {
       const request = store.put(spriteData);
       request.onsuccess = () => resolve(true);
@@ -230,16 +254,16 @@ class StorageManager {
   // Save a chunk of sprite data
   async saveChunk(spriteId, chunkIndex, chunkData) {
     await this.ensureDB();
-    
+
     const transaction = this.db.transaction(["spriteChunks"], "readwrite");
     const store = transaction.objectStore("spriteChunks");
-    
+
     const chunkRecord = {
       spriteId: spriteId,
       chunkIndex: chunkIndex,
-      data: chunkData
+      data: chunkData,
     };
-    
+
     return new Promise((resolve, reject) => {
       const request = store.put(chunkRecord);
       request.onsuccess = () => resolve();
@@ -250,20 +274,22 @@ class StorageManager {
   // Load chunks for a large sprite
   async loadChunks(spriteId, chunkCount) {
     await this.ensureDB();
-    
+
     const transaction = this.db.transaction(["spriteChunks"], "readonly");
     const store = transaction.objectStore("spriteChunks");
     const index = store.index("spriteId");
-    
+
     return new Promise((resolve, reject) => {
       const request = index.getAll(spriteId);
-      
+
       request.onsuccess = () => {
-        const chunks = request.result.sort((a, b) => a.chunkIndex - b.chunkIndex);
-        const flatPixels = chunks.map(chunk => chunk.data).flat();
+        const chunks = request.result.sort(
+          (a, b) => a.chunkIndex - b.chunkIndex
+        );
+        const flatPixels = chunks.map((chunk) => chunk.data).flat();
         resolve(flatPixels);
       };
-      
+
       request.onerror = () => {
         console.error("Failed to load chunks:", request.error);
         resolve([]);
@@ -275,7 +301,7 @@ class StorageManager {
   async saveSprite(sprite) {
     try {
       const pixelCount = sprite.width * sprite.height;
-      
+
       if (pixelCount > this.chunkSize) {
         return await this.saveLargeSprite(sprite);
       } else {
@@ -293,9 +319,14 @@ class StorageManager {
       await this.ensureDB();
 
       // Process in batches based on sprite sizes
-      const smallSprites = sprites.filter(s => s.width * s.height <= 10000);
-      const mediumSprites = sprites.filter(s => s.width * s.height > 10000 && s.width * s.height <= this.chunkSize);
-      const largeSprites = sprites.filter(s => s.width * s.height > this.chunkSize);
+      const smallSprites = sprites.filter((s) => s.width * s.height <= 10000);
+      const mediumSprites = sprites.filter(
+        (s) =>
+          s.width * s.height > 10000 && s.width * s.height <= this.chunkSize
+      );
+      const largeSprites = sprites.filter(
+        (s) => s.width * s.height > this.chunkSize
+      );
 
       // Clear existing sprites first
       await this.clearSprites();
@@ -305,7 +336,7 @@ class StorageManager {
         await this.saveBatch(smallSprites, 10);
       }
 
-      // Save medium sprites in smaller batches  
+      // Save medium sprites in smaller batches
       if (mediumSprites.length > 0) {
         await this.saveBatch(mediumSprites, 3);
       }
@@ -314,7 +345,7 @@ class StorageManager {
       for (const sprite of largeSprites) {
         await this.saveLargeSprite(sprite);
         // Allow other operations to process
-        await new Promise(resolve => setTimeout(resolve, 10));
+        await new Promise((resolve) => setTimeout(resolve, 10));
       }
 
       return true;
@@ -328,16 +359,16 @@ class StorageManager {
   async saveBatch(sprites, batchSize) {
     for (let i = 0; i < sprites.length; i += batchSize) {
       const batch = sprites.slice(i, i + batchSize);
-      
+
       const transaction = this.db.transaction([this.spritesStore], "readwrite");
       const store = transaction.objectStore(this.spritesStore);
-      
+
       await new Promise((resolve, reject) => {
         let completed = 0;
-        
+
         transaction.oncomplete = () => resolve();
         transaction.onerror = () => reject(transaction.error);
-        
+
         for (const sprite of batch) {
           const spriteData = {
             id: sprite.id,
@@ -349,68 +380,116 @@ class StorageManager {
             modifiedAt: sprite.modifiedAt,
             size: sprite.width * sprite.height,
             compressed: false,
-            chunked: false
+            chunked: false,
           };
-          
+
           store.put(spriteData);
         }
       });
-      
+
       // Allow other operations between batches
-      await new Promise(resolve => setTimeout(resolve, 0));
+      await new Promise((resolve) => setTimeout(resolve, 0));
     }
   }
 
   // Optimized sprite loading with decompression/chunk assembly
+  // Update the loadSprites method to handle missing layer data better
+  // Update the loadSprites method to handle missing layer data better
   async loadSprites() {
     try {
       await this.ensureDB();
-
       const transaction = this.db.transaction([this.spritesStore], "readonly");
       const store = transaction.objectStore(this.spritesStore);
-
       return new Promise(async (resolve, reject) => {
         const request = store.getAll();
-
         request.onsuccess = async () => {
           const spritesData = request.result;
           const sprites = [];
-          
           for (const spriteData of spritesData) {
             try {
-              let pixelData;
-              
-              if (spriteData.chunked) {
-                // Load from chunks
-                const flatPixels = await this.loadChunks(spriteData.id, spriteData.chunkCount);
-                pixelData = this.reconstruct2DArray(flatPixels, spriteData.width, spriteData.height);
-              } else if (spriteData.compressed) {
-                // Decompress
-                pixelData = this.decompressPixelData(spriteData.pixels, spriteData.width, spriteData.height);
-              } else {
-                pixelData = spriteData.pixels;
+              let layersData = spriteData.layers;
+
+              // Enhanced backward compatibility - FIX THE LAYER LOADING
+              if (!Array.isArray(layersData) || layersData.length === 0) {
+                if (spriteData.pixels) {
+                  // Old format: single pixel array
+                  layersData = [
+                    {
+                      name: "Layer 1",
+                      visible: true,
+                      opacity: 1,
+                      pixels: spriteData.pixels,
+                      useTypedArray:
+                        spriteData.useTypedArray ||
+                        spriteData.width * spriteData.height > 50000,
+                    },
+                  ];
+                } else {
+                  // Create empty layer if no data
+                  layersData = [
+                    {
+                      name: "Layer 1",
+                      visible: true,
+                      opacity: 1,
+                      pixels: this.createEmptyPixelArray(
+                        spriteData.width,
+                        spriteData.height
+                      ),
+                      useTypedArray:
+                        spriteData.width * spriteData.height > 50000,
+                    },
+                  ];
+                }
               }
-              
+
+              // Decompress layers if needed
+              if (Array.isArray(layersData)) {
+                layersData = layersData.map((layer) => {
+                  let pixels = layer.pixels;
+                  if (layer.compressed && Array.isArray(pixels)) {
+                    pixels = this.decompressPixelData(
+                      pixels,
+                      spriteData.width,
+                      spriteData.height
+                    );
+                  }
+                  return {
+                    ...layer,
+                    pixels,
+                  };
+                });
+              }
+
               const sprite = new Sprite(
                 spriteData.width,
                 spriteData.height,
                 spriteData.name,
-                spriteData.id
+                spriteData.id,
+                layersData // Pass the layers data to constructor
               );
-              
-              sprite.setPixelArray(pixelData);
               sprite.createdAt = spriteData.createdAt;
               sprite.modifiedAt = spriteData.modifiedAt;
-              
               sprites.push(sprite);
             } catch (error) {
               console.error("Failed to load sprite:", spriteData.id, error);
+              // Create a fallback sprite with minimal data
+              try {
+                const fallbackSprite = new Sprite(
+                  spriteData.width || 32,
+                  spriteData.height || 32,
+                  spriteData.name || "Corrupted Sprite"
+                );
+                sprites.push(fallbackSprite);
+              } catch (fallbackError) {
+                console.error(
+                  "Failed to create fallback sprite:",
+                  fallbackError
+                );
+              }
             }
           }
-          
           resolve(sprites);
         };
-
         request.onerror = () => {
           console.error("Failed to load sprites:", request.error);
           resolve([]);
@@ -422,11 +501,23 @@ class StorageManager {
     }
   }
 
+  // Add this helper method to StorageManager
+  createEmptyPixelArray(width, height) {
+    const pixels = [];
+    for (let y = 0; y < height; y++) {
+      pixels[y] = [];
+      for (let x = 0; x < width; x++) {
+        pixels[y][x] = [0, 0, 0, 0];
+      }
+    }
+    return pixels;
+  }
+
   // Reconstruct 2D array from flat array
   reconstruct2DArray(flatPixels, width, height) {
     const pixels = [];
     let index = 0;
-    
+
     for (let y = 0; y < height; y++) {
       pixels[y] = [];
       for (let x = 0; x < width; x++) {
@@ -434,7 +525,7 @@ class StorageManager {
         index++;
       }
     }
-    
+
     return pixels;
   }
 
@@ -443,18 +534,21 @@ class StorageManager {
     try {
       await this.ensureDB();
 
-      const transaction = this.db.transaction([this.spritesStore, "spriteChunks"], "readwrite");
+      const transaction = this.db.transaction(
+        [this.spritesStore, "spriteChunks"],
+        "readwrite"
+      );
       const spritesStore = transaction.objectStore(this.spritesStore);
       const chunksStore = transaction.objectStore("spriteChunks");
 
       return new Promise((resolve, reject) => {
         // Delete sprite metadata
         const spriteRequest = spritesStore.delete(spriteId);
-        
+
         // Delete associated chunks
         const chunksIndex = chunksStore.index("spriteId");
         const chunksRequest = chunksIndex.openCursor(spriteId);
-        
+
         chunksRequest.onsuccess = (event) => {
           const cursor = event.target.result;
           if (cursor) {
@@ -462,7 +556,7 @@ class StorageManager {
             cursor.continue();
           }
         };
-        
+
         transaction.oncomplete = () => resolve(true);
         transaction.onerror = () => {
           console.error("Failed to delete sprite:", transaction.error);
@@ -480,14 +574,17 @@ class StorageManager {
     try {
       await this.ensureDB();
 
-      const transaction = this.db.transaction([this.spritesStore, "spriteChunks"], "readwrite");
+      const transaction = this.db.transaction(
+        [this.spritesStore, "spriteChunks"],
+        "readwrite"
+      );
       const spritesStore = transaction.objectStore(this.spritesStore);
       const chunksStore = transaction.objectStore("spriteChunks");
 
       return new Promise((resolve, reject) => {
         const clearSprites = spritesStore.clear();
         const clearChunks = chunksStore.clear();
-        
+
         transaction.oncomplete = () => resolve(true);
         transaction.onerror = () => {
           console.error("Failed to clear sprites:", transaction.error);
@@ -509,12 +606,12 @@ class StorageManager {
         console.warn("Init promise cleanup error:", error);
       }
     }
-    
+
     // Clear any large caches
     if (this.renderCache) {
       this.renderCache.clear();
     }
-    
+
     this.close();
   }
 
@@ -534,7 +631,7 @@ class StorageManager {
 
       let totalSize = 0;
       let largestSprite = 0;
-      
+
       for (const sprite of sprites) {
         const spriteSize = sprite.width * sprite.height * 4; // 4 bytes per pixel
         totalSize += spriteSize;
@@ -551,7 +648,10 @@ class StorageManager {
         totalSizeFormatted: this.formatBytes(grandTotal),
         spriteCount: sprites.length,
         largestSpriteSize: this.formatBytes(largestSprite),
-        averageSpriteSize: sprites.length > 0 ? this.formatBytes(totalSize / sprites.length) : "0 B"
+        averageSpriteSize:
+          sprites.length > 0
+            ? this.formatBytes(totalSize / sprites.length)
+            : "0 B",
       };
     } catch (error) {
       console.error("Failed to get storage usage:", error);
@@ -562,7 +662,7 @@ class StorageManager {
         totalSizeFormatted: "0 B",
         spriteCount: 0,
         largestSpriteSize: "0 B",
-        averageSpriteSize: "0 B"
+        averageSpriteSize: "0 B",
       };
     }
   }
@@ -593,7 +693,10 @@ class StorageManager {
 
       const cleanSettings = JSON.parse(JSON.stringify(settings));
 
-      const transaction = this.db.transaction([this.settingsStore], "readwrite");
+      const transaction = this.db.transaction(
+        [this.settingsStore],
+        "readwrite"
+      );
       const store = transaction.objectStore(this.settingsStore);
 
       const settingsData = {
@@ -711,23 +814,21 @@ class StorageManager {
   async exportSprites(sprites) {
     try {
       const exportData = {
-        version: "1.0",
+        version: "2.0",
         createdAt: new Date().toISOString(),
         sprites: sprites.map((sprite) => ({
           id: sprite.id,
           name: sprite.name,
           width: sprite.width,
           height: sprite.height,
-          pixels: sprite.getPixelArray(),
+          layers: sprite.getLayersData(),
           createdAt: sprite.createdAt,
           modifiedAt: sprite.modifiedAt,
         })),
       };
-
       const blob = new Blob([JSON.stringify(exportData, null, 2)], {
         type: "application/json",
       });
-
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -736,7 +837,6 @@ class StorageManager {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-
       return true;
     } catch (error) {
       console.error("Failed to export sprites:", error);
@@ -748,19 +848,31 @@ class StorageManager {
     try {
       const text = await this.readFileAsText(file);
       const importData = JSON.parse(text);
-
       if (!importData.sprites || !Array.isArray(importData.sprites)) {
         throw new Error("Invalid sprite file format");
       }
-
       return importData.sprites.map((spriteData) => {
+        let layersData = spriteData.layers;
+        if (!Array.isArray(layersData) && spriteData.pixels) {
+          layersData = [
+            {
+              name: "Layer 1",
+              visible: true,
+              opacity: 1,
+              pixels: spriteData.pixels,
+              useTypedArray:
+                spriteData.useTypedArray ||
+                spriteData.width * spriteData.height > 50000,
+            },
+          ];
+        }
         const sprite = new Sprite(
           spriteData.width,
           spriteData.height,
           spriteData.name,
-          spriteData.id || Date.now() + Math.random()
+          spriteData.id || Date.now() + Math.random(),
+          layersData
         );
-        sprite.setPixelArray(spriteData.pixels);
         sprite.createdAt = spriteData.createdAt || new Date().toISOString();
         sprite.modifiedAt = spriteData.modifiedAt || new Date().toISOString();
         return sprite;
@@ -785,6 +897,6 @@ class StorageManager {
 window.storageManager = new StorageManager();
 
 // Export for module systems
-if (typeof module !== 'undefined' && module.exports) {
+if (typeof module !== "undefined" && module.exports) {
   module.exports = StorageManager;
 }

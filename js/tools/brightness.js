@@ -58,55 +58,44 @@ class BrightnessTool {
 
     // Adjust brightness of pixels at position
     adjustBrightness(x, y) {
-        if (!this.editor.currentSprite) return;
-        
-        const sprite = this.editor.currentSprite;
+        // Layer support: use LayerManager for pixel operations
+        const layerManager = this.editor.layerManager;
+        if (!layerManager) return;
+        const activeLayer = layerManager.getActiveLayer();
+        if (!activeLayer) return;
+        const width = layerManager.width;
+        const height = layerManager.height;
         const halfSize = Math.floor(this.size / 2);
-        
-        // Apply brightness adjustment to brush area
         for (let dy = -halfSize; dy <= halfSize; dy++) {
             for (let dx = -halfSize; dx <= halfSize; dx++) {
                 const pixelX = x + dx;
                 const pixelY = y + dy;
-                
-                // Check if pixel is within sprite bounds
-                if (pixelX >= 0 && pixelX < sprite.width && pixelY >= 0 && pixelY < sprite.height) {
-                    // For round brushes, check distance
+                if (pixelX >= 0 && pixelX < width && pixelY >= 0 && pixelY < height) {
                     if (this.size > 1) {
                         const distance = Math.sqrt(dx * dx + dy * dy);
                         if (distance > this.size / 2) continue;
                     }
-                    
-                    // Check if we should skip this pixel for "apply once" mode
                     const pixelKey = `${pixelX},${pixelY}`;
                     if (this.applyOnce && this.processedPixels.has(pixelKey)) {
                         continue;
                     }
-                    
-                    const currentColor = sprite.getPixel(pixelX, pixelY);
-                    
-                    // Determine intensity to use
+                    // Use LayerManager's getPixel for active layer
+                    const currentColor = layerManager.getPixel(pixelX, pixelY);
                     let intensityToUse = this.intensity;
                     if (this.randomMode) {
-                        // Generate random intensity between -intensity and +intensity
                         const maxIntensity = Math.abs(this.intensity);
                         intensityToUse = (Math.random() * 2 - 1) * maxIntensity;
                     }
-                    
                     const adjustedColor = this.mode === 'hsl' ? 
                         this.adjustPixelBrightnessHSL(currentColor, intensityToUse) :
                         this.adjustPixelBrightness(currentColor, intensityToUse);
-                    
-                    sprite.setPixel(pixelX, pixelY, adjustedColor);
-                    
-                    // Mark pixel as processed if apply once is enabled
+                    layerManager.setPixel(pixelX, pixelY, adjustedColor);
                     if (this.applyOnce) {
                         this.processedPixels.add(pixelKey);
                     }
                 }
             }
         }
-        
         // Trigger canvas redraw
         this.editor.canvasManager.render();
     }
