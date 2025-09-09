@@ -313,12 +313,21 @@ class CanvasManager {
    */
   setSprite(sprite) {
     this.currentSprite = sprite;
-    
+
     if (window.editor && window.editor.layerManager) {
       this.layerManager = window.editor.layerManager;
     }
-    
-    this.updateCanvasSize();
+
+    // Always update canvas size to match sprite dimensions
+    this.mainCanvas.width = sprite.width * this.zoomLevel;
+    this.mainCanvas.height = sprite.height * this.zoomLevel;
+    this.overlayCanvas.width = sprite.width * this.zoomLevel;
+    this.overlayCanvas.height = sprite.height * this.zoomLevel;
+    this.mainCanvas.style.width = `${sprite.width * this.zoomLevel}px`;
+    this.mainCanvas.style.height = `${sprite.height * this.zoomLevel}px`;
+    this.overlayCanvas.style.width = `${sprite.width * this.zoomLevel}px`;
+    this.overlayCanvas.style.height = `${sprite.height * this.zoomLevel}px`;
+
     this.render();
   }
 

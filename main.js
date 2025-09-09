@@ -1,9 +1,6 @@
 // Main Application Entry Point
 // Initializes the Pixel Editor when the DOM is loaded
 
-//setup button click for ai generation
-document.getElementById('quick-template-button').addEventListener('click', handleGenerateAI);
-
 // Global editor instance
 let editor = null;
 
