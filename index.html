@@ -72,6 +72,9 @@
             <i class="fas fa-download"></i>
             Export
           </button>
+          <button id="quick-template-button">Quick Template</button>
+          <button id="generate-ai-button">Generate AI Pixel Art</button>
+          <div id="editor-container"></div>
           <button class="btn btn-secondary" id="settings-btn" title="Settings">
             <i class="fas fa-cog"></i>
           </button>
@@ -160,7 +163,7 @@
       <!-- Main Content -->
       <div class="main-container">
         <!-- Sprite Sidebar (moved to far left) -->
-        <aside class="sidebar">
+        <aside class="sidebar" id = "sprites-sidebar">
           <div class="sidebar-section">
             <h3>Recent Sprites</h3>
             <button class="btn btn-secondary btn-sm" id="pick-folder">
@@ -545,6 +548,8 @@
     <script src="js/tools/brightness.js"></script>
     <script src="js/uiController.js"></script>
     <script src="js/editor.js"></script>
+    <script src="js/fakeAIGenerator.js"></script>
+    <script src="js/aiGenerator.js"></script>
     <script src="main.js" defer></script>
   </body>
 </html>

@@ -370,6 +370,7 @@ class Sprite {
   }
 
   // Resize the sprite
+  // Modified resize method with nearest neighbor scaling
   resize(newWidth, newHeight, maintainAspectRatio = false) {
     if (maintainAspectRatio) {
       const aspectRatio = this.width / this.height;
@@ -380,45 +381,102 @@ class Sprite {
       }
     }
 
+    // Store original dimensions and pixels for scaling
+    const oldWidth = this.width;
+    const oldHeight = this.height;
+
     // Determine if we should use typed arrays for the new size
     const shouldUseTypedArray = newWidth * newHeight > 50000;
 
-    if (shouldUseTypedArray) {
-      const newPixels = new Uint8Array(newWidth * newHeight * 4);
+    // Process each layer with nearest neighbor scaling
+    for (let layerIndex = 0; layerIndex < this.layers.length; layerIndex++) {
+      const layer = this.layers[layerIndex];
 
-      // Copy existing pixels efficiently
-      for (let y = 0; y < Math.min(this.height, newHeight); y++) {
-        for (let x = 0; x < Math.min(this.width, newWidth); x++) {
-          const oldPixel = this.getPixel(x, y);
-          const newIndex = (y * newWidth + x) * 4;
-          newPixels[newIndex] = oldPixel[0];
-          newPixels[newIndex + 1] = oldPixel[1];
-          newPixels[newIndex + 2] = oldPixel[2];
-          newPixels[newIndex + 3] = oldPixel[3];
-        }
-      }
+      if (shouldUseTypedArray) {
+        const newPixels = new Uint8Array(newWidth * newHeight * 4);
 
-      this.pixels = newPixels;
-      this.useTypedArray = true;
-    } else {
-      const newPixels = [];
-      for (let y = 0; y < newHeight; y++) {
-        newPixels[y] = [];
-        for (let x = 0; x < newWidth; x++) {
-          if (x < this.width && y < this.height) {
-            newPixels[y][x] = [...this.getPixel(x, y)];
-          } else {
-            newPixels[y][x] = [0, 0, 0, 0];
+        // Nearest neighbor scaling for typed array
+        for (let y = 0; y < newHeight; y++) {
+          for (let x = 0; x < newWidth; x++) {
+            // Map new coordinates to old coordinates using nearest neighbor
+            const srcX = Math.floor((x / newWidth) * oldWidth);
+            const srcY = Math.floor((y / newHeight) * oldHeight);
+
+            // Clamp to bounds
+            const clampedSrcX = Math.min(srcX, oldWidth - 1);
+            const clampedSrcY = Math.min(srcY, oldHeight - 1);
+
+            // Get original pixel
+            let srcPixel;
+            if (layer.useTypedArray) {
+              const srcIndex = (clampedSrcY * oldWidth + clampedSrcX) * 4;
+              srcPixel = [
+                layer.pixels[srcIndex],
+                layer.pixels[srcIndex + 1],
+                layer.pixels[srcIndex + 2],
+                layer.pixels[srcIndex + 3],
+              ];
+            } else {
+              srcPixel = layer.pixels[clampedSrcY][clampedSrcX];
+            }
+
+            // Set new pixel
+            const newIndex = (y * newWidth + x) * 4;
+            newPixels[newIndex] = srcPixel[0];
+            newPixels[newIndex + 1] = srcPixel[1];
+            newPixels[newIndex + 2] = srcPixel[2];
+            newPixels[newIndex + 3] = srcPixel[3];
           }
         }
-      }
 
-      this.pixels = newPixels;
-      this.useTypedArray = false;
+        layer.pixels = newPixels;
+        layer.useTypedArray = true;
+      } else {
+        const newPixels = [];
+
+        // Nearest neighbor scaling for 2D array
+        for (let y = 0; y < newHeight; y++) {
+          newPixels[y] = [];
+          for (let x = 0; x < newWidth; x++) {
+            // Map new coordinates to old coordinates using nearest neighbor
+            const srcX = Math.floor((x / newWidth) * oldWidth);
+            const srcY = Math.floor((y / newHeight) * oldHeight);
+
+            // Clamp to bounds
+            const clampedSrcX = Math.min(srcX, oldWidth - 1);
+            const clampedSrcY = Math.min(srcY, oldHeight - 1);
+
+            // Get original pixel
+            let srcPixel;
+            if (layer.useTypedArray) {
+              const srcIndex = (clampedSrcY * oldWidth + clampedSrcX) * 4;
+              srcPixel = [
+                layer.pixels[srcIndex],
+                layer.pixels[srcIndex + 1],
+                layer.pixels[srcIndex + 2],
+                layer.pixels[srcIndex + 3],
+              ];
+            } else {
+              srcPixel = [...layer.pixels[clampedSrcY][clampedSrcX]];
+            }
+
+            newPixels[y][x] = srcPixel;
+          }
+        }
+
+        layer.pixels = newPixels;
+        layer.useTypedArray = false;
+      }
     }
 
+    // Update sprite dimensions
     this.width = newWidth;
     this.height = newHeight;
+
+    // Update backward compatibility reference to first layer
+    this.pixels = this.layers[0].pixels;
+    this.useTypedArray = this.layers[0].useTypedArray;
+
     this.modifiedAt = new Date().toISOString();
     this.saveToHistory();
 

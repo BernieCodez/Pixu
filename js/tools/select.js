@@ -1,4 +1,4 @@
-// Select Tool - For selecting rectangular areas
+// Select Tool - For selecting rectangular areas (Layer-compatible version)
 class SelectTool {
   constructor(editor) {
     this.editor = editor;
@@ -17,7 +17,8 @@ class SelectTool {
     this.originalClipboard = null;
     this.rigidScaling = true; // Default to rigid scaling
   }
-  // New method: Get scale handle at position
+
+  // Get scale handle at position
   _getScaleHandle(x, y) {
     if (!this.selection) return null;
 
@@ -47,109 +48,107 @@ class SelectTool {
     return null;
   }
 
-  // New method: Handle scaling logic
-  // Modified _handleScaling method - apply rigid scaling during preview
-_handleScaling(x, y) {
-  const { left, top, right, bottom } = this.originalSelection;
-  const originalWidth = right - left + 1;
-  const originalHeight = bottom - top + 1;
+  // Handle scaling logic with layers
+  _handleScaling(x, y) {
+    const { left, top, right, bottom } = this.originalSelection;
+    const originalWidth = right - left + 1;
+    const originalHeight = bottom - top + 1;
 
-  let newLeft = left,
-    newTop = top,
-    newRight = right,
-    newBottom = bottom;
+    let newLeft = left,
+      newTop = top,
+      newRight = right,
+      newBottom = bottom;
 
-  // Calculate new bounds based on handle being dragged
-  switch (this.scaleHandle) {
-    case "nw":
-      newLeft = x;
-      newTop = y;
-      break;
-    case "ne":
-      newRight = x;
-      newTop = y;
-      break;
-    case "sw":
-      newLeft = x;
-      newBottom = y;
-      break;
-    case "se":
-      newRight = x;
-      newBottom = y;
-      break;
-  }
-
-  // Ensure minimum size
-  if (newRight <= newLeft) newRight = newLeft + 1;
-  if (newBottom <= newTop) newBottom = newTop + 1;
-
-  let newWidth = newRight - newLeft + 1;
-  let newHeight = newBottom - newTop + 1;
-
-  // Apply rigid scaling if enabled - now affects the preview too
-  if (this.rigidScaling) {
-    const scaleX = Math.max(1, Math.round(newWidth / originalWidth));
-    const scaleY = Math.max(1, Math.round(newHeight / originalHeight));
-
-    // Use the same scale for both dimensions (maintain aspect ratio)
-    const scale = Math.max(scaleX, scaleY);
-
+    // Calculate new bounds based on handle being dragged
     switch (this.scaleHandle) {
       case "nw":
-        newLeft = right - originalWidth * scale + 1;
-        newTop = bottom - originalHeight * scale + 1;
-        newRight = right;
-        newBottom = bottom;
+        newLeft = x;
+        newTop = y;
         break;
       case "ne":
-        newLeft = left;
-        newTop = bottom - originalHeight * scale + 1;
-        newRight = left + originalWidth * scale - 1;
-        newBottom = bottom;
+        newRight = x;
+        newTop = y;
         break;
       case "sw":
-        newLeft = right - originalWidth * scale + 1;
-        newTop = top;
-        newRight = right;
-        newBottom = top + originalHeight * scale - 1;
+        newLeft = x;
+        newBottom = y;
         break;
       case "se":
-        newLeft = left;
-        newTop = top;
-        newRight = left + originalWidth * scale - 1;
-        newBottom = top + originalHeight * scale - 1;
+        newRight = x;
+        newBottom = y;
         break;
     }
 
-    // Recalculate width and height based on rigid scaling
-    newWidth = newRight - newLeft + 1;
-    newHeight = newBottom - newTop + 1;
+    // Ensure minimum size
+    if (newRight <= newLeft) newRight = newLeft + 1;
+    if (newBottom <= newTop) newBottom = newTop + 1;
+
+    let newWidth = newRight - newLeft + 1;
+    let newHeight = newBottom - newTop + 1;
+
+    // Apply rigid scaling if enabled
+    if (this.rigidScaling) {
+      const scaleX = Math.max(1, Math.round(newWidth / originalWidth));
+      const scaleY = Math.max(1, Math.round(newHeight / originalHeight));
+
+      // Use the same scale for both dimensions (maintain aspect ratio)
+      const scale = Math.max(scaleX, scaleY);
+
+      switch (this.scaleHandle) {
+        case "nw":
+          newLeft = right - originalWidth * scale + 1;
+          newTop = bottom - originalHeight * scale + 1;
+          newRight = right;
+          newBottom = bottom;
+          break;
+        case "ne":
+          newLeft = left;
+          newTop = bottom - originalHeight * scale + 1;
+          newRight = left + originalWidth * scale - 1;
+          newBottom = bottom;
+          break;
+        case "sw":
+          newLeft = right - originalWidth * scale + 1;
+          newTop = top;
+          newRight = right;
+          newBottom = top + originalHeight * scale - 1;
+          break;
+        case "se":
+          newLeft = left;
+          newTop = top;
+          newRight = left + originalWidth * scale - 1;
+          newBottom = top + originalHeight * scale - 1;
+          break;
+      }
+
+      // Recalculate width and height based on rigid scaling
+      newWidth = newRight - newLeft + 1;
+      newHeight = newBottom - newTop + 1;
+    }
+
+    // Update selection bounds
+    this.selection = {
+      left: newLeft,
+      top: newTop,
+      right: newRight,
+      bottom: newBottom,
+    };
+
+    // Create scaled clipboard
+    const scaledClipboard = this._createScaledClipboard(
+      this.originalClipboard,
+      newWidth,
+      newHeight
+    );
+
+    // Show preview
+    this.editor.canvasManager.showDraggedSelectionPreview(
+      this.selection,
+      scaledClipboard
+    );
   }
 
-  // Update selection bounds
-  this.selection = {
-    left: newLeft,
-    top: newTop,
-    right: newRight,
-    bottom: newBottom,
-  };
-
   // Create scaled clipboard
-  const scaledClipboard = this._createScaledClipboard(
-    this.originalClipboard,
-    newWidth,
-    newHeight
-  );
-
-  // Show preview
-  this.editor.canvasManager.showDraggedSelectionPreview(
-    this.selection,
-    scaledClipboard
-  );
-}
-
-
-  // New method: Create scaled clipboard
   _createScaledClipboard(originalClipboard, newWidth, newHeight) {
     const scaledClipboard = {
       width: newWidth,
@@ -178,146 +177,143 @@ _handleScaling(x, y) {
     return scaledClipboard;
   }
 
-  // Modified onMouseDown method
-  
-// Modified onMouseDown method - clear original content when starting to scale
-onMouseDown(x, y, event) {
-  if (!this.editor.currentSprite) return;
+  // Modified onMouseDown - now works with layers
+  onMouseDown(x, y, event) {
+    if (!this.editor.currentSprite || !this.editor.layerManager) return;
 
-  // Check if clicking on a scale handle
-  if (this.selection) {
-    const handle = this._getScaleHandle(x, y);
-    if (handle) {
-      this.isScaling = true;
-      this.scaleHandle = handle;
-      this.originalSelection = { ...this.selection };
-      this.originalClipboard = this._copyFromBounds(this.selection);
-      
-      // Clear the original content immediately when scaling starts
-      this._deleteBounds(this.selection);
-      this.editor.canvasManager.render();
-      
-      return;
-    }
-
-    // Check if clicking inside selection for dragging
-    if (
-      x >= this.selection.left &&
-      x <= this.selection.right &&
-      y >= this.selection.top &&
-      y <= this.selection.bottom
-    ) {
-      this.isDragging = true;
-      this.dragOffset = { x, y };
-      this.lastDragPosition = { x, y };
-      this.originalSelection = { ...this.selection };
-      this.dragClipboard = this._copyFromBounds(this.selection);
-      this._deleteBounds(this.originalSelection);
-      this.editor.canvasManager.render();
-      this.editor.canvasManager.showDraggedSelectionPreview(
-        this.selection,
-        this.dragClipboard
-      );
-      return;
-    }
-  }
-
-  // Start new selection
-  this.isSelecting = true;
-  this.editor.canvasManager.startSelection(x, y);
-}
-
-// Modified onMouseUp method - always show handles after operations
-onMouseUp(x, y, event) {
-  if (!this.editor.currentSprite) return;
-
-  if (this.isScaling && this.selection && this.originalClipboard) {
-    // Clear the preview
-    this.editor.canvasManager.clearOverlay();
-
-    // Create final scaled clipboard
-    const newWidth = this.selection.right - this.selection.left + 1;
-    const newHeight = this.selection.bottom - this.selection.top + 1;
-    const scaledClipboard = this._createScaledClipboard(
-      this.originalClipboard,
-      newWidth,
-      newHeight
-    );
-
-    // Paste scaled content
-    this._pasteClipboardAt(
-      scaledClipboard,
-      this.selection.left,
-      this.selection.top
-    );
-
-    // Reset scaling state
-    this.isScaling = false;
-    this.scaleHandle = null;
-    this.originalClipboard = null;
-
-    // Update CanvasManager selection state
-    if (this.editor.canvasManager.selection) {
-      this.editor.canvasManager.selection.startX = this.selection.left;
-      this.editor.canvasManager.selection.startY = this.selection.top;
-      this.editor.canvasManager.selection.endX = this.selection.right;
-      this.editor.canvasManager.selection.endY = this.selection.bottom;
-      this.editor.canvasManager.selection.active = true;
-    }
-
-    // Redraw everything and show handles
-    this.editor.canvasManager.render();
-    this.editor.canvasManager.renderSelectionBox(this.selection);
-    this.editor.currentSprite.saveToHistory();
-    this.editor.updateUI();
-  } else if (this.isDragging && this.selection && this.dragClipboard) {
-    // Handle regular dragging
-    this.editor.canvasManager.clearOverlay();
-    this._pasteClipboardAt(
-      this.dragClipboard,
-      this.selection.left,
-      this.selection.top
-    );
-
-    this.isDragging = false;
-    this.dragOffset = null;
-    this.originalSelection = null;
-    this.dragClipboard = null;
-    this.lastDragPosition = null;
-
-    if (this.editor.canvasManager.selection) {
-      this.editor.canvasManager.selection.startX = this.selection.left;
-      this.editor.canvasManager.selection.startY = this.selection.top;
-      this.editor.canvasManager.selection.endX = this.selection.right;
-      this.editor.canvasManager.selection.endY = this.selection.bottom;
-      this.editor.canvasManager.selection.active = true;
-    }
-
-    // Redraw everything and show handles
-    this.editor.canvasManager.render();
-    this.editor.canvasManager.renderSelectionBox(this.selection);
-    this.editor.currentSprite.saveToHistory();
-    this.editor.updateUI();
-  } else if (this.isSelecting) {
-    this.isSelecting = false;
-    this.selection = this.editor.canvasManager.getSelectionBounds();
+    // Check if clicking on a scale handle
     if (this.selection) {
-      if (this.selection.left === this.selection.right) {
-        this.selection.right = this.selection.left;
+      const handle = this._getScaleHandle(x, y);
+      if (handle) {
+        this.isScaling = true;
+        this.scaleHandle = handle;
+        this.originalSelection = { ...this.selection };
+        this.originalClipboard = this._copyFromBounds(this.selection);
+
+        // Clear the original content immediately when scaling starts
+        this._deleteBounds(this.selection);
+        this.editor.canvasManager.render();
+
+        return;
       }
-      if (this.selection.top === this.selection.bottom) {
-        this.selection.bottom = this.selection.top;
+
+      // Check if clicking inside selection for dragging
+      if (
+        x >= this.selection.left &&
+        x <= this.selection.right &&
+        y >= this.selection.top &&
+        y <= this.selection.bottom
+      ) {
+        this.isDragging = true;
+        this.dragOffset = { x, y };
+        this.lastDragPosition = { x, y };
+        this.originalSelection = { ...this.selection };
+        this.dragClipboard = this._copyFromBounds(this.selection);
+        this._deleteBounds(this.originalSelection);
+        this.editor.canvasManager.render();
+        this.editor.canvasManager.showDraggedSelectionPreview(
+          this.selection,
+          this.dragClipboard
+        );
+        return;
       }
-      
-      // Show handles for new selection
+    }
+
+    // Start new selection
+    this.isSelecting = true;
+    this.editor.canvasManager.startSelection(x, y);
+  }
+
+  // Modified onMouseUp - works with layers
+  onMouseUp(x, y, event) {
+    if (!this.editor.currentSprite || !this.editor.layerManager) return;
+
+    if (this.isScaling && this.selection && this.originalClipboard) {
+      // Clear the preview
+      this.editor.canvasManager.clearOverlay();
+
+      // Create final scaled clipboard
+      const newWidth = this.selection.right - this.selection.left + 1;
+      const newHeight = this.selection.bottom - this.selection.top + 1;
+      const scaledClipboard = this._createScaledClipboard(
+        this.originalClipboard,
+        newWidth,
+        newHeight
+      );
+
+      // Paste scaled content
+      this._pasteClipboardAt(
+        scaledClipboard,
+        this.selection.left,
+        this.selection.top
+      );
+
+      // Reset scaling state
+      this.isScaling = false;
+      this.scaleHandle = null;
+      this.originalClipboard = null;
+
+      // Update CanvasManager selection state
+      if (this.editor.canvasManager.selection) {
+        this.editor.canvasManager.selection.startX = this.selection.left;
+        this.editor.canvasManager.selection.startY = this.selection.top;
+        this.editor.canvasManager.selection.endX = this.selection.right;
+        this.editor.canvasManager.selection.endY = this.selection.bottom;
+        this.editor.canvasManager.selection.active = true;
+      }
+
+      // Redraw everything and show handles
+      this.editor.canvasManager.render();
       this.editor.canvasManager.renderSelectionBox(this.selection);
+      this.editor.currentSprite.saveToHistory();
+      this.editor.updateUI();
+    } else if (this.isDragging && this.selection && this.dragClipboard) {
+      // Handle regular dragging
+      this.editor.canvasManager.clearOverlay();
+      this._pasteClipboardAt(
+        this.dragClipboard,
+        this.selection.left,
+        this.selection.top
+      );
+
+      this.isDragging = false;
+      this.dragOffset = null;
+      this.originalSelection = null;
+      this.dragClipboard = null;
+      this.lastDragPosition = null;
+
+      if (this.editor.canvasManager.selection) {
+        this.editor.canvasManager.selection.startX = this.selection.left;
+        this.editor.canvasManager.selection.startY = this.selection.top;
+        this.editor.canvasManager.selection.endX = this.selection.right;
+        this.editor.canvasManager.selection.endY = this.selection.bottom;
+        this.editor.canvasManager.selection.active = true;
+      }
+
+      // Redraw everything and show handles
+      this.editor.canvasManager.render();
+      this.editor.canvasManager.renderSelectionBox(this.selection);
+      this.editor.currentSprite.saveToHistory();
+      this.editor.updateUI();
+    } else if (this.isSelecting) {
+      this.isSelecting = false;
+      this.selection = this.editor.canvasManager.getSelectionBounds();
+      if (this.selection) {
+        if (this.selection.left === this.selection.right) {
+          this.selection.right = this.selection.left;
+        }
+        if (this.selection.top === this.selection.bottom) {
+          this.selection.bottom = this.selection.top;
+        }
+
+        // Show handles for new selection
+        this.editor.canvasManager.renderSelectionBox(this.selection);
+      }
     }
   }
-}
 
-  // Modified onMouseDrag method
   onMouseDrag(x, y, lastX, lastY, event) {
-    if (!this.editor.currentSprite) return;
+    if (!this.editor.currentSprite || !this.editor.layerManager) return;
 
     if (this.isScaling && this.selection && this.originalClipboard) {
       this._handleScaling(x, y);
@@ -351,61 +347,100 @@ onMouseUp(x, y, event) {
     }
   }
 
-  // Helper: copy pixels from given bounds
+  // LAYER-COMPATIBLE: Copy pixels from given bounds using LayerManager
+  // LAYER-COMPATIBLE: Copy pixels from given bounds using LayerManager - ACTIVE LAYER ONLY
   _copyFromBounds(bounds) {
-    const sprite = this.editor.currentSprite;
+    const layerManager = this.editor.layerManager;
+    const activeLayer = layerManager.getActiveLayer();
+
+    if (!activeLayer) {
+      return { width: 0, height: 0, pixels: [] };
+    }
+
     const width = bounds.right - bounds.left + 1;
     const height = bounds.bottom - bounds.top + 1;
     const clipboard = { width, height, pixels: [] };
+
     for (let y = 0; y < height; y++) {
       clipboard.pixels[y] = [];
       for (let x = 0; x < width; x++) {
         const srcX = bounds.left + x;
         const srcY = bounds.top + y;
-        clipboard.pixels[y][x] = sprite.getPixel(srcX, srcY);
+        // Use pixel from active layer only, not composite
+        clipboard.pixels[y][x] = layerManager.getPixel(srcX, srcY);
       }
     }
     return clipboard;
   }
 
-  // Helper: delete pixels in given bounds
+  // LAYER-COMPATIBLE: Delete pixels in given bounds on active layer only
   _deleteBounds(bounds) {
-    const sprite = this.editor.currentSprite;
+    const layerManager = this.editor.layerManager;
+    const activeLayer = layerManager.getActiveLayer();
+
+    if (!activeLayer || activeLayer.locked) {
+      return; // Can't modify locked layer
+    }
+
     const transparentColor = [0, 0, 0, 0];
+
+    // Enable batch mode for performance
+    layerManager.setBatchMode(true);
+
     for (let y = bounds.top; y <= bounds.bottom; y++) {
       for (let x = bounds.left; x <= bounds.right; x++) {
-        if (x >= 0 && x < sprite.width && y >= 0 && y < sprite.height) {
-          sprite.setPixel(x, y, transparentColor);
+        if (
+          x >= 0 &&
+          x < layerManager.width &&
+          y >= 0 &&
+          y < layerManager.height
+        ) {
+          layerManager.setPixel(x, y, transparentColor);
         }
       }
     }
+
+    // Disable batch mode and trigger update
+    layerManager.setBatchMode(false);
   }
 
-  // Helper: paste clipboard at position
+  // LAYER-COMPATIBLE: Paste clipboard at position on active layer
   _pasteClipboardAt(clipboard, left, top) {
-    const sprite = this.editor.currentSprite;
+    const layerManager = this.editor.layerManager;
+    const activeLayer = layerManager.getActiveLayer();
+
+    if (!activeLayer || activeLayer.locked) {
+      return; // Can't modify locked layer
+    }
+
+    // Enable batch mode for performance
+    layerManager.setBatchMode(true);
+
     for (let py = 0; py < clipboard.height; py++) {
       for (let px = 0; px < clipboard.width; px++) {
         const destX = left + px;
         const destY = top + py;
         if (
           destX >= 0 &&
-          destX < sprite.width &&
+          destX < layerManager.width &&
           destY >= 0 &&
-          destY < sprite.height
+          destY < layerManager.height
         ) {
           const pixel = clipboard.pixels[py][px];
           if (pixel[3] > 0) {
-            sprite.setPixel(destX, destY, pixel);
+            // Only paste non-transparent pixels
+            layerManager.setPixel(destX, destY, pixel);
           }
         }
       }
     }
+
+    // Disable batch mode and trigger update
+    layerManager.setBatchMode(false);
   }
 
   // Handle mouse move event
   onMouseMove(x, y, event) {
-    // Update selection preview if selecting
     if (this.isSelecting) {
       this.editor.canvasManager.updateSelection(x, y);
     }
@@ -413,23 +448,27 @@ onMouseUp(x, y, event) {
 
   // Handle mouse leave event
   onMouseLeave(event) {
-    // Complete selection if we're in the middle of selecting
     if (this.isSelecting) {
       this.isSelecting = false;
       this.selection = this.editor.canvasManager.getSelectionBounds();
     }
-    // Reset drag position tracking
     this.lastDragPosition = null;
   }
 
-  // Copy selected area to clipboard
+  // LAYER-COMPATIBLE: Copy selected area to clipboard
+  // LAYER-COMPATIBLE: Copy selected area to clipboard - ACTIVE LAYER ONLY
   copy() {
-    if (!this.selection || !this.editor.currentSprite) return false;
+    if (!this.selection || !this.editor.layerManager) return false;
 
-    const sprite = this.editor.currentSprite;
+    const layerManager = this.editor.layerManager;
+    const activeLayer = layerManager.getActiveLayer();
+
+    if (!activeLayer) return false;
+
     const width = this.selection.right - this.selection.left + 1;
-    this.editor.canvasManager.clearDraggedSelection();
     const height = this.selection.bottom - this.selection.top + 1;
+
+    this.editor.canvasManager.clearDraggedSelection();
 
     this.clipboard = {
       width,
@@ -437,13 +476,13 @@ onMouseUp(x, y, event) {
       pixels: [],
     };
 
-    // Copy pixels from selection
+    // Copy pixels from active layer only
     for (let y = 0; y < height; y++) {
       this.clipboard.pixels[y] = [];
       for (let x = 0; x < width; x++) {
         const srcX = this.selection.left + x;
         const srcY = this.selection.top + y;
-        this.clipboard.pixels[y][x] = sprite.getPixel(srcX, srcY);
+        this.clipboard.pixels[y][x] = layerManager.getPixel(srcX, srcY);
       }
     }
 
@@ -453,20 +492,28 @@ onMouseUp(x, y, event) {
   // Cut selected area to clipboard
   cut() {
     if (!this.copy()) return false;
-
     this.delete();
     return true;
   }
 
-  // Paste from clipboard at current selection or top-left
+  // LAYER-COMPATIBLE: Paste from clipboard
   paste(x = 0, y = 0) {
-    if (!this.clipboard || !this.editor.currentSprite) return false;
+    if (!this.clipboard || !this.editor.layerManager) return false;
 
-    const sprite = this.editor.currentSprite;
+    const layerManager = this.editor.layerManager;
+    const activeLayer = layerManager.getActiveLayer();
+
+    if (!activeLayer || activeLayer.locked) {
+      console.warn("Cannot paste: active layer is locked or doesn't exist");
+      return false;
+    }
 
     // Use selection position if available, otherwise use provided coordinates
     const startX = this.selection ? this.selection.left : x;
     const startY = this.selection ? this.selection.top : y;
+
+    // Enable batch mode for performance
+    layerManager.setBatchMode(true);
 
     // Paste pixels
     for (let py = 0; py < this.clipboard.height; py++) {
@@ -477,69 +524,107 @@ onMouseUp(x, y, event) {
         // Only paste if within bounds
         if (
           destX >= 0 &&
-          destX < sprite.width &&
+          destX < layerManager.width &&
           destY >= 0 &&
-          destY < sprite.height
+          destY < layerManager.height
         ) {
           const pixel = this.clipboard.pixels[py][px];
           // Only paste non-transparent pixels
           if (pixel[3] > 0) {
-            sprite.setPixel(destX, destY, pixel);
+            layerManager.setPixel(destX, destY, pixel);
           }
         }
       }
     }
 
+    // Disable batch mode and trigger update
+    layerManager.setBatchMode(false);
+
     // Update canvas and save to history
     this.editor.canvasManager.render();
-    sprite.saveToHistory();
+    this.editor.currentSprite.saveToHistory();
     this.editor.updateUI();
 
     return true;
   }
 
-  // Delete selected area (make transparent)
+  // LAYER-COMPATIBLE: Delete selected area on active layer
   delete() {
-    if (!this.selection || !this.editor.currentSprite) return false;
+    if (!this.selection || !this.editor.layerManager) return false;
 
-    const sprite = this.editor.currentSprite;
+    const layerManager = this.editor.layerManager;
+    const activeLayer = layerManager.getActiveLayer();
+
+    if (!activeLayer || activeLayer.locked) {
+      console.warn("Cannot delete: active layer is locked or doesn't exist");
+      return false;
+    }
+
     const transparentColor = [0, 0, 0, 0];
+
+    // Enable batch mode for performance
+    layerManager.setBatchMode(true);
 
     // Clear selection area
     for (let y = this.selection.top; y <= this.selection.bottom; y++) {
       for (let x = this.selection.left; x <= this.selection.right; x++) {
-        if (x >= 0 && x < sprite.width && y >= 0 && y < sprite.height) {
-          sprite.setPixel(x, y, transparentColor);
+        if (
+          x >= 0 &&
+          x < layerManager.width &&
+          y >= 0 &&
+          y < layerManager.height
+        ) {
+          layerManager.setPixel(x, y, transparentColor);
         }
       }
     }
 
+    // Disable batch mode and trigger update
+    layerManager.setBatchMode(false);
+
     // Update canvas and save to history
     this.editor.canvasManager.render();
-    sprite.saveToHistory();
+    this.editor.currentSprite.saveToHistory();
     this.editor.updateUI();
 
     return true;
   }
 
-  // Fill selected area with color
+  // LAYER-COMPATIBLE: Fill selected area with color on active layer
   fill(color) {
-    if (!this.selection || !this.editor.currentSprite) return false;
+    if (!this.selection || !this.editor.layerManager) return false;
 
-    const sprite = this.editor.currentSprite;
+    const layerManager = this.editor.layerManager;
+    const activeLayer = layerManager.getActiveLayer();
+
+    if (!activeLayer || activeLayer.locked) {
+      console.warn("Cannot fill: active layer is locked or doesn't exist");
+      return false;
+    }
+
+    // Enable batch mode for performance
+    layerManager.setBatchMode(true);
 
     // Fill selection area
     for (let y = this.selection.top; y <= this.selection.bottom; y++) {
       for (let x = this.selection.left; x <= this.selection.right; x++) {
-        if (x >= 0 && x < sprite.width && y >= 0 && y < sprite.height) {
-          sprite.setPixel(x, y, color);
+        if (
+          x >= 0 &&
+          x < layerManager.width &&
+          y >= 0 &&
+          y < layerManager.height
+        ) {
+          layerManager.setPixel(x, y, color);
         }
       }
     }
 
+    // Disable batch mode and trigger update
+    layerManager.setBatchMode(false);
+
     // Update canvas and save to history
     this.editor.canvasManager.render();
-    sprite.saveToHistory();
+    this.editor.currentSprite.saveToHistory();
     this.editor.updateUI();
 
     return true;
@@ -548,13 +633,12 @@ onMouseUp(x, y, event) {
   // Clear current selection
   clearSelection() {
     this.selection = null;
-    this.lastDragPosition = null; // Reset drag tracking
+    this.lastDragPosition = null;
     this.editor.canvasManager.endSelection();
   }
 
   // Called when tool is deactivated
   onDeactivate() {
-    // Clear selection when switching away from select tool
     this.clearSelection();
   }
 
@@ -588,6 +672,8 @@ onMouseUp(x, y, event) {
     const selectionInfo = this.getSelectionInfo();
     const hasSelection = this.hasSelection();
     const hasClipboard = this.hasClipboard();
+    const activeLayer = this.editor.layerManager?.getActiveLayer();
+    const isLayerLocked = activeLayer?.locked || false;
 
     return `
         <div class="setting-group">
@@ -600,6 +686,19 @@ onMouseUp(x, y, event) {
                 }
             </div>
         </div>
+        
+        ${
+          isLayerLocked
+            ? `
+        <div class="setting-group">
+            <div class="warning-message">
+                <i class="fas fa-lock"></i> Active layer is locked
+            </div>
+        </div>
+        `
+            : ""
+        }
+        
         <div class="setting-group">
             <label>
                 <input type="checkbox" id="rigid-scaling-cb" ${
@@ -617,12 +716,12 @@ onMouseUp(x, y, event) {
                     <i class="fas fa-copy"></i> Copy
                 </button>
                 <button class="btn btn-secondary btn-sm" id="cut-btn" ${
-                  !hasSelection ? "disabled" : ""
+                  !hasSelection || isLayerLocked ? "disabled" : ""
                 }>
                     <i class="fas fa-cut"></i> Cut
                 </button>
                 <button class="btn btn-secondary btn-sm" id="paste-btn" ${
-                  !hasClipboard ? "disabled" : ""
+                  !hasClipboard || isLayerLocked ? "disabled" : ""
                 }>
                     <i class="fas fa-paste"></i> Paste
                 </button>
@@ -631,7 +730,7 @@ onMouseUp(x, y, event) {
         <div class="setting-group">
             <div class="button-group">
                 <button class="btn btn-secondary btn-sm" id="delete-btn" ${
-                  !hasSelection ? "disabled" : ""
+                  !hasSelection || isLayerLocked ? "disabled" : ""
                 }>
                     <i class="fas fa-trash"></i> Delete
                 </button>
@@ -695,12 +794,15 @@ onMouseUp(x, y, event) {
       });
     }
 
-    // Existing keyboard shortcuts...
+    // Keyboard shortcuts
     document.addEventListener("keydown", (e) => {
       if (
         this.editor.currentTool === this &&
         !e.target.matches("input, textarea")
       ) {
+        const activeLayer = this.editor.layerManager?.getActiveLayer();
+        const isLayerLocked = activeLayer?.locked || false;
+
         switch (e.key.toLowerCase()) {
           case "c":
             if (e.ctrlKey || e.metaKey) {
@@ -710,14 +812,14 @@ onMouseUp(x, y, event) {
             }
             break;
           case "x":
-            if (e.ctrlKey || e.metaKey) {
+            if ((e.ctrlKey || e.metaKey) && !isLayerLocked) {
               e.preventDefault();
               this.cut();
               this.updateSettingsUI();
             }
             break;
           case "v":
-            if (e.ctrlKey || e.metaKey) {
+            if ((e.ctrlKey || e.metaKey) && !isLayerLocked) {
               e.preventDefault();
               this.paste();
               this.updateSettingsUI();
@@ -725,9 +827,11 @@ onMouseUp(x, y, event) {
             break;
           case "delete":
           case "backspace":
-            e.preventDefault();
-            this.delete();
-            this.updateSettingsUI();
+            if (!isLayerLocked) {
+              e.preventDefault();
+              this.delete();
+              this.updateSettingsUI();
+            }
             break;
           case "escape":
             this.clearSelection();

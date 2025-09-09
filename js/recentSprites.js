@@ -11,25 +11,41 @@ class RecentSpritesManager {
     this.initializeDatabase();
     this.setupDragAndDrop();
   }
+
   // Setup drag-and-drop for image import
   setupDragAndDrop() {
-    const container = document.getElementById("recent-sprites");
+    const container = document.getElementById("sprites-sidebar");
     if (!container) return;
 
     container.addEventListener("dragover", (e) => {
       e.preventDefault();
+      e.stopPropagation();
       container.classList.add("drag-over");
     });
+
     container.addEventListener("dragleave", (e) => {
-      container.classList.remove("drag-over");
+      e.preventDefault();
+      e.stopPropagation();
+      // Only remove drag-over if we're leaving the container entirely
+      if (!container.contains(e.relatedTarget)) {
+        container.classList.remove("drag-over");
+      }
     });
+
     container.addEventListener("drop", (e) => {
       e.preventDefault();
+      e.stopPropagation();
       container.classList.remove("drag-over");
+      
+      // Handle dropped files
       if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
         this.handleDroppedFiles(e.dataTransfer.files);
       }
     });
+
+    // Prevent default drag behaviors on the document
+    document.addEventListener("dragover", (e) => e.preventDefault());
+    document.addEventListener("drop", (e) => e.preventDefault());
   }
 
   // Handle dropped image files
@@ -37,53 +53,104 @@ class RecentSpritesManager {
     for (let i = 0; i < fileList.length; i++) {
       const file = fileList[i];
       if (!file.type.startsWith("image/")) continue;
-      const img = new Image();
-      img.onload = async () => {
-        // Create a canvas to get image data
-        const canvas = document.createElement("canvas");
-        canvas.width = img.width;
-        canvas.height = img.height;
-        const ctx = canvas.getContext("2d");
-        ctx.drawImage(img, 0, 0);
-        const imageData = ctx.getImageData(0, 0, img.width, img.height);
-        // If too large, show downscale modal
-        if (img.width > 64 || img.height > 64) {
-          if (
-            window.editor &&
-            window.editor.uiManager &&
-            window.editor.uiManager.showDownscaleModal
-          ) {
-            window.editor.uiManager.showDownscaleModal(
-              imageData,
-              img.width,
-              img.height
-            );
-          }
+      
+      try {
+        if (file.type === "image/svg+xml" || file.name.toLowerCase().endsWith('.svg')) {
+          // Handle SVG files
+          await this.handleSVGFile(file);
         } else {
-          // Otherwise, import directly
-          if (window.editor && window.editor.createSpriteFromImageData) {
-            window.editor.createSpriteFromImageData(
-              imageData,
-              img.width,
-              img.height
-            );
-            window.editor.uiManager.showNotification(
-              `Imported image: ${img.width}x${img.height}`,
-              "success"
-            );
-          }
+          // Handle raster images (PNG, JPG, etc.)
+          await this.handleRasterImage(file);
         }
-      };
-      img.onerror = () => {
+      } catch (error) {
+        console.error(`Failed to process dropped file: ${file.name}`, error);
         if (window.editor && window.editor.uiManager) {
           window.editor.uiManager.showNotification(
-            "Failed to load dropped image",
+            `Failed to load: ${file.name}`,
             "error"
           );
         }
-      };
-      img.src = URL.createObjectURL(file);
+      }
     }
+  }
+
+  // Handle SVG file loading
+  async handleSVGFile(file) {
+    try {
+      const svgText = await file.text();
+      const sprite = await this.parseSVGToSprite(svgText, file.name.replace(/\.[^/.]+$/, ""));
+      
+      if (window.editor && window.editor.addSprite) {
+        window.editor.addSprite(sprite);
+        window.editor.setCurrentSprite(sprite);
+        window.editor.uiManager.showNotification(
+          `Imported SVG: ${sprite.name} (${sprite.width}x${sprite.height})`,
+          "success"
+        );
+      }
+    } catch (error) {
+      throw new Error(`Failed to process SVG file: ${error.message}`);
+    }
+  }
+
+  // Handle raster image files
+  async handleRasterImage(file) {
+    const img = new Image();
+    
+    return new Promise((resolve, reject) => {
+      img.onload = async () => {
+        try {
+          // Create a canvas to get image data
+          const canvas = document.createElement("canvas");
+          canvas.width = img.width;
+          canvas.height = img.height;
+          const ctx = canvas.getContext("2d");
+          ctx.drawImage(img, 0, 0);
+          const imageData = ctx.getImageData(0, 0, img.width, img.height);
+          
+          // If too large, show downscale modal
+          if (img.width > 64 || img.height > 64) {
+            if (
+              window.editor &&
+              window.editor.uiManager &&
+              window.editor.uiManager.showDownscaleModal
+            ) {
+              window.editor.uiManager.showDownscaleModal(
+                imageData,
+                img.width,
+                img.height
+              );
+            }
+          } else {
+            // Otherwise, import directly
+            if (window.editor && window.editor.createSpriteFromImageData) {
+              window.editor.createSpriteFromImageData(
+                imageData,
+                img.width,
+                img.height
+              );
+              window.editor.uiManager.showNotification(
+                `Imported image: ${img.width}x${img.height}`,
+                "success"
+              );
+            }
+          }
+          
+          URL.revokeObjectURL(img.src);
+          resolve();
+        } catch (error) {
+          URL.revokeObjectURL(img.src);
+          reject(error);
+        }
+      };
+
+      img.onerror = () => {
+        URL.revokeObjectURL(img.src);
+        reject(new Error("Failed to load dropped image"));
+      };
+
+      img.src = URL.createObjectURL(file);
+    });
   }
 
   // Initialize IndexedDB for storing file handles
@@ -254,7 +321,6 @@ class RecentSpritesManager {
   }
 
   // Load recent sprites from the selected folder
-  // Load recent sprites from IndexedDB instead of folder
   async loadRecentSprites() {
     if (!this.dirHandle) return;
 
@@ -308,12 +374,12 @@ class RecentSpritesManager {
 
     if (sprites.length === 0) {
       container.innerHTML = `
-                <div class="no-sprites-message">
-                    <i class="fas fa-image"></i>
-                    <p>No SVG sprites found</p>
-                    <p class="help-text">Save some sprites to see them here</p>
-                </div>
-            `;
+        <div class="no-sprites-message">
+          <i class="fas fa-image"></i>
+          <p>No SVG sprites found</p>
+          <p class="help-text">Save some sprites to see them here</p>
+        </div>
+      `;
       return;
     }
 
@@ -323,12 +389,12 @@ class RecentSpritesManager {
       spriteElement.title = `${sprite.name} (${sprite.size})`;
 
       spriteElement.innerHTML = `
-                <img src="${sprite.url}" alt="${sprite.name}" loading="lazy">
-                <div class="recent-sprite-info">
-                    <div class="recent-sprite-name">${sprite.name}</div>
-                    <div class="recent-sprite-size">${sprite.modified}</div>
-                </div>
-            `;
+        <img src="${sprite.url}" alt="${sprite.name}" loading="lazy">
+        <div class="recent-sprite-info">
+          <div class="recent-sprite-name">${sprite.name}</div>
+          <div class="recent-sprite-size">${sprite.modified}</div>
+        </div>
+      `;
 
       // Add click handler to load sprite
       spriteElement.addEventListener("click", () => {
@@ -338,88 +404,17 @@ class RecentSpritesManager {
       container.appendChild(spriteElement);
     });
   }
-  // Create thumbnail canvas from sprite data
-  createSpriteThumbnail(sprite) {
-    const canvas = document.createElement("canvas");
-    canvas.width = 32;
-    canvas.height = 32;
-    canvas.className = "sprite-thumbnail";
-    canvas.style.cssText =
-      "width: 32px; height: 32px; image-rendering: pixelated;";
 
-    const ctx = canvas.getContext("2d");
-
-    // Create checkerboard pattern for transparency
-    this.drawCheckerboard(ctx, canvas.width, canvas.height, 4);
-
-    // Draw sprite scaled to fit thumbnail
-    const scaleX = canvas.width / sprite.width;
-    const scaleY = canvas.height / sprite.height;
-    const scale = Math.min(scaleX, scaleY);
-
-    const scaledWidth = sprite.width * scale;
-    const scaledHeight = sprite.height * scale;
-    const offsetX = (canvas.width - scaledWidth) / 2;
-    const offsetY = (canvas.height - scaledHeight) / 2;
-
-    // Draw pixels
-    for (let y = 0; y < sprite.height; y++) {
-      for (let x = 0; x < sprite.width; x++) {
-        const pixel = sprite.getPixel(x, y);
-        const [r, g, b, a] = pixel;
-
-        if (a > 0) {
-          ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${a / 255})`;
-          ctx.fillRect(offsetX + x * scale, offsetY + y * scale, scale, scale);
-        }
-      }
-    }
-
-    return canvas;
-  }
-  // Draw checkerboard pattern for transparency
-  drawCheckerboard(ctx, width, height, size) {
-    const lightColor = "#ffffff";
-    const darkColor = "#e0e0e0";
-
-    for (let x = 0; x < width; x += size) {
-      for (let y = 0; y < height; y += size) {
-        const isEven = (Math.floor(x / size) + Math.floor(y / size)) % 2 === 0;
-        ctx.fillStyle = isEven ? lightColor : darkColor;
-        ctx.fillRect(x, y, size, size);
-      }
-    }
-  }
-
-  // Load sprite from file into editor
-  // Load sprite from storage into editor
-  loadSpriteFromStorage(spriteData) {
+  // Load sprite from file into editor - FIXED METHOD
+  async loadSpriteFromFile(spriteData) {
     try {
-      const sprite = spriteData.sprite;
-
-      // Check if sprite with same ID already exists in editor
-      const existingIndex = this.editor.sprites.findIndex(
-        (s) => s.id === sprite.id
+      // Use the editor's existing import functionality
+      await this.editor.importFile(spriteData.file);
+      
+      this.editor.uiManager.showNotification(
+        `Loaded sprite: ${spriteData.name}`,
+        "success"
       );
-
-      if (existingIndex !== -1) {
-        // Switch to existing sprite
-        this.editor.setCurrentSprite(this.editor.sprites[existingIndex]);
-        this.editor.uiManager.showNotification(
-          `Switched to: ${sprite.name}`,
-          "info"
-        );
-      } else {
-        // Add sprite to current session
-        this.editor.sprites.push(sprite);
-        this.editor.setCurrentSprite(sprite);
-        this.editor.uiManager.showNotification(
-          `Loaded sprite: ${sprite.name}`,
-          "success"
-        );
-      }
-
-      this.editor.updateUI();
     } catch (error) {
       console.error("Failed to load sprite:", error);
       this.editor.uiManager.showNotification(
@@ -427,53 +422,6 @@ class RecentSpritesManager {
         "error"
       );
     }
-  }
-
-  // Parse SVG text to create a Sprite object
-  async parseSVGToSprite(svgText, name) {
-    return new Promise((resolve, reject) => {
-      try {
-        // Create a temporary image to render the SVG
-        const img = new Image();
-        const svgBlob = new Blob([svgText], { type: "image/svg+xml" });
-        const url = URL.createObjectURL(svgBlob);
-
-        img.onload = () => {
-          try {
-            // Create temporary canvas to rasterize SVG
-            const tempCanvas = document.createElement("canvas");
-            const tempCtx = tempCanvas.getContext("2d");
-            tempCanvas.width = img.naturalWidth || img.width || 32;
-            tempCanvas.height = img.naturalHeight || img.height || 32;
-
-            tempCtx.drawImage(img, 0, 0);
-            const imageData = tempCtx.getImageData(
-              0,
-              0,
-              tempCanvas.width,
-              tempCanvas.height
-            );
-
-            const sprite = Sprite.fromImageData(imageData, name);
-
-            URL.revokeObjectURL(url);
-            resolve(sprite);
-          } catch (error) {
-            URL.revokeObjectURL(url);
-            reject(error);
-          }
-        };
-
-        img.onerror = () => {
-          URL.revokeObjectURL(url);
-          reject(new Error("Failed to load SVG image"));
-        };
-
-        img.src = url;
-      } catch (error) {
-        reject(error);
-      }
-    });
   }
 
   // Save current sprite to the selected folder
@@ -520,23 +468,24 @@ class RecentSpritesManager {
     const container = document.getElementById("recent-sprites");
     if (container) {
       container.innerHTML = `
-                <div class="no-sprites-message">
-                    <i class="fas fa-exclamation-triangle"></i>
-                    <p>Feature not supported</p>
-                    <p class="help-text">Your browser doesn't support the File System Access API. Try Chrome 86+</p>
-                </div>
-            `;
+        <div class="no-sprites-message">
+          <i class="fas fa-exclamation-triangle"></i>
+          <p>Feature not supported</p>
+          <p class="help-text">Your browser doesn't support the File System Access API. Try Chrome 86+</p>
+        </div>
+      `;
     }
   }
 
-  // Update UI based on current state
   // Update UI based on current state
   updateUI() {
     const container = document.getElementById("recent-sprites");
 
     if (container) {
-      // Always try to load recent sprites from IndexedDB
-      this.loadRecentSprites();
+      // Always try to load recent sprites if we have a directory handle
+      if (this.dirHandle) {
+        this.loadRecentSprites();
+      }
     }
   }
 }
