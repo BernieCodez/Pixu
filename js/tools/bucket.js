@@ -13,12 +13,19 @@ class BucketTool {
   // Handle mouse down event
   onMouseDown(x, y, event) {
     if (!this.editor.layerManager) return;
+
+    // Start batch operation for undo/redo
+    this.editor.layerManager.startBatchOperation();
+
     if (this.fillAll) {
       this.fillAllPixels(x, y);
     } else {
       this.floodFill(x, y);
     }
-    // TODO: Implement layerManager history if needed
+
+    // End batch operation - this will save to history
+    this.editor.layerManager.endBatchOperation();
+
     this.editor.updateUI();
   }
 
@@ -43,12 +50,20 @@ class BucketTool {
   floodFill(startX, startY) {
     if (!this.editor.layerManager) return;
     const layerManager = this.editor.layerManager;
+    const activeLayer = layerManager.getActiveLayer();
+    if (!activeLayer || activeLayer.locked) return;
+
     const targetColor = layerManager.getPixel(startX, startY);
     if (this.opacity > 0 && this.colorsEqual(targetColor, this.color)) return;
+
     const stack = [[startX, startY]];
     const visited = new Set();
     const fillColor = [...this.color];
     fillColor[3] = Math.round((fillColor[3] * this.opacity) / 100);
+
+    // Use batch mode for multiple pixel operations
+    layerManager.setBatchMode(true);
+
     while (stack.length > 0) {
       const [x, y] = stack.pop();
       const key = `${x},${y}`;
@@ -79,6 +94,8 @@ class BucketTool {
       stack.push([x, y + 1]);
       stack.push([x, y - 1]);
     }
+
+    layerManager.setBatchMode(false);
     this.editor.canvasManager.render();
   }
 
@@ -86,10 +103,18 @@ class BucketTool {
   fillAllPixels(startX, startY) {
     if (!this.editor.layerManager) return;
     const layerManager = this.editor.layerManager;
+    const activeLayer = layerManager.getActiveLayer();
+    if (!activeLayer || activeLayer.locked) return;
+
     const targetColor = layerManager.getPixel(startX, startY);
     if (this.opacity > 0 && this.colorsEqual(targetColor, this.color)) return;
+
     const fillColor = [...this.color];
     fillColor[3] = Math.round((fillColor[3] * this.opacity) / 100);
+
+    // Use batch mode for multiple pixel operations
+    layerManager.setBatchMode(true);
+
     for (let y = 0; y < layerManager.height; y++) {
       for (let x = 0; x < layerManager.width; x++) {
         const currentColor = layerManager.getPixel(x, y);
@@ -105,6 +130,8 @@ class BucketTool {
         }
       }
     }
+
+    layerManager.setBatchMode(false);
     this.editor.canvasManager.render();
   }
 

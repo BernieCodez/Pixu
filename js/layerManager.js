@@ -13,7 +13,116 @@ class LayerManager {
     this.batchMode = false;
     this.pendingUpdates = false;
 
+    // History system
+    this.history = [];
+    this.historyIndex = -1;
+    this.maxHistorySize = 50;
+
     this.createDefaultLayer();
+    this.saveToHistory(); // Save initial state
+  }
+
+  // Save current state to history
+  saveToHistory() {
+    // Remove future history if we're not at the end
+    if (this.historyIndex < this.history.length - 1) {
+      this.history.splice(this.historyIndex + 1);
+    }
+
+    // Create deep copy of current state
+    const state = {
+      width: this.width,
+      height: this.height,
+      activeLayerIndex: this.activeLayerIndex,
+      timestamp: Date.now(),
+      layers: this.layers.map((layer) => ({
+        id: layer.id,
+        name: layer.name,
+        visible: layer.visible,
+        opacity: layer.opacity,
+        locked: layer.locked,
+        blendMode: layer.blendMode,
+        pixels: layer.pixels.map((row) => row.map((pixel) => [...pixel])),
+      })),
+    };
+
+    this.history.push(state);
+    this.historyIndex++;
+
+    // Limit history size
+    if (this.history.length > this.maxHistorySize) {
+      this.history.shift();
+      this.historyIndex--;
+    }
+  }
+
+  // Undo last action
+  undo() {
+    if (this.historyIndex > 0) {
+      this.historyIndex--;
+      const state = this.history[this.historyIndex];
+      this.restoreFromState(state);
+      return true;
+    }
+    return false;
+  }
+
+  // Redo next action
+  redo() {
+    if (this.historyIndex < this.history.length - 1) {
+      this.historyIndex++;
+      const state = this.history[this.historyIndex];
+      this.restoreFromState(state);
+      return true;
+    }
+    return false;
+  }
+
+  // Restore from history state
+  restoreFromState(state) {
+    // Prevent saving to history during restore
+    this._restoring = true;
+
+    this.width = state.width;
+    this.height = state.height;
+    this.activeLayerIndex = state.activeLayerIndex;
+
+    // Deep copy layers from state
+    this.layers = state.layers.map((layerData) => ({
+      id: layerData.id,
+      name: layerData.name,
+      visible: layerData.visible,
+      opacity: layerData.opacity,
+      locked: layerData.locked || false,
+      blendMode: layerData.blendMode || "normal",
+      pixels: layerData.pixels.map((row) => row.map((pixel) => [...pixel])),
+    }));
+
+    this.compositeDirty = true;
+    this.compositeCache = null;
+
+    this._restoring = false;
+    this.notifyChange();
+  }
+
+  // Check if undo is available
+  canUndo() {
+    return this.historyIndex > 0;
+  }
+
+  // Check if redo is available
+  canRedo() {
+    return this.historyIndex < this.history.length - 1;
+  }
+
+  // Add to LayerManager - for tools to batch pixel operations and save once
+  startBatchOperation() {
+    this.setBatchMode(true);
+  }
+
+  endBatchOperation() {
+    this.setBatchMode(false);
+    this.saveToHistory();
   }
 
   createDefaultLayer() {
@@ -45,6 +154,8 @@ class LayerManager {
       this.activeLayerIndex = this.layers.length - 1;
     }
 
+    this.notifyChange();
+    this.saveToHistory(); // Add this
     this.notifyChange();
     return layerData;
   }
@@ -80,6 +191,8 @@ class LayerManager {
     }
 
     this.notifyChange();
+    this.saveToHistory(); // Add this
+    this.notifyChange();
     return true;
   }
 
@@ -101,6 +214,8 @@ class LayerManager {
     newLayer.visible = sourceLayer.visible;
     newLayer.blendMode = sourceLayer.blendMode;
 
+    this.notifyChange();
+    this.saveToHistory(); // Add this
     this.notifyChange();
     return newLayer;
   }
@@ -135,6 +250,8 @@ class LayerManager {
     }
 
     this.notifyChange();
+    this.saveToHistory(); // Add this
+    this.notifyChange();
     return true;
   }
 
@@ -160,13 +277,13 @@ class LayerManager {
 
   setLayerName(index, name) {
     if (index < 0 || index >= this.layers.length || !name.trim()) {
-        return false;
+      return false;
     }
 
     this.layers[index].name = name.trim();
     this.notifyChange(); // CRITICAL: This must be called
     return true;
-}
+  }
 
   setLayerLocked(index, locked) {
     if (index < 0 || index >= this.layers.length) {
@@ -389,9 +506,12 @@ class LayerManager {
 
   // Modified notifyChange
   // Optimized notifyChange:
+  // Optimized notifyChange - prevent infinite loops and history during restore
   notifyChange() {
-    if (this.batchMode) {
-      this.pendingUpdates = true;
+    if (this.batchMode || this._restoring) {
+      if (!this._restoring) {
+        this.pendingUpdates = true;
+      }
       return;
     }
 
@@ -399,10 +519,13 @@ class LayerManager {
 
     // Save layer changes back to sprite
     if (
+      !this.saving &&
       window.editor &&
       typeof window.editor.saveLayersToSprite === "function"
     ) {
+      this.saving = true;
       window.editor.saveLayersToSprite();
+      this.saving = false;
     }
 
     if (this.onChange) {
@@ -526,6 +649,8 @@ class LayerManager {
 
     // Remove upper layer
     this.deleteLayer(index);
+    this.saveToHistory(); // Add this
+    this.notifyChange();
     return true;
   }
 

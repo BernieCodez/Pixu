@@ -802,6 +802,7 @@ class UIController {
   }
 
   // Setup tool button event listeners
+  // Setup tool button event listeners
   setupToolButtons() {
     const toolButtons = document.querySelectorAll(".tool-btn[data-tool]");
     toolButtons.forEach((button) => {
@@ -811,19 +812,31 @@ class UIController {
       });
     });
 
-    // Undo button
+    // Undo button - now uses LayerManager
     const undoBtn = document.getElementById("undo-btn");
     if (undoBtn) {
       undoBtn.addEventListener("click", () => {
-        this.editor.undo();
+        if (this.editor.layerManager) {
+          const success = this.editor.layerManager.undo();
+          if (success) {
+            this.editor.canvasManager.render();
+            this.editor.updateUI();
+          }
+        }
       });
     }
 
-    // Redo button
+    // Redo button - now uses LayerManager
     const redoBtn = document.getElementById("redo-btn");
     if (redoBtn) {
       redoBtn.addEventListener("click", () => {
-        this.editor.redo();
+        if (this.editor.layerManager) {
+          const success = this.editor.layerManager.redo();
+          if (success) {
+            this.editor.canvasManager.render();
+            this.editor.updateUI();
+          }
+        }
       });
     }
 
@@ -991,16 +1004,37 @@ class UIController {
         case "z":
           if (e.ctrlKey || e.metaKey) {
             if (e.shiftKey) {
-              this.editor.redo();
+              // Redo with Ctrl+Shift+Z
+              if (this.editor.layerManager) {
+                const success = this.editor.layerManager.redo();
+                if (success) {
+                  this.editor.canvasManager.render();
+                  this.editor.updateUI();
+                }
+              }
             } else {
-              this.editor.undo();
+              // Undo with Ctrl+Z
+              if (this.editor.layerManager) {
+                const success = this.editor.layerManager.undo();
+                if (success) {
+                  this.editor.canvasManager.render();
+                  this.editor.updateUI();
+                }
+              }
             }
             e.preventDefault();
           }
           break;
         case "y":
           if (e.ctrlKey || e.metaKey) {
-            this.editor.redo();
+            // Redo with Ctrl+Y
+            if (this.editor.layerManager) {
+              const success = this.editor.layerManager.redo();
+              if (success) {
+                this.editor.canvasManager.render();
+                this.editor.updateUI();
+              }
+            }
             e.preventDefault();
           }
           break;
@@ -1442,11 +1476,11 @@ class UIController {
     const redoBtn = document.getElementById("redo-btn");
 
     if (undoBtn) {
-      undoBtn.disabled = !this.editor.currentSprite?.canUndo();
+      undoBtn.disabled = !this.editor.layerManager?.canUndo();
     }
 
     if (redoBtn) {
-      redoBtn.disabled = !this.editor.currentSprite?.canRedo();
+      redoBtn.disabled = !this.editor.layerManager?.canRedo();
     }
   }
 
@@ -2190,7 +2224,7 @@ class UIController {
     `;
 
     // Add CSS animations
-    const style = document.createElement('style');
+    const style = document.createElement("style");
     style.textContent = `
         @keyframes fadeIn {
             from { opacity: 0; }
@@ -2227,7 +2261,7 @@ class UIController {
             background: #00bae6 !important;
         }
     `;
-    
+
     document.head.appendChild(style);
     modal.appendChild(modalContent);
     document.body.appendChild(modal);
@@ -2239,52 +2273,52 @@ class UIController {
 
     // Focus and select text after a brief delay to ensure visibility
     setTimeout(() => {
-        input.focus();
-        input.select();
+      input.focus();
+      input.select();
     }, 50);
 
     const cleanup = () => {
-        document.head.removeChild(style);
-        document.body.removeChild(modal);
+      document.head.removeChild(style);
+      document.body.removeChild(modal);
     };
 
     const handleRename = () => {
-        const newName = input.value.trim();
-        if (newName && newName !== layer.name) {
-            // FIXED: Use LayerManager method instead of direct property modification
-            if (this.editor && this.editor.layerManager) {
-                const success = this.editor.layerManager.setLayerName(index, newName);
-                if (success) {
-                    // FIXED: Force sprite save after layer rename
-                    if (this.editor.saveLayersToSprite) {
-                        this.editor.saveLayersToSprite();
-                    }
-                    
-                    // Update UI
-                    this.updateLayersList();
-                    
-                    if (this.showNotification) {
-                        this.showNotification(`Renamed layer to "${newName}"`, "success");
-                    }
-                } else {
-                    if (this.showNotification) {
-                        this.showNotification("Failed to rename layer", "error");
-                    }
-                }
-            } else {
-                // Fallback to direct modification if layerManager not available
-                layer.name = newName;
-                this.updateLayersList();
-                if (this.showNotification) {
-                    this.showNotification(`Renamed layer to "${newName}"`, "success");
-                }
+      const newName = input.value.trim();
+      if (newName && newName !== layer.name) {
+        // FIXED: Use LayerManager method instead of direct property modification
+        if (this.editor && this.editor.layerManager) {
+          const success = this.editor.layerManager.setLayerName(index, newName);
+          if (success) {
+            // FIXED: Force sprite save after layer rename
+            if (this.editor.saveLayersToSprite) {
+              this.editor.saveLayersToSprite();
             }
+
+            // Update UI
+            this.updateLayersList();
+
+            if (this.showNotification) {
+              this.showNotification(`Renamed layer to "${newName}"`, "success");
+            }
+          } else {
+            if (this.showNotification) {
+              this.showNotification("Failed to rename layer", "error");
+            }
+          }
+        } else {
+          // Fallback to direct modification if layerManager not available
+          layer.name = newName;
+          this.updateLayersList();
+          if (this.showNotification) {
+            this.showNotification(`Renamed layer to "${newName}"`, "success");
+          }
         }
-        cleanup();
+      }
+      cleanup();
     };
 
     const handleCancel = () => {
-        cleanup();
+      cleanup();
     };
 
     // Event listeners
@@ -2293,27 +2327,27 @@ class UIController {
 
     // Handle keyboard events
     input.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") {
-            e.preventDefault();
-            handleRename();
-        } else if (e.key === "Escape") {
-            e.preventDefault();
-            handleCancel();
-        }
+      if (e.key === "Enter") {
+        e.preventDefault();
+        handleRename();
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        handleCancel();
+      }
     });
 
     // Close on outside click
     modal.addEventListener("click", (e) => {
-        if (e.target === modal) {
-            handleCancel();
-        }
+      if (e.target === modal) {
+        handleCancel();
+      }
     });
 
     // Prevent modal content clicks from closing
     modalContent.addEventListener("click", (e) => {
-        e.stopPropagation();
+      e.stopPropagation();
     });
-}
+  }
 
   // Update selected color from input value (HEX or RGB)
   updateSelectedColor(value, type = "hex") {

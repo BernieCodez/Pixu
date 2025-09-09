@@ -398,8 +398,10 @@ class PixelEditor {
    * Undo last action
    */
   undo() {
-    if (this.currentSprite && this.currentSprite.undo()) {
-      this.canvasManager.render();
+    if (this.layerManager && this.layerManager.undo()) {
+      if (this.canvasManager) {
+        this.canvasManager.render();
+      }
       this.updateUI();
       this.uiManager.showNotification("Undone", "info");
       return true;
@@ -411,8 +413,10 @@ class PixelEditor {
    * Redo last undone action
    */
   redo() {
-    if (this.currentSprite && this.currentSprite.redo()) {
-      this.canvasManager.render();
+    if (this.layerManager && this.layerManager.redo()) {
+      if (this.canvasManager) {
+        this.canvasManager.render();
+      }
       this.updateUI();
       this.uiManager.showNotification("Redone", "info");
       return true;

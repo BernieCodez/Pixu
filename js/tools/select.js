@@ -229,6 +229,9 @@ class SelectTool {
     if (!this.editor.currentSprite || !this.editor.layerManager) return;
 
     if (this.isScaling && this.selection && this.originalClipboard) {
+      // Start batch operation for scaling
+      this.editor.layerManager.startBatchOperation();
+
       // Clear the preview
       this.editor.canvasManager.clearOverlay();
 
@@ -253,6 +256,9 @@ class SelectTool {
       this.scaleHandle = null;
       this.originalClipboard = null;
 
+      // End batch operation - this will save to history
+      this.editor.layerManager.endBatchOperation();
+
       // Update CanvasManager selection state
       if (this.editor.canvasManager.selection) {
         this.editor.canvasManager.selection.startX = this.selection.left;
@@ -265,9 +271,11 @@ class SelectTool {
       // Redraw everything and show handles
       this.editor.canvasManager.render();
       this.editor.canvasManager.renderSelectionBox(this.selection);
-      this.editor.currentSprite.saveToHistory();
       this.editor.updateUI();
     } else if (this.isDragging && this.selection && this.dragClipboard) {
+      // Start batch operation for dragging
+      this.editor.layerManager.startBatchOperation();
+
       // Handle regular dragging
       this.editor.canvasManager.clearOverlay();
       this._pasteClipboardAt(
@@ -282,6 +290,9 @@ class SelectTool {
       this.dragClipboard = null;
       this.lastDragPosition = null;
 
+      // End batch operation - this will save to history
+      this.editor.layerManager.endBatchOperation();
+
       if (this.editor.canvasManager.selection) {
         this.editor.canvasManager.selection.startX = this.selection.left;
         this.editor.canvasManager.selection.startY = this.selection.top;
@@ -293,7 +304,6 @@ class SelectTool {
       // Redraw everything and show handles
       this.editor.canvasManager.render();
       this.editor.canvasManager.renderSelectionBox(this.selection);
-      this.editor.currentSprite.saveToHistory();
       this.editor.updateUI();
     } else if (this.isSelecting) {
       this.isSelecting = false;
@@ -492,7 +502,15 @@ class SelectTool {
   // Cut selected area to clipboard
   cut() {
     if (!this.copy()) return false;
+
+    // Start batch operation for cutting
+    this.editor.layerManager.startBatchOperation();
+
     this.delete();
+
+    // End batch operation - this will save to history
+    this.editor.layerManager.endBatchOperation();
+
     return true;
   }
 
@@ -508,12 +526,12 @@ class SelectTool {
       return false;
     }
 
+    // Start batch operation for pasting
+    layerManager.startBatchOperation();
+
     // Use selection position if available, otherwise use provided coordinates
     const startX = this.selection ? this.selection.left : x;
     const startY = this.selection ? this.selection.top : y;
-
-    // Enable batch mode for performance
-    layerManager.setBatchMode(true);
 
     // Paste pixels
     for (let py = 0; py < this.clipboard.height; py++) {
@@ -537,12 +555,11 @@ class SelectTool {
       }
     }
 
-    // Disable batch mode and trigger update
-    layerManager.setBatchMode(false);
+    // End batch operation - this will save to history
+    layerManager.endBatchOperation();
 
-    // Update canvas and save to history
+    // Update canvas
     this.editor.canvasManager.render();
-    this.editor.currentSprite.saveToHistory();
     this.editor.updateUI();
 
     return true;
@@ -562,8 +579,8 @@ class SelectTool {
 
     const transparentColor = [0, 0, 0, 0];
 
-    // Enable batch mode for performance
-    layerManager.setBatchMode(true);
+    // Start batch operation for deleting
+    layerManager.startBatchOperation();
 
     // Clear selection area
     for (let y = this.selection.top; y <= this.selection.bottom; y++) {
@@ -579,12 +596,11 @@ class SelectTool {
       }
     }
 
-    // Disable batch mode and trigger update
-    layerManager.setBatchMode(false);
+    // End batch operation - this will save to history
+    layerManager.endBatchOperation();
 
-    // Update canvas and save to history
+    // Update canvas
     this.editor.canvasManager.render();
-    this.editor.currentSprite.saveToHistory();
     this.editor.updateUI();
 
     return true;
@@ -602,8 +618,8 @@ class SelectTool {
       return false;
     }
 
-    // Enable batch mode for performance
-    layerManager.setBatchMode(true);
+    // Start batch operation for filling
+    layerManager.startBatchOperation();
 
     // Fill selection area
     for (let y = this.selection.top; y <= this.selection.bottom; y++) {
@@ -619,12 +635,11 @@ class SelectTool {
       }
     }
 
-    // Disable batch mode and trigger update
-    layerManager.setBatchMode(false);
+    // End batch operation - this will save to history
+    layerManager.endBatchOperation();
 
-    // Update canvas and save to history
+    // Update canvas
     this.editor.canvasManager.render();
-    this.editor.currentSprite.saveToHistory();
     this.editor.updateUI();
 
     return true;
