@@ -334,8 +334,8 @@ class PixelEditor {
 
     // Check if this is the last sprite
     if (this.sprites.length <= 1) {
-      this.uiManager.showNotification("Cannot delete the last sprite", "error");
-      return false;
+      // Prevent deletion if it's the last sprite
+      this.createNewSprite(16, 16, "Sprite 1");
     }
 
     const spriteName = this.sprites[index].name;
@@ -370,7 +370,124 @@ class PixelEditor {
       `Canvas resized to ${width}×${height}`,
       "success"
     );
+    this.setCurrentSprite(this.currentSprite); // Refresh layers and canvas
     return true;
+  }
+
+  // Add this method to your PixelEditor class
+  // This should be inserted in the PixelEditor class after the resizeCanvas method
+
+  /**
+   * Crop current sprite to selection bounds
+   */
+  cropToSelection(selection) {
+    if (!this.currentSprite || !this.layerManager || !selection) {
+      console.warn("Cannot crop: missing sprite, layer manager, or selection");
+      return false;
+    }
+
+    const newWidth = selection.right - selection.left + 1;
+    const newHeight = selection.bottom - selection.top + 1;
+
+    // Validate crop dimensions
+    if (newWidth <= 0 || newHeight <= 0) {
+      this.uiManager?.showNotification("Invalid crop dimensions", "error");
+      return false;
+    }
+
+    // Ensure selection is within sprite bounds
+    if (
+      selection.left < 0 ||
+      selection.top < 0 ||
+      selection.right >= this.currentSprite.width ||
+      selection.bottom >= this.currentSprite.height
+    ) {
+      this.uiManager?.showNotification(
+        "Selection extends outside sprite bounds",
+        "error"
+      );
+      return false;
+    }
+
+    try {
+      // Start batch operation to prevent multiple history entries
+      this.layerManager.startBatchOperation();
+
+      // Create new layer data for cropped size
+      const oldLayers = this.layerManager.layers.map((layer) => ({
+        ...layer,
+        pixels: layer.pixels.map((row) => [...row]), // Deep copy pixels
+      }));
+
+      // Resize layer manager to new dimensions
+      this.layerManager.resize(newWidth, newHeight);
+
+      // Copy cropped pixels for each layer
+      for (
+        let layerIndex = 0;
+        layerIndex < this.layerManager.layers.length;
+        layerIndex++
+      ) {
+        const layer = this.layerManager.layers[layerIndex];
+        const oldLayer = oldLayers[layerIndex];
+
+        if (!oldLayer) continue;
+
+        // Initialize new pixel array
+        layer.pixels = [];
+
+        for (let y = 0; y < newHeight; y++) {
+          layer.pixels[y] = [];
+          for (let x = 0; x < newWidth; x++) {
+            const srcX = selection.left + x;
+            const srcY = selection.top + y;
+
+            // Copy pixel from original layer
+            if (
+              srcY < oldLayer.pixels.length &&
+              srcX < oldLayer.pixels[srcY].length
+            ) {
+              layer.pixels[y][x] = [...oldLayer.pixels[srcY][srcX]];
+            } else {
+              layer.pixels[y][x] = [0, 0, 0, 0]; // Transparent pixel
+            }
+          }
+        }
+      }
+
+      // Update sprite dimensions
+      this.currentSprite.width = newWidth;
+      this.currentSprite.height = newHeight;
+
+      // Save layers back to sprite
+      this.saveLayersToSprite();
+
+      // End batch operation - this will save to history
+      this.layerManager.endBatchOperation();
+
+      // Update canvas manager
+      this.canvasManager.updateCanvasSize();
+      this.canvasManager.render();
+
+      // Update UI
+      this.updateUI();
+
+      // Show success message
+      this.uiManager?.showNotification(
+        `Sprite cropped to ${newWidth}×${newHeight}`,
+        "success"
+      );
+
+      return true;
+    } catch (error) {
+      console.error("Error during crop operation:", error);
+      this.uiManager?.showNotification("Failed to crop sprite", "error");
+
+      // End batch operation even on error
+      this.layerManager.endBatchOperation();
+
+      return false;
+    }
   }
 
   // Set primary color

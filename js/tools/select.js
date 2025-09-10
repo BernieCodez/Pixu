@@ -1,4 +1,4 @@
-// Select Tool - For selecting rectangular areas (Layer-compatible version)
+// Select Tool - For selecting rectangular areas (Layer-compatible version with crop)
 class SelectTool {
   constructor(editor) {
     this.editor = editor;
@@ -318,6 +318,9 @@ class SelectTool {
 
         // Show handles for new selection
         this.editor.canvasManager.renderSelectionBox(this.selection);
+        
+        // CRITICAL FIX: Update settings UI immediately after selection is created
+        this.updateSettingsUI();
       }
     }
   }
@@ -645,6 +648,35 @@ class SelectTool {
     return true;
   }
 
+  // NEW: Crop sprite to selection bounds
+  crop() {
+    if (!this.selection || !this.editor.currentSprite) {
+      console.warn("Cannot crop: no selection or current sprite");
+      return false;
+    }
+
+    const newWidth = this.selection.right - this.selection.left + 1;
+    const newHeight = this.selection.bottom - this.selection.top + 1;
+
+    // Validate crop dimensions
+    if (newWidth <= 0 || newHeight <= 0) {
+      this.editor.uiManager?.showNotification("Invalid crop dimensions", "error");
+      return false;
+    }
+
+    // Use the editor's cropToSelection method
+    const success = this.editor.cropToSelection(this.selection);
+    
+    if (success) {
+      // Clear selection after successful crop
+      this.clearSelection();
+      this.updateSettingsUI();
+      return true;
+    }
+    
+    return false;
+  }
+
   // Clear current selection
   clearSelection() {
     this.selection = null;
@@ -682,8 +714,6 @@ class SelectTool {
     return this.clipboard !== null;
   }
 
-  // Get tool settings UI elements
-  // Get tool settings UI elements
   // Get tool settings UI elements
   getSettingsHTML() {
     const hasSelection = this.hasSelection();
@@ -738,6 +768,14 @@ class SelectTool {
                   <i class="fas fa-times"></i>
               </button>
           </div>
+          
+          <div class="setting-group">
+              <button class="btn btn-primary btn-sm" id="crop-btn" ${
+                !hasSelection ? "disabled" : ""
+              }>
+                  <i class="fas fa-crop"></i> Crop to Selection
+              </button>
+          </div>
       `;
   }
 
@@ -748,6 +786,7 @@ class SelectTool {
     const pasteBtn = document.getElementById("paste-btn");
     const deleteBtn = document.getElementById("delete-btn");
     const clearSelectionBtn = document.getElementById("clear-selection-btn");
+    const cropBtn = document.getElementById("crop-btn");
     const rigidScalingCb = document.getElementById("rigid-scaling-cb");
 
     if (copyBtn) {
@@ -782,6 +821,15 @@ class SelectTool {
       clearSelectionBtn.addEventListener("click", () => {
         this.clearSelection();
         this.updateSettingsUI();
+      });
+    }
+
+    // NEW: Crop button event listener
+    if (cropBtn) {
+      cropBtn.addEventListener("click", () => {
+        if (confirm("Crop the sprite to the current selection? This cannot be undone.")) {
+          this.crop();
+        }
       });
     }
 

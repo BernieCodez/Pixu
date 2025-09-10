@@ -1220,75 +1220,11 @@ class UIController {
         (sprite) => !sessionSpriteIds.has(sprite.id)
       );
 
-      if (storedOnlySprites.length > 0) {
-        this.displayStoredSprites(storedOnlySprites);
-      }
     } catch (error) {
       console.error("Failed to load session sprites:", error);
     }
   }
-  // Display stored sprites under current session
-  displayStoredSprites(sprites) {
-    const spritesList = document.getElementById("sprites-list");
-    if (!spritesList) return;
-
-    // Add separator if there are current session sprites
-    if (this.editor.sprites.length > 0) {
-      const separator = document.createElement("div");
-      separator.className = "sprites-separator";
-      separator.innerHTML = `
-            <div style="
-                margin: 12px 0 8px 0;
-                padding: 4px 8px;
-                font-size: 11px;
-                color: #888;
-                text-transform: uppercase;
-                letter-spacing: 0.5px;
-                border-top: 1px solid #333;
-                padding-top: 8px;
-            ">Stored Sprites</div>
-        `;
-      spritesList.appendChild(separator);
-    }
-
-    // Sort by modified date (newest first)
-    sprites.sort((a, b) => new Date(b.modifiedAt) - new Date(a.modifiedAt));
-
-    sprites.forEach((sprite) => {
-      const spriteItem = document.createElement("div");
-      spriteItem.className = "sprite-item stored-sprite";
-      spriteItem.style.opacity = "0.7"; // Visual distinction
-
-      // Create thumbnail
-      const thumbnail = this.createSpriteThumbnail(sprite);
-
-      const spriteInfo = document.createElement("div");
-      spriteInfo.className = "sprite-info";
-      spriteInfo.innerHTML = `
-            <div class="sprite-name">${sprite.name}</div>
-            <div class="sprite-size">${sprite.width}×${sprite.height}</div>
-            <div class="sprite-date" style="font-size: 10px; color: #666;">
-                ${new Date(sprite.modifiedAt).toLocaleDateString()}
-            </div>
-        `;
-
-      spriteItem.appendChild(thumbnail);
-      spriteItem.appendChild(spriteInfo);
-
-      // Click to load sprite into session
-      spriteItem.addEventListener("click", () => {
-        this.loadStoredSpriteToSession(sprite);
-      });
-
-      // Right-click context menu for stored sprites
-      spriteItem.addEventListener("contextmenu", (e) => {
-        e.preventDefault();
-        this.showStoredSpriteContextMenu(e, sprite);
-      });
-
-      spritesList.appendChild(spriteItem);
-    });
-  }
+  
   // Load a stored sprite into the current session
   loadStoredSpriteToSession(sprite) {
     // Check if sprite is already in session
@@ -1789,7 +1725,6 @@ class UIController {
             } else {
               this.editor.currentSprite = null;
             }
-            this.editor.updateUI();
             this.showNotification(`Deleted: ${sprite.name}`, "success");
           }
           this.hideContextMenu();
