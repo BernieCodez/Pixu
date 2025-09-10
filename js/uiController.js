@@ -262,36 +262,19 @@ class UIController {
         layerItem.className = `layer-item ${i === activeIndex ? "active" : ""}`;
         layerItem.setAttribute("draggable", "true");
         layerItem.dataset.index = i;
-        layerItem.style.cssText = `
-        display: flex;
-        align-items: center;
-        padding: 8px 12px;
-        margin-bottom: 4px;
-        background: ${
-          i === activeIndex
-            ? "rgba(74, 144, 226, 0.2)"
-            : "rgba(255, 255, 255, 0.05)"
-        };
-        border: 1px solid ${i === activeIndex ? "#4a90e2" : "transparent"};
-        border-radius: 6px;
-        cursor: pointer;
-        transition: all 0.15s ease;
-      `;
 
         layerItem.innerHTML = `
-        <span class="drag-handle" title="Drag to reorder" style="cursor: grab; margin-right: 8px; color: #aaa;">
+        <span class="drag-handle" title="Drag to reorder">
           <i class="fas fa-grip-vertical"></i>
         </span>
-        <span class="layer-name" style="flex: 1; color: white;">${
-          layer.name || `Layer ${i + 1}`
-        }</span>
+        <span class="layer-name">${layer.name || `Layer ${i + 1}`}</span>
         <input type="range" class="layer-opacity-slider" min="0" max="100" value="${Math.round(
           (layer.opacity || 1) * 100
-        )}" title="Opacity" style="width: 70px; margin-left: 8px;" />
-        <span class="layer-opacity-value" style="font-size: 12px; color: #999; margin-left: 4px;">${Math.round(
+        )}" title="Opacity" />
+        <span class="layer-opacity-value">${Math.round(
           (layer.opacity || 1) * 100
         )}%</span>
-        <button class="btn btn-sm layer-visibility" title="Toggle Visibility" style="margin-left: 8px;">
+        <button class="btn btn-sm layer-visibility" title="Toggle Visibility">
           <i class="fas ${
             layer.visible !== false ? "fa-eye" : "fa-eye-slash"
           }"></i>
@@ -370,15 +353,8 @@ class UIController {
     } else {
       // Fallback for when layer manager is not available or has no layers
       layersList.innerHTML = `
-      <div class="layer-item active" style="
-          display: flex;
-          align-items: center;
-          padding: 8px 12px;
-          background: rgba(74, 144, 226, 0.2);
-          border: 1px solid #4a90e2;
-          border-radius: 6px;
-      ">
-          <span style="color: white;">Layer 1 (Basic)</span>
+      <div class="layer-item layer-item-fallback active">
+          <span>Layer 1 (Basic)</span>
       </div>
     `;
     }
@@ -793,6 +769,54 @@ class UIController {
         this.showExportModal();
       });
     }
+
+    // Canvas size inputs
+    this.setupCanvasSizeInputs();
+  }
+  setupCanvasSizeInputs() {
+    const widthInput = document.getElementById("canvas-width-header");
+    const heightInput = document.getElementById("canvas-height-header");
+
+    if (widthInput && heightInput) {
+      const applyResize = () => {
+        const width = parseInt(widthInput.value);
+        const height = parseInt(heightInput.value);
+
+        if (width > 0 && height > 0 && width <= 128 && height <= 128) {
+          this.editor.resizeCanvas(width, height);
+          this.showNotification(
+            `Canvas resized to ${width}×${height}`,
+            "success"
+          );
+        } else {
+          this.showNotification(
+            "Invalid dimensions. Use values between 1 and 128.",
+            "error"
+          );
+          // Reset to current sprite size
+          if (this.editor.currentSprite) {
+            widthInput.value = this.editor.currentSprite.width;
+            heightInput.value = this.editor.currentSprite.height;
+          }
+        }
+      };
+
+      widthInput.addEventListener("change", applyResize);
+      heightInput.addEventListener("change", applyResize);
+
+      // Also listen for Enter key
+      widthInput.addEventListener("keypress", (e) => {
+        if (e.key === "Enter") {
+          applyResize();
+        }
+      });
+
+      heightInput.addEventListener("keypress", (e) => {
+        if (e.key === "Enter") {
+          applyResize();
+        }
+      });
+    }
   }
 
   // Handle SVG export - simple direct download
@@ -874,12 +898,12 @@ class UIController {
     }
 
     // Resize canvas
-    const resizeBtn = document.getElementById("resize-canvas");
-    if (resizeBtn) {
-      resizeBtn.addEventListener("click", () => {
-        this.showResizeModal();
-      });
-    }
+    // const resizeBtn = document.getElementById("resize-canvas");
+    // if (resizeBtn) {
+    //   resizeBtn.addEventListener("click", () => {
+    //     this.showResizeModal();
+    //   });
+    // }
   }
 
   // Setup color picker event listeners
@@ -1465,9 +1489,12 @@ class UIController {
   }
 
   updateCanvasSizeDisplay() {
-    const sizeDisplay = document.getElementById("canvas-size");
-    if (sizeDisplay && this.editor.currentSprite) {
-      sizeDisplay.textContent = `${this.editor.currentSprite.width}x${this.editor.currentSprite.height}`;
+    const widthInput = document.getElementById("canvas-width-header");
+    const heightInput = document.getElementById("canvas-height-header");
+
+    if (widthInput && heightInput && this.editor.currentSprite) {
+      widthInput.value = this.editor.currentSprite.width;
+      heightInput.value = this.editor.currentSprite.height;
     }
   }
 

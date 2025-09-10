@@ -4,7 +4,15 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Pixel Editor</title>
-    <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="styles/base.css" />
+    <link rel="stylesheet" href="styles/canvas-components.css" />
+    <link rel="stylesheet" href="styles/ui-components.css" />
+
+    <!-- base.css - Core styling, reset, layout, buttons, and basic UI elements -->
+    <!-- canvas-components.css - Canvas-specific components, sidebars, toolbars, and drawing area -->
+    <!-- ui-components.css - Properties panel, modals, forms, and interactive UI components -->
+
+
     <link
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
       rel="stylesheet"
@@ -23,11 +31,38 @@
             Pixel Editor
           </h1>
         </div>
-        <div class="header-center">
-          <button class="btn btn-secondary" id="resize-canvas">
-            <i class="fas fa-expand-arrows-alt"></i>
-            Resize
+        <div class="toolbar-group">
+          <button class="tool-btn" id="zoom-in" title="Zoom In">
+            <i class="fas fa-search-plus"></i>
           </button>
+          <button class="tool-btn" id="zoom-out" title="Zoom Out">
+            <i class="fas fa-search-minus"></i>
+          </button>
+          <button class="tool-btn" id="toggle-grid" title="Toggle Grid">
+            <i class="fas fa-th"></i>
+          </button>
+        </div>
+        <div class="header-center">
+          <div class="canvas-size-inputs">
+            <label for="canvas-width-header">W:</label>
+            <input
+              type="number"
+              id="canvas-width-header"
+              min="1"
+              max="128"
+              value="16"
+              style="width: 50px; margin-right: 8px"
+            />
+            <label for="canvas-height-header">H:</label>
+            <input
+              type="number"
+              id="canvas-height-header"
+              min="1"
+              max="128"
+              value="16"
+              style="width: 50px; margin-right: 12px"
+            />
+          </div>
           <span id="sprite-name-display" class="sprite-name-display"
             >Untitled</span
           >
@@ -46,17 +81,6 @@
           </button>
           <button class="tool-btn" id="redo-btn" title="Redo">
             <i class="fas fa-redo"></i>
-          </button>
-        </div>
-        <div class="toolbar-group">
-          <button class="tool-btn" id="zoom-in" title="Zoom In">
-            <i class="fas fa-search-plus"></i>
-          </button>
-          <button class="tool-btn" id="zoom-out" title="Zoom Out">
-            <i class="fas fa-search-minus"></i>
-          </button>
-          <button class="tool-btn" id="toggle-grid" title="Toggle Grid">
-            <i class="fas fa-th"></i>
           </button>
         </div>
         <div class="header-right">
@@ -161,7 +185,7 @@
       <!-- Main Content -->
       <div class="main-container">
         <!-- Sprite Sidebar (moved to far left) -->
-        <aside class="sidebar" id = "sprites-sidebar">
+        <aside class="sidebar" id="sprites-sidebar">
           <div class="sidebar-section">
             <h3>Recent Sprites</h3>
             <button class="btn btn-secondary btn-sm" id="pick-folder">
@@ -303,7 +327,11 @@
             ></div>
           </div>
           <!-- <button class = "generate-ai-button" id = "generate-ai-button">Generate AI Pixel Art</button> -->
-          <button class="btn generate-ai-button" id="generate-ai-button" title="Generate AI Pixel Art">
+          <button
+            class="btn generate-ai-button"
+            id="generate-ai-button"
+            title="Generate AI Pixel Art"
+          >
             <i class="fa fa-wand-magic-sparkles"></i>
           </button>
         </main>

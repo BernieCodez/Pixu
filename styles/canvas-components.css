@@ -1,0 +1,495 @@
+/* Sidebar */
+.sidebar {
+    width: 250px;
+    background: #2d2d2d;
+    border-right: 1px solid #444;
+    padding: 20px;
+    overflow-y: auto;
+}
+
+/* Drag-over effect for sprite sidebar drop target */
+.sidebar.drag-over {
+    background: #003a55;
+    box-shadow: 0 0 0 3px #00d4ff inset;
+    transition: background 0.2s, box-shadow 0.2s;
+}
+
+.sidebar-section h3 {
+    color: #00d4ff;
+    font-size: 16px;
+    margin-bottom: 15px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.sprites-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+    gap: 10px;
+}
+
+.sprite-thumbnail {
+    aspect-ratio: 1;
+    background: #1a1a1a;
+    border: 2px solid #444;
+    border-radius: 6px;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+    transition: all 0.2s ease;
+    animation: fadeIn 0.3s ease;
+}
+
+.sprite-thumbnail:hover {
+    border-color: #00d4ff;
+    transform: scale(1.05);
+}
+
+.sprite-thumbnail.active {
+    border-color: #00d4ff;
+    box-shadow: 0 0 0 2px rgba(0, 212, 255, 0.3);
+}
+
+.sprite-thumbnail canvas {
+    width: 100%;
+    height: 100%;
+    image-rendering: pixelated;
+}
+
+.sprite-thumbnail .sprite-name {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: rgba(0, 0, 0, 0.8);
+    color: #fff;
+    padding: 2px 4px;
+    font-size: 10px;
+    text-align: center;
+}
+
+.sprite-name{
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 150px; /* Set your desired maximum width */
+}
+
+/* Canvas Area */
+.canvas-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: #1a1a1a;
+    position: relative;
+}
+
+.canvas-toolbar {
+    background: #2d2d2d;
+    border-bottom: 1px solid #444;
+    padding: 10px 15px;
+    display: flex;
+    gap: 20px;
+    align-items: center;
+    overflow-x: auto;
+    min-height: 60px;
+    max-width: 100%;
+    flex-shrink: 0;
+}
+
+.canvas-toolbar .tool-settings {
+    display: flex;
+    flex-direction: row;
+    gap: 16px;
+    align-items: center;
+    flex-shrink: 0;
+    min-width: min-content;
+    overflow-x: auto;
+    max-width: 100%;
+    padding-right: 10px;
+}
+
+.canvas-toolbar .setting-group {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    margin-right: 8px;
+    gap: 8px;
+    flex-shrink: 0;
+    white-space: nowrap;
+    min-width: max-content;
+}
+
+/* Style the scrollbar for tool settings */
+.canvas-toolbar .tool-settings::-webkit-scrollbar {
+    height: 6px;
+}
+
+.canvas-toolbar .tool-settings::-webkit-scrollbar-track {
+    background: #1a1a1a;
+    border-radius: 3px;
+}
+
+.canvas-toolbar .tool-settings::-webkit-scrollbar-thumb {
+    background: #555;
+    border-radius: 3px;
+}
+
+.canvas-toolbar .tool-settings::-webkit-scrollbar-thumb:hover {
+    background: #666;
+}
+
+.canvas-toolbar .slider-container {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.canvas-container {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    position: relative;
+    overflow: auto;
+}
+
+#main-canvas, #overlay-canvas {
+    border: 2px solid #444;
+    border-radius: 4px;
+    image-rendering: pixelated;
+    cursor: crosshair;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+#overlay-canvas {
+    pointer-events: none;
+    z-index: 10;
+}
+
+.canvas-grid {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    z-index: 5;
+    opacity: 0.3;
+}
+
+/* Selection overlay styles */
+.selection-overlay {
+    position: absolute;
+    border: 2px dashed #00d4ff;
+    background: rgba(0, 212, 255, 0.1);
+    pointer-events: none;
+    z-index: 15;
+}
+
+/* Toolbox Sidebar */
+.toolbox-sidebar {
+    width: 64px;
+    background: #2d2d2d;
+    border-right: 1px solid #444;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 12px 0;
+    z-index: 2;
+    border-left: none;
+}
+
+.toolbox-section {
+    width: 100%;
+    text-align: center;
+}
+
+.toolbox-section h3 {
+    color: #fff;
+    font-size: 14px;
+    margin-bottom: 10px;
+}
+
+.toolbox-tools {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    align-items: center;
+}
+
+.toolbox-tools .tool-btn {
+    width: 40px;
+    height: 40px;
+    font-size: 20px;
+    background: #2d2d2d;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.toolbox-tools .tool-btn.active,
+.toolbox-tools .tool-btn:hover {
+    background: #444;
+}
+
+/* Sprite Name Input */
+.sprite-name-input:focus {
+    outline: none;
+    width: 160px;
+    max-width: 160px;
+    font-size: 16px;
+    padding: 8px 8px;
+    border-radius: 6px;
+    border: 1px solid #444;
+    background: #1a1a1a;
+    color: #fff;
+    margin-right: 12px;
+}
+
+/* Recent Sprites */
+.recent-sprites {
+    min-height: 100px;
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid #444;
+    border-radius: 6px;
+    padding: 10px;
+    margin-top: 10px;
+}
+
+.no-sprites-message {
+    text-align: center;
+    color: #666;
+    padding: 20px 10px;
+}
+
+.no-sprites-message i {
+    font-size: 24px;
+    margin-bottom: 10px;
+    color: #555;
+}
+
+.no-sprites-message p {
+    margin: 5px 0;
+    font-size: 14px;
+}
+
+.help-text {
+    font-size: 12px !important;
+    color: #555 !important;
+}
+
+.recent-sprite-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.2s ease;
+    margin-bottom: 5px;
+}
+
+.recent-sprite-item:hover {
+    background: rgba(0, 212, 255, 0.1);
+}
+
+.recent-sprite-item img {
+    width: 32px;
+    height: 32px;
+    border: 1px solid #444;
+    border-radius: 3px;
+    image-rendering: pixelated;
+}
+
+.recent-sprite-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.recent-sprite-name {
+    font-size: 12px;
+    color: #fff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.recent-sprite-size {
+    font-size: 10px;
+    color: #888;
+}
+
+/* Canvas Info Styles */
+.canvas-info {
+    padding: 8px 0;
+}
+
+.info-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 4px 0;
+    font-size: 12px;
+}
+
+.info-label {
+    color: #888;
+}
+
+.info-value {
+    color: #fff;
+    font-weight: 500;
+}
+
+/* Layers */
+.layers-list {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+/* Layer List Styles */
+/* Layer List Styles */
+.layer-item {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  margin-bottom: 4px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.layer-item.active {
+  background: rgba(74, 144, 226, 0.2);
+  border-color: #4a90e2;
+}
+
+.layer-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.layer-item.active:hover {
+  background: rgba(74, 144, 226, 0.3);
+}
+
+.layer-item.dragging {
+  opacity: 0.5;
+  transform: rotate(2deg);
+}
+
+.layer-item.drag-over {
+  background: rgba(74, 144, 226, 0.1);
+  border-color: #4a90e2;
+  border-style: dashed;
+}
+
+.drag-handle {
+  cursor: grab;
+  margin-right: 8px;
+  color: #aaa;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+.layer-name {
+  flex: 1;
+  color: white;
+}
+
+.layer-opacity-slider {
+  width: 70px;
+  margin-left: 8px;
+  height: 6px;
+  border-radius: 3px;
+  background: #2d2d2d;
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.layer-opacity-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #00d4ff;
+  cursor: pointer;
+}
+
+.layer-opacity-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #00d4ff;
+  cursor: pointer;
+  border: none;
+}
+
+.layer-opacity-value {
+  font-size: 12px;
+  color: #999;
+  margin-left: 4px;
+}
+
+.layer-visibility {
+  margin-left: 8px;
+  background-color: transparent;
+  color: white;
+}
+
+/* Fallback layer item styles */
+.layer-item-fallback {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  background: rgba(74, 144, 226, 0.2);
+  border: 1px solid #4a90e2;
+  border-radius: 6px;
+}
+
+.layer-item-fallback span {
+  color: white;
+}
+
+.add-layer-btn {
+    background: none;
+    border: none;
+    color: #888;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 2px;
+    margin-left: auto;
+    transition: color 0.2s;
+}
+
+.add-layer-btn:hover {
+    color: #4a90e2;
+    background: rgba(74, 144, 226, 0.1);
+}
+
+/* Responsive Design */
+@media (max-width: 900px) {
+    .toolbox-sidebar {
+        width: 48px;
+    }
+    
+    .toolbox-tools .tool-btn {
+        width: 32px;
+        height: 32px;
+        font-size: 16px;
+    }
+}
