@@ -683,80 +683,62 @@ class SelectTool {
   }
 
   // Get tool settings UI elements
+  // Get tool settings UI elements
+  // Get tool settings UI elements
   getSettingsHTML() {
-    const selectionInfo = this.getSelectionInfo();
     const hasSelection = this.hasSelection();
     const hasClipboard = this.hasClipboard();
     const activeLayer = this.editor.layerManager?.getActiveLayer();
     const isLayerLocked = activeLayer?.locked || false;
 
     return `
-        <div class="setting-group">
-            <label>Selection:</label>
-            <div class="selection-info">
-                ${
-                  selectionInfo
-                    ? `${selectionInfo.width}×${selectionInfo.height} at (${selectionInfo.x}, ${selectionInfo.y})`
-                    : "No selection"
-                }
-            </div>
-        </div>
-        
-        ${
-          isLayerLocked
-            ? `
-        <div class="setting-group">
-            <div class="warning-message">
-                <i class="fas fa-lock"></i> Active layer is locked
-            </div>
-        </div>
-        `
-            : ""
-        }
-        
-        <div class="setting-group">
-            <label>
-                <input type="checkbox" id="rigid-scaling-cb" ${
-                  this.rigidScaling ? "checked" : ""
-                }>
-                Rigid Scaling
-            </label>
-            <small class="help-text">When enabled, scaling maintains integer ratios (e.g., 2x, 3x)</small>
-        </div>
-        <div class="setting-group">
-            <div class="button-group">
-                <button class="btn btn-secondary btn-sm" id="copy-btn" ${
-                  !hasSelection ? "disabled" : ""
-                }>
-                    <i class="fas fa-copy"></i> Copy
-                </button>
-                <button class="btn btn-secondary btn-sm" id="cut-btn" ${
-                  !hasSelection || isLayerLocked ? "disabled" : ""
-                }>
-                    <i class="fas fa-cut"></i> Cut
-                </button>
-                <button class="btn btn-secondary btn-sm" id="paste-btn" ${
-                  !hasClipboard || isLayerLocked ? "disabled" : ""
-                }>
-                    <i class="fas fa-paste"></i> Paste
-                </button>
-            </div>
-        </div>
-        <div class="setting-group">
-            <div class="button-group">
-                <button class="btn btn-secondary btn-sm" id="delete-btn" ${
-                  !hasSelection || isLayerLocked ? "disabled" : ""
-                }>
-                    <i class="fas fa-trash"></i> Delete
-                </button>
-                <button class="btn btn-secondary btn-sm" id="clear-selection-btn" ${
-                  !hasSelection ? "disabled" : ""
-                }>
-                    <i class="fas fa-times"></i> Clear
-                </button>
-            </div>
-        </div>
-    `;
+          ${
+            isLayerLocked
+              ? `<div class="setting-group">
+                  <div class="warning-message">
+                      <i class="fas fa-lock"></i> Layer locked
+                  </div>
+               </div>`
+              : ""
+          }
+          
+          <div class="setting-group">
+              <label>
+                  <input type="checkbox" id="rigid-scaling-cb" ${
+                    this.rigidScaling ? "checked" : ""
+                  }>
+                  Rigid Scaling
+              </label>
+          </div>
+          
+          <div class="setting-group">
+              <button class="btn btn-secondary btn-sm" id="copy-btn" ${
+                !hasSelection ? "disabled" : ""
+              }>
+                  <i class="fas fa-copy"></i>
+              </button>
+              <button class="btn btn-secondary btn-sm" id="cut-btn" ${
+                !hasSelection || isLayerLocked ? "disabled" : ""
+              }>
+                  <i class="fas fa-cut"></i>
+              </button>
+              <button class="btn btn-secondary btn-sm" id="paste-btn" ${
+                !hasClipboard || isLayerLocked ? "disabled" : ""
+              }>
+                  <i class="fas fa-paste"></i>
+              </button>
+              <button class="btn btn-secondary btn-sm" id="delete-btn" ${
+                !hasSelection || isLayerLocked ? "disabled" : ""
+              }>
+                  <i class="fas fa-trash"></i>
+              </button>
+              <button class="btn btn-secondary btn-sm" id="clear-selection-btn" ${
+                !hasSelection ? "disabled" : ""
+              }>
+                  <i class="fas fa-times"></i>
+              </button>
+          </div>
+      `;
   }
 
   // Initialize tool settings event listeners

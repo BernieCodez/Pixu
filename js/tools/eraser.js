@@ -1,16 +1,20 @@
-// Eraser Tool - For erasing pixels (making them transparent)
+// Eraser Tool - For erasing pixels (making them transparent) with opacity support
 class EraserTool {
   constructor(editor) {
     this.editor = editor;
     this.name = "eraser";
     this.size = 1;
+    this.opacity = 100; // Added opacity property
     this.isDrawing = false;
+    this.applyOnce = false; // Apply once per mouse down
+    this.processedPixels = new Set(); // Track processed pixels for apply once
   }
 
   // Handle mouse down event
   onMouseDown(x, y, event) {
     if (!this.editor.layerManager) return;
     this.isDrawing = true;
+    this.processedPixels.clear(); // Clear processed pixels for new stroke
     this.editor.layerManager.startBatchOperation();
     this.erasePixel(x, y);
   }
@@ -26,6 +30,7 @@ class EraserTool {
   onMouseUp(x, y, event) {
     if (!this.editor.layerManager || !this.isDrawing) return;
     this.isDrawing = false;
+    this.processedPixels.clear(); // Clear processed pixels
     // TODO: Implement layerManager history if needed
     this.editor.layerManager.endBatchOperation();
     this.editor.updateUI();
@@ -40,34 +45,66 @@ class EraserTool {
   onMouseLeave(event) {
     if (this.isDrawing) {
       this.isDrawing = false;
+      this.processedPixels.clear(); // Clear processed pixels
       // TODO: Implement layerManager history if needed
       this.editor.layerManager.endBatchOperation();
-
       this.editor.updateUI();
     }
   }
 
-  // Erase pixels at position
+  // Erase pixels at position with opacity support
   erasePixel(x, y) {
     if (!this.editor.layerManager) return;
     const layerManager = this.editor.layerManager;
     const halfSize = Math.floor(this.size / 2);
-    const transparentColor = [0, 0, 0, 0];
+    
     for (let dy = -halfSize; dy <= halfSize; dy++) {
       for (let dx = -halfSize; dx <= halfSize; dx++) {
         const pixelX = x + dx;
         const pixelY = y + dy;
+        
         if (
           pixelX >= 0 &&
           pixelX < layerManager.width &&
           pixelY >= 0 &&
           pixelY < layerManager.height
         ) {
+          // For round erasers, check distance
           if (this.size > 1) {
             const distance = Math.sqrt(dx * dx + dy * dy);
             if (distance > this.size / 2) continue;
           }
-          layerManager.setPixel(pixelX, pixelY, transparentColor);
+          
+          // Check if pixel should be processed (apply once mode)
+          const pixelKey = `${pixelX},${pixelY}`;
+          if (this.applyOnce && this.processedPixels.has(pixelKey)) {
+            continue;
+          }
+          
+          // Handle opacity-based erasing
+          if (this.opacity < 100) {
+            // Get existing pixel
+            const existingPixel = layerManager.getPixel(pixelX, pixelY);
+            // Calculate new alpha based on eraser opacity
+            const eraseStrength = this.opacity / 100;
+            const newAlpha = Math.round(existingPixel[3] * (1 - eraseStrength));
+            const partiallyErasedColor = [
+              existingPixel[0],
+              existingPixel[1], 
+              existingPixel[2],
+              newAlpha
+            ];
+            layerManager.setPixel(pixelX, pixelY, partiallyErasedColor);
+          } else {
+            // Full erase - make completely transparent
+            const transparentColor = [0, 0, 0, 0];
+            layerManager.setPixel(pixelX, pixelY, transparentColor);
+          }
+          
+          // Mark pixel as processed for apply once mode
+          if (this.applyOnce) {
+            this.processedPixels.add(pixelKey);
+          }
         }
       }
     }
@@ -108,6 +145,16 @@ class EraserTool {
     this.size = Math.max(1, Math.min(10, size));
   }
 
+  // Set eraser opacity
+  setOpacity(opacity) {
+    this.opacity = Math.max(0, Math.min(100, opacity));
+  }
+
+  // Set apply once mode
+  setApplyOnce(applyOnce) {
+    this.applyOnce = applyOnce;
+  }
+
   // Get tool settings UI elements
   getSettingsHTML() {
     return `
@@ -118,18 +165,49 @@ class EraserTool {
                     <span class="slider-value">${this.size}</span>
                 </div>
             </div>
+            <div class="setting-group">
+                <label for="eraser-opacity">Opacity:</label>
+                <div class="slider-container">
+                    <input type="range" id="eraser-opacity" min="0" max="100" value="${this.opacity}">
+                    <span class="slider-value">${this.opacity}%</span>
+                </div>
+            </div>
+            <div class="setting-group">
+                <label>
+                    <input type="checkbox" id="eraser-apply-once" ${this.applyOnce ? "checked" : ""}>
+                    Apply Once
+                </label>
+            </div>
         `;
   }
 
   // Initialize tool settings event listeners
   initializeSettings() {
     const sizeSlider = document.getElementById("eraser-size");
-    const sizeValue = sizeSlider.nextElementSibling;
+    const opacitySlider = document.getElementById("eraser-opacity");
+    const applyOnceCheckbox = document.getElementById("eraser-apply-once");
+    
+    if (sizeSlider) {
+      const sizeValue = sizeSlider.nextElementSibling;
+      sizeSlider.addEventListener("input", (e) => {
+        this.setSize(parseInt(e.target.value));
+        sizeValue.textContent = this.size;
+      });
+    }
 
-    sizeSlider.addEventListener("input", (e) => {
-      this.setSize(parseInt(e.target.value));
-      sizeValue.textContent = this.size;
-    });
+    if (opacitySlider) {
+      const opacityValue = opacitySlider.nextElementSibling;
+      opacitySlider.addEventListener("input", (e) => {
+        this.setOpacity(parseInt(e.target.value));
+        opacityValue.textContent = `${this.opacity}%`;
+      });
+    }
+
+    if (applyOnceCheckbox) {
+      applyOnceCheckbox.addEventListener("change", (e) => {
+        this.setApplyOnce(e.target.checked);
+      });
+    }
   }
 
   // Get tool cursor

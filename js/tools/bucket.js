@@ -243,110 +243,60 @@ class BucketTool {
   // Get tool settings UI elements
   getSettingsHTML() {
     return `
-            <div class="setting-group">
-                <label for="fill-opacity">Opacity:</label>
-                <div class="slider-container">
-                    <input type="range" id="fill-opacity" min="0" max="100" value="${
-                      this.opacity
-                    }">
-                    <span class="slider-value">${this.opacity}%</span>
-                </div>
-            </div>
-            <div class="setting-group">
-                <label for="fill-tolerance">Color Tolerance:</label>
-                <div class="slider-container">
-                    <input type="range" id="fill-tolerance" min="0" max="100" value="${
-                      this.tolerance
-                    }">
-                    <span class="slider-value">${this.tolerance}%</span>
-                </div>
-                <small class="setting-help">Higher tolerance fills similar colors</small>
-            </div>
-            <div class="setting-group">
-                <label>Fill Mode:</label>
-                <div class="button-group">
-                    <button class="btn btn-secondary btn-sm ${
-                      !this.fillAll ? "active" : ""
-                    }" id="fill-mode-connected" data-mode="connected">Connected Only</button>
-                    <button class="btn btn-secondary btn-sm ${
-                      this.fillAll ? "active" : ""
-                    }" id="fill-mode-all" data-mode="all">Fill All</button>
-                </div>
-                <small class="setting-help">Connected: traditional flood fill | Fill All: fills all matching pixels</small>
-            </div>
-            <div class="setting-group">
-                <label>
-                    <input type="checkbox" id="fill-all-checkbox" ${
-                      this.fillAll ? "checked" : ""
-                    }>
-                    Fill all pixels of same color (ignores connectivity)
-                </label>
-            </div>
-        `;
+          <div class="setting-group">
+              <label for="fill-opacity">Opacity:</label>
+              <div class="slider-container">
+                  <input type="range" id="fill-opacity" min="0" max="100" value="${
+                    this.opacity
+                  }">
+                  <span class="slider-value">${this.opacity}%</span>
+              </div>
+          </div>
+          <div class="setting-group">
+              <label for="fill-tolerance">Tolerance:</label>
+              <div class="slider-container">
+                  <input type="range" id="fill-tolerance" min="0" max="100" value="${
+                    this.tolerance
+                  }">
+                  <span class="slider-value">${this.tolerance}%</span>
+              </div>
+          </div>
+          <div class="setting-group">
+              <label>
+                  <input type="checkbox" id="fill-all-checkbox" ${
+                    this.fillAll ? "checked" : ""
+                  }>
+                  Fill All Matching
+              </label>
+          </div>
+      `;
   }
 
   // Initialize tool settings event listeners
   initializeSettings() {
     const opacitySlider = document.getElementById("fill-opacity");
     const toleranceSlider = document.getElementById("fill-tolerance");
-    const opacityValue = opacitySlider.nextElementSibling;
-    const toleranceValue = toleranceSlider.nextElementSibling;
     const fillAllCheckbox = document.getElementById("fill-all-checkbox");
 
-    // Opacity slider
-    opacitySlider.addEventListener("input", (e) => {
-      this.setOpacity(parseInt(e.target.value));
-      opacityValue.textContent = `${this.opacity}%`;
-    });
-
-    // Tolerance slider
-    toleranceSlider.addEventListener("input", (e) => {
-      this.setTolerance(parseInt(e.target.value));
-      toleranceValue.textContent = `${this.tolerance}%`;
-    });
-
-    // Fill all checkbox
-    if (fillAllCheckbox) {
-      fillAllCheckbox.addEventListener("change", (e) => {
-        this.setFillAll(e.target.checked);
-        // Update button states
-        const connectedBtn = document.getElementById("fill-mode-connected");
-        const allBtn = document.getElementById("fill-mode-all");
-        if (connectedBtn && allBtn) {
-          if (this.fillAll) {
-            connectedBtn.classList.remove("active");
-            allBtn.classList.add("active");
-          } else {
-            connectedBtn.classList.add("active");
-            allBtn.classList.remove("active");
-          }
-        }
+    if (opacitySlider) {
+      const opacityValue = opacitySlider.nextElementSibling;
+      opacitySlider.addEventListener("input", (e) => {
+        this.setOpacity(parseInt(e.target.value));
+        opacityValue.textContent = `${this.opacity}%`;
       });
     }
 
-    // Mode buttons
-    const connectedModeBtn = document.getElementById("fill-mode-connected");
-    const allModeBtn = document.getElementById("fill-mode-all");
-
-    if (connectedModeBtn && allModeBtn) {
-      connectedModeBtn.addEventListener("click", () => {
-        this.setFillAll(false);
-        connectedModeBtn.classList.add("active");
-        allModeBtn.classList.remove("active");
-        // Update checkbox
-        if (fillAllCheckbox) {
-          fillAllCheckbox.checked = false;
-        }
+    if (toleranceSlider) {
+      const toleranceValue = toleranceSlider.nextElementSibling;
+      toleranceSlider.addEventListener("input", (e) => {
+        this.setTolerance(parseInt(e.target.value));
+        toleranceValue.textContent = `${this.tolerance}%`;
       });
+    }
 
-      allModeBtn.addEventListener("click", () => {
-        this.setFillAll(true);
-        allModeBtn.classList.add("active");
-        connectedModeBtn.classList.remove("active");
-        // Update checkbox
-        if (fillAllCheckbox) {
-          fillAllCheckbox.checked = true;
-        }
+    if (fillAllCheckbox) {
+      fillAllCheckbox.addEventListener("change", (e) => {
+        this.setFillAll(e.target.checked);
       });
     }
   }

@@ -281,106 +281,83 @@ class BrightnessTool {
   setRandomMode(randomMode) {
     this.randomMode = randomMode;
   }
-
+  // Get tool settings UI elements
   // Get tool settings UI elements
   getSettingsHTML() {
     return `
-            <div class="setting-group">
-                <label for="brightness-intensity">Intensity:</label>
-                <div class="slider-container">
-                    <input type="range" id="brightness-intensity" min="-50" max="50" value="${
-                      this.intensity
-                    }">
-                    <span class="slider-value">${
-                      this.intensity > 0 ? "+" : ""
-                    }${this.intensity}%</span>
-                </div>
-            </div>
-            <div class="setting-group">
-                <label for="brightness-size">Brush Size:</label>
-                <div class="slider-container">
-                    <input type="range" id="brightness-size" min="1" max="10" value="${
-                      this.size
-                    }">
-                    <span class="slider-value">${this.size}</span>
-                </div>
-            </div>
-            <div class="setting-group">
-                <label>Mode:</label>
-                <div class="button-group">
-                    <button class="btn btn-secondary btn-sm active" id="brightness-mode-rgb" data-mode="rgb">RGB</button>
-                    <button class="btn btn-secondary btn-sm" id="brightness-mode-hsl" data-mode="hsl">HSL</button>
-                </div>
-            </div>
-            <div class="setting-group">
-                <label>
-                    <input type="checkbox" id="brightness-apply-once" ${
-                      this.applyOnce ? "checked" : ""
-                    }>
-                    Apply Once (per stroke)
-                </label>
-            </div>
-            <div class="setting-group">
-                <label>
-                    <input type="checkbox" id="brightness-random" ${
-                      this.randomMode ? "checked" : ""
-                    }>
-                    Random Intensity
-                </label>
-            </div>
-        `;
+          <div class="setting-group">
+              <label for="brightness-intensity">Intensity:</label>
+              <div class="slider-container">
+                  <input type="range" id="brightness-intensity" min="-50" max="50" value="${
+                    this.intensity
+                  }">
+                  <span class="slider-value">${this.intensity > 0 ? "+" : ""}${
+      this.intensity
+    }%</span>
+              </div>
+          </div>
+          <div class="setting-group">
+              <label for="brightness-size">Size:</label>
+              <div class="slider-container">
+                  <input type="range" id="brightness-size" min="1" max="10" value="${
+                    this.size
+                  }">
+                  <span class="slider-value">${this.size}</span>
+              </div>
+          </div>
+          <div class="setting-group">
+              <label>
+                  <input type="checkbox" id="brightness-apply-once" ${
+                    this.applyOnce ? "checked" : ""
+                  }>
+                  Apply Once
+              </label>
+          </div>
+          <div class="setting-group">
+              <label>
+                  <input type="checkbox" id="brightness-random" ${
+                    this.randomMode ? "checked" : ""
+                  }>
+                  Random Intensity
+              </label>
+          </div>
+      `;
   }
 
   // Initialize tool settings event listeners
   initializeSettings() {
     const intensitySlider = document.getElementById("brightness-intensity");
     const sizeSlider = document.getElementById("brightness-size");
-    const intensityValue = intensitySlider.nextElementSibling;
-    const sizeValue = sizeSlider.nextElementSibling;
     const applyOnceCheckbox = document.getElementById("brightness-apply-once");
     const randomCheckbox = document.getElementById("brightness-random");
 
-    intensitySlider.addEventListener("input", (e) => {
-      this.setIntensity(parseInt(e.target.value));
-      intensityValue.textContent = `${this.intensity > 0 ? "+" : ""}${
-        this.intensity
-      }%`;
-    });
+    if (intensitySlider) {
+      const intensityValue = intensitySlider.nextElementSibling;
+      intensitySlider.addEventListener("input", (e) => {
+        this.setIntensity(parseInt(e.target.value));
+        intensityValue.textContent = `${this.intensity > 0 ? "+" : ""}${
+          this.intensity
+        }%`;
+      });
+    }
 
-    sizeSlider.addEventListener("input", (e) => {
-      this.setSize(parseInt(e.target.value));
-      sizeValue.textContent = this.size;
-    });
+    if (sizeSlider) {
+      const sizeValue = sizeSlider.nextElementSibling;
+      sizeSlider.addEventListener("input", (e) => {
+        this.setSize(parseInt(e.target.value));
+        sizeValue.textContent = this.size;
+      });
+    }
 
-    // Apply once checkbox
     if (applyOnceCheckbox) {
       applyOnceCheckbox.addEventListener("change", (e) => {
         this.setApplyOnce(e.target.checked);
       });
     }
 
-    // Random mode checkbox
     if (randomCheckbox) {
       randomCheckbox.addEventListener("change", (e) => {
         this.setRandomMode(e.target.checked);
-      });
-    }
-
-    // Mode buttons
-    const rgbModeBtn = document.getElementById("brightness-mode-rgb");
-    const hslModeBtn = document.getElementById("brightness-mode-hsl");
-
-    if (rgbModeBtn && hslModeBtn) {
-      rgbModeBtn.addEventListener("click", () => {
-        this.mode = "rgb";
-        rgbModeBtn.classList.add("active");
-        hslModeBtn.classList.remove("active");
-      });
-
-      hslModeBtn.addEventListener("click", () => {
-        this.mode = "hsl";
-        hslModeBtn.classList.add("active");
-        rgbModeBtn.classList.remove("active");
       });
     }
   }

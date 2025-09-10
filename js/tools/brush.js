@@ -1,4 +1,4 @@
-// Brush Tool - For painting pixels
+// Brush Tool - For painting pixels with Apply Once functionality
 class BrushTool {
   constructor(editor) {
     this.editor = editor;
@@ -7,12 +7,15 @@ class BrushTool {
     this.opacity = 100;
     this.color = [0, 0, 0, 255]; // Black
     this.isDrawing = false;
+    this.applyOnce = false; // Apply once per mouse down
+    this.processedPixels = new Set(); // Track processed pixels for apply once
   }
 
   // Handle mouse down event
   onMouseDown(x, y, event) {
     if (!this.editor.layerManager) return;
     this.isDrawing = true;
+    this.processedPixels.clear(); // Clear processed pixels for new stroke
     this.editor.layerManager.startBatchOperation();
 
     this.drawPixel(x, y);
@@ -29,6 +32,7 @@ class BrushTool {
   onMouseUp(x, y, event) {
     if (!this.editor.layerManager || !this.isDrawing) return;
     this.isDrawing = false;
+    this.processedPixels.clear(); // Clear processed pixels
     // Save to history after brush stroke is complete
     // TODO: Implement layerManager history if needed
     this.editor.layerManager.endBatchOperation();
@@ -44,6 +48,7 @@ class BrushTool {
   onMouseLeave(event) {
     if (this.isDrawing) {
       this.isDrawing = false;
+      this.processedPixels.clear(); // Clear processed pixels
       // TODO: Implement layerManager history if needed
       this.editor.layerManager.endBatchOperation();
       this.editor.updateUI();
@@ -75,6 +80,13 @@ class BrushTool {
             const distance = Math.sqrt(dx * dx + dy * dy);
             if (distance > this.size / 2) continue;
           }
+          
+          // Check if pixel should be processed (apply once mode)
+          const pixelKey = `${pixelX},${pixelY}`;
+          if (this.applyOnce && this.processedPixels.has(pixelKey)) {
+            continue;
+          }
+          
           // Blend with existing pixel if opacity < 100%
           if (this.opacity < 100) {
             const existingPixel = layerManager.getPixel(pixelX, pixelY);
@@ -82,6 +94,11 @@ class BrushTool {
             layerManager.setPixel(pixelX, pixelY, blendedColor);
           } else {
             layerManager.setPixel(pixelX, pixelY, color);
+          }
+          
+          // Mark pixel as processed for apply once mode
+          if (this.applyOnce) {
+            this.processedPixels.add(pixelKey);
           }
         }
       }
@@ -159,6 +176,11 @@ class BrushTool {
     this.opacity = Math.max(0, Math.min(100, opacity));
   }
 
+  // Set apply once mode
+  setApplyOnce(applyOnce) {
+    this.applyOnce = applyOnce;
+  }
+
   // Set brush color
   setColor(color) {
     if (Array.isArray(color) && color.length >= 3) {
@@ -209,6 +231,12 @@ class BrushTool {
                     <span class="slider-value">${this.opacity}%</span>
                 </div>
             </div>
+            <div class="setting-group">
+                <label>
+                    <input type="checkbox" id="brush-apply-once" ${this.applyOnce ? "checked" : ""}>
+                    Apply Once
+                </label>
+            </div>
         `;
   }
 
@@ -216,6 +244,7 @@ class BrushTool {
   initializeSettings() {
     const sizeSlider = document.getElementById("brush-size");
     const opacitySlider = document.getElementById("brush-opacity");
+    const applyOnceCheckbox = document.getElementById("brush-apply-once");
     const sizeValue = sizeSlider.nextElementSibling;
     const opacityValue = opacitySlider.nextElementSibling;
 
@@ -228,6 +257,12 @@ class BrushTool {
       this.setOpacity(parseInt(e.target.value));
       opacityValue.textContent = `${this.opacity}%`;
     });
+
+    if (applyOnceCheckbox) {
+      applyOnceCheckbox.addEventListener("change", (e) => {
+        this.setApplyOnce(e.target.checked);
+      });
+    }
   }
 
   // Get tool cursor
