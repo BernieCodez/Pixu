@@ -524,3 +524,257 @@
         max-height: 96px;
     }
 }
+
+
+
+
+
+
+
+
+
+/* Add these styles to your existing CSS files */
+
+/* Frames Row Styling */
+.frames-row {
+  background: #2d2d2d;
+  border-top: 1px solid #444;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 80px;
+  max-height: 120px;
+}
+
+.frames-toolbar {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.frames-toolbar .btn {
+  padding: 6px 8px;
+  min-width: 32px;
+  height: 28px;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.frames-list {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 4px 0;
+  flex: 1;
+  align-items: center;
+  min-height: 48px;
+}
+
+.frames-list::-webkit-scrollbar {
+  height: 6px;
+}
+
+.frames-list::-webkit-scrollbar-track {
+  background: #2d2d2d;
+  border-radius: 3px;
+}
+
+.frames-list::-webkit-scrollbar-thumb {
+  background: #555;
+  border-radius: 3px;
+}
+
+.frames-list::-webkit-scrollbar-thumb:hover {
+  background: #666;
+}
+
+/* Frame Item Styling - Similar to layer items */
+.frame-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 6px;
+  background: #2d2d2d;
+  border: 2px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+  min-width: 48px;
+  flex-shrink: 0;
+}
+
+.frame-item:hover {
+  background: #333;
+  border-color: #555;
+}
+
+.frame-item.active {
+  background: #00d4ff;
+  border-color: #00bae6;
+  color: #1a1a1a;
+}
+
+.frame-item.active .frame-number {
+  color: #1a1a1a;
+  font-weight: 600;
+}
+
+.frame-item.dragging {
+  opacity: 0.5;
+  transform: scale(0.95);
+}
+
+.frame-item.drag-over {
+  border-color: #00d4ff;
+  background: rgba(0, 212, 255, 0.1);
+}
+
+.frame-thumbnail {
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid #444;
+  background: #1a1a1a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.frame-item.active .frame-thumbnail {
+  border-color: #1a1a1a;
+}
+
+.frame-thumbnail canvas {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  image-rendering: pixelated;
+  image-rendering: -moz-crisp-edges;
+  image-rendering: crisp-edges;
+}
+
+.frame-number {
+  font-size: 10px;
+  font-weight: 500;
+  color: #ccc;
+  line-height: 1;
+  text-align: center;
+  min-width: 20px;
+}
+
+.no-frames-message {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #666;
+  font-size: 12px;
+  font-style: italic;
+  height: 48px;
+  width: 100%;
+}
+
+/* Frame Context Menu Styling - Similar to existing context menus */
+.frame-context-menu {
+  position: fixed;
+  background: #2d2d2d;
+  border: 1px solid #444;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  z-index: 10000;
+  min-width: 140px;
+  padding: 4px 0;
+  font-family: system-ui, -apple-system, sans-serif;
+  color: white;
+  font-size: 14px;
+}
+
+.frame-context-menu > div {
+  padding: 8px 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: background-color 0.15s ease;
+}
+
+.frame-context-menu > div:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.frame-context-menu > div[data-danger="true"] {
+  color: #ff6b6b;
+}
+
+.frame-context-menu > div[data-danger="true"]:hover {
+  background: rgba(255, 107, 107, 0.1);
+}
+
+.frame-context-menu > div[data-disabled="true"] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.frame-context-menu > div[data-disabled="true"]:hover {
+  background: transparent;
+}
+
+/* Animation for frame transitions */
+@keyframes frameSelect {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.frame-item.active {
+  animation: frameSelect 0.2s ease-out;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .frames-row {
+    padding: 8px;
+    min-height: 70px;
+    max-height: 100px;
+  }
+  
+  .frame-thumbnail {
+    width: 28px;
+    height: 28px;
+  }
+  
+  .frame-item {
+    min-width: 42px;
+    padding: 4px;
+  }
+  
+  .frames-toolbar .btn {
+    padding: 4px 6px;
+    height: 24px;
+    font-size: 11px;
+  }
+}
+
+/* Dark mode specific adjustments */
+@media (prefers-color-scheme: dark) {
+  .frame-thumbnail {
+    background: #0f0f0f;
+  }
+  
+  .frames-list::-webkit-scrollbar-track {
+    background: #1a1a1a;
+  }
+}
