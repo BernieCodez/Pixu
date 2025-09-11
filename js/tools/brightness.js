@@ -318,7 +318,7 @@ class BrightnessTool {
                   <input type="checkbox" id="brightness-random" ${
                     this.randomMode ? "checked" : ""
                   }>
-                  Random Intensity
+                  Random
               </label>
           </div>
       `;

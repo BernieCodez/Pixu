@@ -29,21 +29,41 @@
   gap: 10px;
 }
 
+.sprite-item{
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.2s ease;
+  margin-bottom: 5px;
+  border: 1px solid #444;
+  transition: all 0.2s ease;
+}
+
+.sprite-item:hover {
+  transform: scale(1.05);
+}
+
+.sprite-item.active{
+  border-color: #00d4ff;
+  box-shadow: 0 0 0 2px rgba(0, 212, 255, 0.3);
+}
+
 .sprite-thumbnail {
   aspect-ratio: 1;
   background: #1a1a1a;
-  border: 2px solid #444;
+  border: 1px solid #444;
   border-radius: 6px;
   cursor: pointer;
   position: relative;
   overflow: hidden;
   transition: all 0.2s ease;
   animation: fadeIn 0.3s ease;
-}
-
-.sprite-thumbnail:hover {
-  border-color: #00d4ff;
-  transform: scale(1.05);
 }
 
 .sprite-thumbnail.active {
@@ -65,15 +85,16 @@
   background: rgba(0, 0, 0, 0.8);
   color: #fff;
   padding: 2px 4px;
-  font-size: 10px;
+  font-size: 3px;
   text-align: center;
 }
 
 .sprite-name {
+  margin-top: 4px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 150px; /* Set your desired maximum width */
+  max-width: 50px; /* Set your desired maximum width */
 }
 
 /* Canvas Area */
@@ -233,10 +254,12 @@
   border: none;
   border-radius: 8px;
   cursor: pointer;
-  transition: background 0.2s;
+  transition: all 0.2s;
 }
 
-.toolbox-tools .tool-btn.active,
+.toolbox-tools .tool-btn.active{
+  background: #00d4ff;
+}
 .toolbox-tools .tool-btn:hover {
   background: #444;
 }
@@ -264,6 +287,7 @@
   border-radius: 6px;
   padding: 10px;
   margin-top: 10px;
+  margin-bottom: 10px;;
 }
 
 .no-sprites-message {

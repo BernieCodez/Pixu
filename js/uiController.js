@@ -1190,6 +1190,8 @@ class UIController {
       // Click to select sprite
       spriteItem.addEventListener("click", () => {
         this.editor.setCurrentSprite(sprite);
+        // spriteItem.classList.add("active");
+        this.updateSpritesList();
       });
 
       // Right-click context menu
