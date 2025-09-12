@@ -100,9 +100,8 @@ class CanvasManager {
       for (let x = 0; x < clipboard.width; x++) {
         const pixel = clipboard.pixels[y][x];
         if (pixel[3] > 0) {
-          this.overlayCtx.fillStyle = `rgba(${pixel[0]},${pixel[1]},${
-            pixel[2]
-          },${pixel[3] / 255})`;
+          this.overlayCtx.fillStyle = `rgba(${pixel[0]},${pixel[1]},${pixel[2]
+            },${pixel[3] / 255})`;
           this.overlayCtx.fillRect(
             (left + x) * this.zoomLevel,
             (top + y) * this.zoomLevel,
@@ -189,9 +188,8 @@ class CanvasManager {
           const shadowR = Math.max(0, pixel[0] * 0.3);
           const shadowG = Math.max(0, pixel[1] * 0.3);
           const shadowB = Math.max(0, pixel[2] * 0.3);
-          this.overlayCtx.fillStyle = `rgba(${shadowR},${shadowG},${shadowB},${
-            pixel[3] / 255
-          })`;
+          this.overlayCtx.fillStyle = `rgba(${shadowR},${shadowG},${shadowB},${pixel[3] / 255
+            })`;
           // Offset shadow slightly down and right
           this.overlayCtx.fillRect(
             (left + x) * this.zoomLevel + 2,
@@ -209,9 +207,8 @@ class CanvasManager {
       for (let x = 0; x < clipboard.width; x++) {
         const pixel = clipboard.pixels[y][x];
         if (pixel[3] > 0) {
-          this.overlayCtx.fillStyle = `rgba(${pixel[0]},${pixel[1]},${
-            pixel[2]
-          },${pixel[3] / 255})`;
+          this.overlayCtx.fillStyle = `rgba(${pixel[0]},${pixel[1]},${pixel[2]
+            },${pixel[3] / 255})`;
           this.overlayCtx.fillRect(
             (left + x) * this.zoomLevel,
             (top + y) * this.zoomLevel,
@@ -947,56 +944,266 @@ class CanvasManager {
    * Create thumbnail canvas for sprite
    */
   createThumbnail(sprite, size = 64) {
-    const thumbnailCanvas = document.createElement("canvas");
-    const thumbnailCtx = thumbnailCanvas.getContext("2d");
+    const thumbnailCanvas = document.createElement('canvas');
+    const thumbnailCtx = thumbnailCanvas.getContext('2d');
     thumbnailCanvas.width = size;
     thumbnailCanvas.height = size;
 
-    // Calculate scale to fit sprite in thumbnail while maintaining aspect ratio
-    const scale = Math.min(size / sprite.width, size / sprite.height);
-    const scaledWidth = sprite.width * scale;
-    const scaledHeight = sprite.height * scale;
-    const offsetX = (size - scaledWidth) / 2;
-    const offsetY = (size - scaledHeight) / 2;
+    // Disable smoothing for pixel-perfect scaling
+    thumbnailCtx.imageSmoothingEnabled = false;
 
-    // Render checkerboard background
-    thumbnailCtx.fillStyle = "#ffffff";
-    thumbnailCtx.fillRect(offsetX, offsetY, scaledWidth, scaledHeight);
+    // Initialize with first frame
+    this.renderThumbnailFrame(thumbnailCtx, sprite, 0, size);
 
-    thumbnailCtx.fillStyle = "#e0e0e0";
-    const checkerSize = Math.max(1, scale);
-    for (let y = 0; y < sprite.height; y++) {
-      for (let x = 0; x < sprite.width; x++) {
-        if ((x + y) % 2 === 1) {
-          thumbnailCtx.fillRect(
-            offsetX + x * scale,
-            offsetY + y * scale,
-            scale,
-            scale
-          );
-        }
-      }
-    }
-
-    // Render sprite
-    for (let y = 0; y < sprite.height; y++) {
-      for (let x = 0; x < sprite.width; x++) {
-        const [r, g, b, a] = sprite.getPixel(x, y);
-
-        if (a > 0) {
-          thumbnailCtx.fillStyle = `rgba(${r}, ${g}, ${b}, ${a / 255})`;
-          thumbnailCtx.fillRect(
-            offsetX + x * scale,
-            offsetY + y * scale,
-            scale,
-            scale
-          );
-        }
-      }
+    // Add animation support if sprite has multiple frames
+    if (sprite.frames && sprite.frames.length > 1) {
+      this.setupThumbnailAnimation(thumbnailCanvas, thumbnailCtx, sprite, size);
     }
 
     return thumbnailCanvas;
   }
+  renderThumbnailFrame(ctx, sprite, frameIndex, size) {
+    // Clear canvas
+    ctx.clearRect(0, 0, size, size);
+
+    // Get frame data
+    let frameData;
+    if (sprite.frames && sprite.frames[frameIndex]) {
+      frameData = sprite.frames[frameIndex];
+    } else {
+      // Fallback to sprite pixel data for non-animated sprites
+      frameData = {
+        width: sprite.width,
+        height: sprite.height,
+        layers: [{
+          visible: true,
+          opacity: 1,
+          pixels: sprite.getPixelArray ? sprite.getPixelArray() : this.getSpritePixelArray(sprite)
+        }]
+      };
+    }
+
+    // Calculate scale to fit sprite in thumbnail while maintaining aspect ratio
+    const scale = Math.min(size / frameData.width, size / frameData.height);
+    const scaledWidth = frameData.width * scale;
+    const scaledHeight = frameData.height * scale;
+    const offsetX = (size - scaledWidth) / 2;
+    const offsetY = (size - scaledHeight) / 2;
+
+    // Render checkerboard background for transparency
+    this.renderThumbnailBackground(ctx, offsetX, offsetY, scaledWidth, scaledHeight, scale);
+
+    // Render all visible layers for this frame
+    for (const layer of frameData.layers) {
+      if (!layer.visible) continue;
+
+      const layerOpacity = layer.opacity || 1;
+
+      for (let y = 0; y < frameData.height; y++) {
+        for (let x = 0; x < frameData.width; x++) {
+          const pixel = layer.pixels[y] && layer.pixels[y][x];
+          if (!pixel) continue;
+
+          const [r, g, b, a] = pixel;
+          if (a > 0) {
+            const finalAlpha = (a / 255) * layerOpacity;
+            ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${finalAlpha})`;
+
+            // Use Math.ceil for scale to avoid gaps in scaled pixels
+            const pixelWidth = Math.ceil(scale);
+            const pixelHeight = Math.ceil(scale);
+
+            ctx.fillRect(
+              offsetX + x * scale,
+              offsetY + y * scale,
+              pixelWidth,
+              pixelHeight
+            );
+          }
+        }
+      }
+    }
+  }
+
+
+  getSpritePixelArray(sprite) {
+    const pixels = [];
+    for (let y = 0; y < sprite.height; y++) {
+      pixels[y] = [];
+      for (let x = 0; x < sprite.width; x++) {
+        pixels[y][x] = sprite.getPixel ? sprite.getPixel(x, y) : [0, 0, 0, 0];
+      }
+    }
+    return pixels;
+  }
+
+  /**
+   * Create thumbnail with custom frame rate for animation
+   */
+  createThumbnailWithFrameRate(sprite, size = 64, frameRate = 12) {
+    const thumbnail = this.createThumbnail(sprite, size);
+
+    // Override the frame rate for this specific thumbnail
+    if (sprite.frames && sprite.frames.length > 1) {
+      const originalEnter = thumbnail.onmouseenter;
+      thumbnail.onmouseenter = function (e) {
+        // Custom animation logic with specific frame rate
+        let currentFrame = 0;
+        let animationInterval = null;
+
+        const frameTime = 1000 / frameRate;
+        animationInterval = setInterval(() => {
+          currentFrame = (currentFrame + 1) % sprite.frames.length;
+          // Re-render with new frame
+          const ctx = this.getContext('2d');
+          window.editor.canvasManager.renderThumbnailFrame(ctx, sprite, currentFrame, size);
+        }, frameTime);
+
+        this._customInterval = animationInterval;
+      };
+
+      thumbnail.onmouseleave = function (e) {
+        if (this._customInterval) {
+          clearInterval(this._customInterval);
+          this._customInterval = null;
+        }
+        // Reset to first frame
+        const ctx = this.getContext('2d');
+        window.editor.canvasManager.renderThumbnailFrame(ctx, sprite, 0, size);
+      };
+    }
+
+    return thumbnail;
+  }
+
+  /**
+   * Batch create thumbnails for multiple sprites (optimized for sprite lists)
+   */
+  createThumbnailBatch(sprites, size = 64, callback) {
+    const thumbnails = [];
+    let processed = 0;
+
+    const processBatch = () => {
+      const batchSize = 5; // Process 5 thumbnails per frame to avoid blocking UI
+      const endIndex = Math.min(processed + batchSize, sprites.length);
+
+      for (let i = processed; i < endIndex; i++) {
+        thumbnails[i] = this.createThumbnail(sprites[i], size);
+      }
+
+      processed = endIndex;
+
+      if (processed < sprites.length) {
+        // Schedule next batch
+        requestAnimationFrame(processBatch);
+      } else {
+        // All done, call callback
+        if (callback) callback(thumbnails);
+      }
+    };
+
+    // Start processing
+    requestAnimationFrame(processBatch);
+
+    return thumbnails; // Returns array that will be populated asynchronously
+  }
+
+
+  renderThumbnailBackground(ctx, offsetX, offsetY, width, height, scale) {
+    const checkerSize = Math.max(2, scale);
+
+    // Fill with white background first
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(offsetX, offsetY, width, height);
+
+    // Add checkerboard pattern
+    ctx.fillStyle = '#e0e0e0';
+    const checkersX = Math.ceil(width / checkerSize);
+    const checkersY = Math.ceil(height / checkerSize);
+
+    for (let cy = 0; cy < checkersY; cy++) {
+      for (let cx = 0; cx < checkersX; cx++) {
+        if ((cx + cy) % 2 === 1) {
+          ctx.fillRect(
+            offsetX + cx * checkerSize,
+            offsetY + cy * checkerSize,
+            checkerSize,
+            checkerSize
+          );
+        }
+      }
+    }
+  }
+
+  /**
+   * Setup hover animation for thumbnail
+   */
+  setupThumbnailAnimation(canvas, ctx, sprite, size) {
+    let animationInterval = null;
+    let currentFrame = 0;
+    let isAnimating = false;
+
+    // Mouse enter - start animation
+    canvas.addEventListener('mouseenter', () => {
+      if (isAnimating) return;
+
+      isAnimating = true;
+      currentFrame = 0;
+
+      // Calculate frame rate (default to 12 FPS, but use animation manager's rate if available)
+      let frameRate = 12;
+      if (window.editor && window.editor.animationManager) {
+        frameRate = window.editor.animationManager.frameRate;
+      }
+
+      const frameTime = 1000 / frameRate;
+
+      animationInterval = setInterval(() => {
+        currentFrame = (currentFrame + 1) % sprite.frames.length;
+        this.renderThumbnailFrame(ctx, sprite, currentFrame, size);
+      }, frameTime);
+    });
+
+    // Mouse leave - stop animation and return to first frame
+    canvas.addEventListener('mouseleave', () => {
+      if (animationInterval) {
+        clearInterval(animationInterval);
+        animationInterval = null;
+      }
+
+      isAnimating = false;
+      currentFrame = 0;
+      this.renderThumbnailFrame(ctx, sprite, 0, size);
+    });
+
+    // Add visual indication that this thumbnail is animated
+    this.addAnimationIndicator(canvas, ctx, size);
+  }
+
+  /**
+   * Add small indicator to show this thumbnail has animation
+   */
+  addAnimationIndicator(canvas, ctx, size) {
+    // Draw small play icon in bottom-right corner
+    const iconSize = Math.max(8, size / 8);
+    const margin = 2;
+    const x = size - iconSize - margin;
+    const y = size - iconSize - margin;
+
+    // Semi-transparent background
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+    ctx.fillRect(x - 1, y - 1, iconSize + 2, iconSize + 2);
+
+    // White play triangle
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.moveTo(x + 1, y + 1);
+    ctx.lineTo(x + iconSize - 1, y + iconSize / 2);
+    ctx.lineTo(x + 1, y + iconSize - 1);
+    ctx.closePath();
+    ctx.fill();
+  }
+
 
   /**
    * Render hover outline for pixel

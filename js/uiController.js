@@ -275,8 +275,7 @@ class UIController {
           (layer.opacity || 1) * 100
         )}%</span>
         <button class="btn btn-sm layer-visibility" title="Toggle Visibility">
-          <i class="fas ${
-            layer.visible !== false ? "fa-eye" : "fa-eye-slash"
+          <i class="fas ${layer.visible !== false ? "fa-eye" : "fa-eye-slash"
           }"></i>
         </button>
       `;
@@ -742,6 +741,461 @@ class UIController {
 
     // Keyboard shortcuts
     this.setupKeyboardShortcuts();
+
+    this.setupFrameControls();
+  }
+
+  setupFrameControls() {
+    // Frame control buttons
+    const addFrameBtn = document.getElementById('add-frame-btn');
+    const duplicateFrameBtn = document.getElementById('duplicate-frame-btn');
+    const deleteFrameBtn = document.getElementById('delete-frame-btn');
+
+    if (addFrameBtn) {
+      addFrameBtn.addEventListener('click', () => {
+        if (this.editor.animationManager) {
+          this.editor.animationManager.addFrame();
+          this.updateFramesList();
+          this.showNotification('Frame added', 'success');
+        }
+      });
+    }
+
+    if (duplicateFrameBtn) {
+      duplicateFrameBtn.addEventListener('click', () => {
+        if (this.editor.animationManager) {
+          this.editor.animationManager.duplicateFrame();
+          this.updateFramesList();
+          this.showNotification('Frame duplicated', 'success');
+        }
+      });
+    }
+
+    if (deleteFrameBtn) {
+      deleteFrameBtn.addEventListener('click', () => {
+        if (this.editor.animationManager) {
+          const success = this.editor.animationManager.deleteFrame();
+          if (success) {
+            this.updateFramesList();
+            this.showNotification('Frame deleted', 'success');
+          } else {
+            this.showNotification('Cannot delete the last frame', 'warning');
+          }
+        }
+      });
+    }
+
+    // Add animation controls
+    this.setupAnimationControls();
+  }
+
+  setupAnimationControls() {
+    // Create animation controls if they don't exist
+    const framesToolbar = document.querySelector('.frames-toolbar');
+    if (framesToolbar && !document.getElementById('play-btn')) {
+      const animationControls = document.createElement('div');
+      animationControls.className = 'animation-controls';
+      animationControls.innerHTML = `
+      <button class="btn btn-sm" id="play-btn" title="Play Animation">
+        <i class="fas fa-play"></i>
+      </button>
+      <button class="btn btn-sm" id="stop-btn" title="Stop Animation">
+        <i class="fas fa-stop"></i>
+      </button>
+      <div class="fps-control" style="display: inline-block; margin-left: 8px;">
+        <label for="fps-input" style="font-size: 12px; margin-right: 4px;">FPS:</label>
+        <input type="number" id="fps-input" min="1" max="60" value="12" 
+               style="width: 50px; padding: 2px; border: 1px solid #444; background: #1a1a1a; color: white; border-radius: 3px;">
+      </div>
+    `;
+      framesToolbar.appendChild(animationControls);
+
+      // Add event listeners
+      const playBtn = document.getElementById('play-btn');
+      const stopBtn = document.getElementById('stop-btn');
+      const fpsInput = document.getElementById('fps-input');
+
+      if (playBtn) {
+        playBtn.addEventListener('click', () => {
+          if (this.editor.animationManager) {
+            if (this.editor.animationManager.isPlaying) {
+              this.editor.animationManager.stop();
+              playBtn.innerHTML = '<i class="fas fa-play"></i>';
+              playBtn.title = 'Play Animation';
+            } else {
+              this.editor.animationManager.play();
+              playBtn.innerHTML = '<i class="fas fa-pause"></i>';
+              playBtn.title = 'Pause Animation';
+            }
+          }
+        });
+      }
+
+      if (stopBtn) {
+        stopBtn.addEventListener('click', () => {
+          if (this.editor.animationManager) {
+            this.editor.animationManager.stop();
+            if (playBtn) {
+              playBtn.innerHTML = '<i class="fas fa-play"></i>';
+              playBtn.title = 'Play Animation';
+            }
+          }
+        });
+      }
+
+      if (fpsInput) {
+        fpsInput.addEventListener('change', (e) => {
+          const fps = parseInt(e.target.value);
+          if (this.editor.animationManager && fps > 0 && fps <= 60) {
+            this.editor.animationManager.setFrameRate(fps);
+          }
+        });
+      }
+    }
+  }
+
+  // Update frames list UI
+  updateFramesList() {
+    const framesList = document.getElementById('frames-list');
+    if (!framesList || !this.editor.animationManager) return;
+
+    const sprite = this.editor.currentSprite;
+    if (!sprite || !sprite.frames) {
+      framesList.innerHTML = '<div class="no-frames">No frames</div>';
+      return;
+    }
+
+    // Clear existing frames
+    framesList.innerHTML = '';
+
+    // Create frame thumbnails
+    sprite.frames.forEach((frame, index) => {
+      const frameItem = document.createElement('div');
+      frameItem.className = `frame-item ${index === this.editor.animationManager.currentFrameIndex ? 'active' : ''}`;
+      frameItem.draggable = true;
+      frameItem.dataset.frameIndex = index;
+
+      // Create thumbnail canvas
+      const thumbnail = document.createElement('canvas');
+      thumbnail.width = 64;
+      thumbnail.height = 64;
+      thumbnail.className = 'frame-thumbnail';
+      const ctx = thumbnail.getContext('2d');
+
+      // Render frame thumbnail
+      this.renderFrameThumbnail(ctx, frame, 64, 64);
+
+      // Create frame info
+      const frameInfo = document.createElement('div');
+      frameInfo.className = 'frame-info';
+      frameInfo.innerHTML = `
+      <div class="frame-name">${frame.name || `Frame ${index + 1}`}</div>
+      <div class="frame-number">${index + 1}</div>
+    `;
+
+      frameItem.appendChild(thumbnail);
+      frameItem.appendChild(frameInfo);
+
+      // Add event listeners
+      frameItem.addEventListener('click', () => {
+        this.editor.animationManager.setCurrentFrame(index);
+        this.updateFramesList();
+        this.updateLayersList();
+      });
+
+      // ADDED: Right-click context menu for frame export
+      frameItem.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        this.showFrameContextMenu(e, frame, index);
+      });
+
+      // Double-click to rename
+      frameInfo.addEventListener('dblclick', () => {
+        this.editFrameName(frame, frameInfo.querySelector('.frame-name'));
+      });
+
+      // Existing drag and drop code...
+      frameItem.addEventListener('dragstart', (e) => {
+        e.dataTransfer.setData('text/plain', index.toString());
+        frameItem.classList.add('dragging');
+      });
+
+      frameItem.addEventListener('dragend', () => {
+        frameItem.classList.remove('dragging');
+      });
+
+      frameItem.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        frameItem.classList.add('drag-over');
+      });
+
+      frameItem.addEventListener('dragleave', () => {
+        frameItem.classList.remove('drag-over');
+      });
+
+      frameItem.addEventListener('drop', (e) => {
+        e.preventDefault();
+        frameItem.classList.remove('drag-over');
+
+        const fromIndex = parseInt(e.dataTransfer.getData('text/plain'));
+        const toIndex = index;
+
+        if (fromIndex !== toIndex) {
+          this.editor.animationManager.moveFrame(fromIndex, toIndex);
+          this.updateFramesList();
+        }
+      });
+
+      framesList.appendChild(frameItem);
+    });
+  }
+
+  showFrameContextMenu(event, frame, frameIndex) {
+    this.hideContextMenu();
+
+    const contextMenu = document.createElement('div');
+    contextMenu.className = 'frame-context-menu';
+    contextMenu.style.cssText = `
+    position: fixed;
+    background: #2d2d2d;
+    border: 1px solid #444;
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    z-index: 10000;
+    min-width: 180px;
+    padding: 4px 0;
+    font-family: system-ui, -apple-system, sans-serif;
+    color: white;
+    font-size: 14px;
+  `;
+
+    const menuItems = [
+      {
+        label: 'Export Frame (1x)',
+        icon: 'fas fa-download',
+        action: () => {
+          this.editor.exportSingleFrame(frameIndex, 1);
+          this.hideContextMenu();
+        }
+      },
+      {
+        label: 'Export Frame (4x)',
+        icon: 'fas fa-download',
+        action: () => {
+          this.editor.exportSingleFrame(frameIndex, 4);
+          this.hideContextMenu();
+        }
+      },
+      {
+        label: 'Export Frame (10x)',
+        icon: 'fas fa-download',
+        action: () => {
+          this.editor.exportSingleFrame(frameIndex, 10);
+          this.hideContextMenu();
+        }
+      },
+      { type: 'separator' },
+      {
+        label: 'Duplicate Frame',
+        icon: 'fas fa-copy',
+        action: () => {
+          this.editor.animationManager.duplicateFrame(frameIndex);
+          this.updateFramesList();
+          this.hideContextMenu();
+        }
+      },
+      {
+        label: 'Delete Frame',
+        icon: 'fas fa-trash',
+        action: () => {
+          if (this.editor.currentSprite.frames.length > 1) {
+            if (confirm(`Delete "${frame.name || `Frame ${frameIndex + 1}`}"?`)) {
+              this.editor.animationManager.deleteFrame(frameIndex);
+              this.updateFramesList();
+            }
+          } else {
+            this.showNotification('Cannot delete the last frame', 'warning');
+          }
+          this.hideContextMenu();
+        },
+        danger: true,
+        disabled: this.editor.currentSprite.frames.length <= 1
+      }
+    ];
+
+    // Build menu items
+    menuItems.forEach(item => {
+      if (item.type === 'separator') {
+        const separator = document.createElement('div');
+        separator.style.cssText = 'height: 1px; background: #444; margin: 4px 0;';
+        contextMenu.appendChild(separator);
+      } else {
+        const menuItem = document.createElement('div');
+        menuItem.style.cssText = `
+        padding: 8px 12px;
+        cursor: ${item.disabled ? 'not-allowed' : 'pointer'};
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        transition: background-color 0.15s ease;
+        opacity: ${item.disabled ? '0.5' : '1'};
+        ${item.danger && !item.disabled ? 'color: #ff6b6b;' : ''}
+      `;
+
+        menuItem.innerHTML = `
+        <i class="${item.icon}" style="width: 14px;"></i>
+        <span>${item.label}</span>
+      `;
+
+        if (!item.disabled) {
+          menuItem.addEventListener('mouseenter', () => {
+            menuItem.style.backgroundColor = item.danger
+              ? 'rgba(255, 107, 107, 0.1)'
+              : 'rgba(255, 255, 255, 0.1)';
+          });
+
+          menuItem.addEventListener('mouseleave', () => {
+            menuItem.style.backgroundColor = 'transparent';
+          });
+
+          menuItem.addEventListener('click', item.action);
+        }
+
+        contextMenu.appendChild(menuItem);
+      }
+    });
+
+    // Position and show menu
+    let left = event.clientX;
+    let top = event.clientY;
+
+    if (left + 180 > window.innerWidth) {
+      left = window.innerWidth - 180 - 10;
+    }
+    if (top + 300 > window.innerHeight) {
+      top = window.innerHeight - 300 - 10;
+    }
+
+    contextMenu.style.left = `${left}px`;
+    contextMenu.style.top = `${top}px`;
+
+    document.body.appendChild(contextMenu);
+    this.activeContextMenu = contextMenu;
+
+    document.addEventListener('click', this.handleContextMenuOutsideClick.bind(this), { once: true });
+  }
+
+  // Render frame thumbnail
+  // In the renderFrameThumbnail method, add the checkerboard background at the beginning:
+  renderFrameThumbnail(ctx, frame, width, height) {
+    // Add checkerboard background for transparency
+    this.drawCheckerboard(ctx, width, height, 4);
+
+    if (!frame || !frame.layers) return;
+
+    // Calculate scale to fit frame in thumbnail
+    const scale = Math.min(width / frame.width, height / frame.height);
+    const scaledWidth = frame.width * scale;
+    const scaledHeight = frame.height * scale;
+    const offsetX = (width - scaledWidth) / 2;
+    const offsetY = (height - scaledHeight) / 2;
+
+    // Render each visible layer
+    frame.layers.forEach(layer => {
+      if (!layer.visible || !layer.pixels) return;
+
+      for (let y = 0; y < frame.height; y++) {
+        for (let x = 0; x < frame.width; x++) {
+          if (!layer.pixels[y] || !layer.pixels[y][x]) continue;
+
+          const [r, g, b, a] = layer.pixels[y][x];
+          if (a > 0) {
+            const opacity = (a / 255) * layer.opacity;
+            ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${opacity})`;
+            ctx.fillRect(
+              offsetX + x * scale,
+              offsetY + y * scale,
+              Math.max(1, scale),
+              Math.max(1, scale)
+            );
+          }
+        }
+      }
+    });
+  }
+
+  // Draw transparency checkerboard pattern
+  drawTransparencyPattern(ctx, x, y, width, height) {
+    const checkSize = 4;
+    ctx.fillStyle = '#404040';
+
+    for (let py = y; py < y + height; py += checkSize) {
+      for (let px = x; px < x + width; px += checkSize) {
+        const checkX = Math.floor((px - x) / checkSize);
+        const checkY = Math.floor((py - y) / checkSize);
+
+        if ((checkX + checkY) % 2 === 0) {
+          ctx.fillRect(px, py, checkSize, checkSize);
+        }
+      }
+    }
+  }
+
+  // Edit frame name
+  editFrameName(frame, nameElement) {
+    const currentName = frame.name || 'Frame';
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = currentName;
+    input.className = 'frame-name-input';
+    input.style.cssText = `
+    background: #1a1a1a;
+    border: 1px solid #00d4ff;
+    color: white;
+    padding: 2px 4px;
+    border-radius: 3px;
+    font-size: 12px;
+    width: 100%;
+  `;
+
+    nameElement.replaceWith(input);
+    input.focus();
+    input.select();
+
+    const finishEdit = () => {
+      const newName = input.value.trim() || 'Frame';
+      frame.name = newName;
+
+      const newNameElement = document.createElement('div');
+      newNameElement.className = 'frame-name';
+      newNameElement.textContent = newName;
+
+      input.replaceWith(newNameElement);
+
+      // Save changes
+      this.editor.saveSprites();
+
+      // Add double-click listener to new element
+      newNameElement.addEventListener('dblclick', () => {
+        this.editFrameName(frame, newNameElement);
+      });
+    };
+
+    input.addEventListener('blur', finishEdit);
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        finishEdit();
+      } else if (e.key === 'Escape') {
+        const nameElement = document.createElement('div');
+        nameElement.className = 'frame-name';
+        nameElement.textContent = currentName;
+        input.replaceWith(nameElement);
+
+        nameElement.addEventListener('dblclick', () => {
+          this.editFrameName(frame, nameElement);
+        });
+      }
+    });
   }
 
   // Setup header button event listeners
@@ -1170,9 +1624,8 @@ class UIController {
 
     this.editor.sprites.forEach((sprite, index) => {
       const spriteItem = document.createElement("div");
-      spriteItem.className = `sprite-item ${
-        sprite === this.editor.currentSprite ? "active" : ""
-      }`;
+      spriteItem.className = `sprite-item ${sprite === this.editor.currentSprite ? "active" : ""
+        }`;
 
       // Create thumbnail
       const thumbnail = this.createSpriteThumbnail(sprite);
@@ -1226,7 +1679,7 @@ class UIController {
       console.error("Failed to load session sprites:", error);
     }
   }
-  
+
   // Load a stored sprite into the current session
   loadStoredSpriteToSession(sprite) {
     // Check if sprite is already in session
@@ -1384,10 +1837,60 @@ class UIController {
 
     const ctx = canvas.getContext("2d");
 
+    // Store animation data for hover functionality
+    canvas._sprite = sprite;
+    canvas._animationInterval = null;
+    canvas._currentFrameIndex = 0;
+    canvas._isAnimating = false;
+
+    // Initial render with first frame
+    this.renderThumbnailFrame(canvas, sprite, 0);
+
+    // Add hover animation functionality if sprite has multiple frames
+    if (sprite.frames && sprite.frames.length > 1) {
+      canvas.addEventListener('mouseenter', () => {
+        if (!canvas._isAnimating) {
+          canvas._isAnimating = true;
+          canvas._currentFrameIndex = 0;
+
+          canvas._animationInterval = setInterval(() => {
+            canvas._currentFrameIndex = (canvas._currentFrameIndex + 1) % sprite.frames.length;
+            this.renderThumbnailFrame(canvas, sprite, canvas._currentFrameIndex);
+          }, 150); // ~6.7 FPS for smooth preview
+        }
+      });
+
+      canvas.addEventListener('mouseleave', () => {
+        if (canvas._animationInterval) {
+          clearInterval(canvas._animationInterval);
+          canvas._animationInterval = null;
+        }
+        canvas._isAnimating = false;
+        canvas._currentFrameIndex = 0;
+        // Return to first frame
+        this.renderThumbnailFrame(canvas, sprite, 0);
+      });
+
+      // Visual indicator for animated sprites
+      canvas.style.position = 'relative';
+      canvas.style.cursor = 'pointer';
+      canvas.title = `${sprite.name} (${sprite.frames.length} frames - hover to preview)`;
+    } else {
+      canvas.title = sprite.name;
+    }
+
+    return canvas;
+  }
+
+  // New method to render a specific frame to thumbnail
+  renderThumbnailFrame(canvas, sprite, frameIndex) {
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
     // Create checkerboard pattern for transparency
     this.drawCheckerboard(ctx, canvas.width, canvas.height, 4);
 
-    // Draw sprite scaled to fit thumbnail
+    // Calculate scaling
     const scaleX = canvas.width / sprite.width;
     const scaleY = canvas.height / sprite.height;
     const scale = Math.min(scaleX, scaleY);
@@ -1397,7 +1900,38 @@ class UIController {
     const offsetX = (canvas.width - scaledWidth) / 2;
     const offsetY = (canvas.height - scaledHeight) / 2;
 
-    // Get pixels using the correct method name
+    // Check if sprite has frame-based animation data
+    if (sprite.frames && sprite.frames[frameIndex]) {
+      const frame = sprite.frames[frameIndex];
+
+      // Render each visible layer in the frame
+      if (frame.layers && Array.isArray(frame.layers)) {
+        frame.layers.forEach(layer => {
+          if (!layer.visible || !layer.pixels) return;
+
+          for (let y = 0; y < frame.height; y++) {
+            for (let x = 0; x < frame.width; x++) {
+              if (!layer.pixels[y] || !layer.pixels[y][x]) continue;
+
+              const [r, g, b, a] = layer.pixels[y][x];
+              if (a > 0) {
+                const opacity = (a / 255) * layer.opacity;
+                ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${opacity})`;
+                ctx.fillRect(
+                  offsetX + x * scale,
+                  offsetY + y * scale,
+                  scale,
+                  scale
+                );
+              }
+            }
+          }
+        });
+        return;
+      }
+    }
+
+    // Fallback to original sprite rendering for non-animated sprites
     for (let y = 0; y < sprite.height; y++) {
       for (let x = 0; x < sprite.width; x++) {
         const pixel = sprite.getPixel(x, y);
@@ -1409,10 +1943,9 @@ class UIController {
         }
       }
     }
-
-    return canvas;
   }
 
+  // Update the drawCheckerboard method to use the same colors as sprite thumbnails:
   drawCheckerboard(ctx, width, height, size) {
     const lightColor = "#ffffff";
     const darkColor = "#e0e0e0";
@@ -1583,6 +2116,8 @@ class UIController {
     try {
       this.updateToolButtons();
       this.updateColorDisplay();
+      this.updateFramesList();
+
 
       // Only update sprites list if sprites are available
       if (this.editor.sprites && Array.isArray(this.editor.sprites)) {
@@ -1645,11 +2180,11 @@ class UIController {
     const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
     return result
       ? [
-          parseInt(result[1], 16),
-          parseInt(result[2], 16),
-          parseInt(result[3], 16),
-          255,
-        ]
+        parseInt(result[1], 16),
+        parseInt(result[2], 16),
+        parseInt(result[3], 16),
+        255,
+      ]
       : [0, 0, 0, 255];
   }
 
@@ -1721,7 +2256,7 @@ class UIController {
             if (this.editor.sprites.length > 0) {
               this.editor.setCurrentSprite(
                 this.editor.sprites[
-                  Math.min(index, this.editor.sprites.length - 1)
+                Math.min(index, this.editor.sprites.length - 1)
                 ]
               );
             } else {
@@ -2407,10 +2942,76 @@ class UIController {
       // Reset to default values
       document.getElementById("export-format").value = "svg";
       document.getElementById("export-scale").value = "1";
+
+      // Add animation export section if sprite has multiple frames
+      this.updateExportModalForAnimation();
       this.updateExportPreview();
       modal.style.display = "flex";
     }
   }
+
+  updateExportModalForAnimation() {
+  const sprite = this.editor.currentSprite;
+  const hasAnimation = sprite && sprite.frames && sprite.frames.length > 1;
+  
+  // Find or create animation export section
+  let animationSection = document.getElementById('animation-export-section');
+  
+  if (hasAnimation) {
+    if (!animationSection) {
+      animationSection = document.createElement('div');
+      animationSection.id = 'animation-export-section';
+      animationSection.className = 'export-section';
+      animationSection.innerHTML = `
+        <h3 style="color: #00d4ff; margin-bottom: 15px;">Animation Export</h3>
+        <div class="export-row">
+          <label for="animation-fps">Frame Rate (FPS):</label>
+          <input type="number" id="animation-fps" min="1" max="60" value="12" style="width: 60px;">
+        </div>
+        <div class="export-buttons" style="display: flex; gap: 10px; margin-top: 15px;">
+          <button id="export-animated-svg" class="btn btn-primary">
+            <i class="fas fa-file-code"></i> Export Animated SVG
+          </button>
+          <button id="export-gif" class="btn btn-primary">
+            <i class="fas fa-file-image"></i> Export GIF
+          </button>
+          <button id="export-frames-zip" class="btn btn-primary">
+            <i class="fas fa-file-archive"></i> Export Frames (ZIP)
+          </button>
+        </div>
+      `;
+      
+      // Insert before the regular export options
+      const exportContent = document.querySelector('#export-modal .modal-content');
+      const regularExportSection = exportContent.querySelector('.export-section');
+      exportContent.insertBefore(animationSection, regularExportSection);
+      
+      // Add event listeners
+      document.getElementById('export-animated-svg').addEventListener('click', () => {
+        const fps = parseInt(document.getElementById('animation-fps').value);
+        this.editor.exportAsAnimatedSVG(fps);
+        this.hideExportModal();
+      });
+      
+      document.getElementById('export-gif').addEventListener('click', () => {
+        const fps = parseInt(document.getElementById('animation-fps').value);
+        this.editor.exportAsGIF(fps);
+        this.hideExportModal();
+      });
+      
+      document.getElementById('export-frames-zip').addEventListener('click', () => {
+        this.editor.exportFramesAsZip();
+        this.hideExportModal();
+      });
+    }
+    
+    animationSection.style.display = 'block';
+  } else {
+    if (animationSection) {
+      animationSection.style.display = 'none';
+    }
+  }
+}
 
   hideExportModal() {
     const modal = document.getElementById("export-modal");

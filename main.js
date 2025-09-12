@@ -353,6 +353,21 @@ if (document.readyState === 'loading') {
 
 // Sprite name editing logic
 document.addEventListener('DOMContentLoaded', function() {
+
+    // Initialize frame controls after editor is ready
+    if (editor && editor.uiController) {
+        editor.uiController.setupFrameControls();
+    }
+    
+    // Ensure sprites have frame data for backward compatibility
+    if (editor && editor.sprites) {
+        editor.sprites.forEach(sprite => {
+            if (!sprite.frames || sprite.frames.length === 0) {
+                sprite.initializeFrames();
+            }
+        });
+    }
+    
     const nameDisplay = document.getElementById('sprite-name-display');
     const editBtn = document.getElementById('edit-sprite-name');
     let currentName = nameDisplay ? nameDisplay.textContent : 'Untitled';

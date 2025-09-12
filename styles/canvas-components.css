@@ -528,3 +528,201 @@
     font-size: 16px;
   }
 }
+
+
+/* Add these styles to your existing styles/canvas-components.css file */
+
+/* Frames row styling */
+.frames-row {
+  display: flex;
+  align-items: center;
+  background: #2d2d2d;
+  border-top: 1px solid #333;
+  padding: 8px;
+  min-height: 80px;
+}
+
+.frames-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 12px;
+  padding-right: 12px;
+  border-right: 1px solid #333;
+}
+
+.frames-toolbar .btn {
+  padding: 6px 8px;
+  font-size: 12px;
+}
+
+.animation-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 8px;
+  padding-left: 8px;
+  border-left: 1px solid #444;
+}
+
+.fps-control label {
+  color: #ccc;
+  font-size: 12px;
+}
+
+#fps-input {
+  width: 50px;
+  padding: 4px;
+  background: #2d2d2d;
+  border: 1px solid #444;
+  color: white;
+  border-radius: 4px;
+  text-align: center;
+}
+
+.frames-list {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  flex: 1;
+  padding: 4px;
+  min-height: 72px;
+}
+
+.frame-item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 80px;
+  padding: 4px;
+  background: #2d2d2d;
+  border: 2px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.frame-item:hover {
+  background: #3d3d3d;
+  border-color: #444;
+}
+
+.frame-item.active {
+  background: #1a3d5a;
+  border-color: #00d4ff;
+}
+
+.frame-item.dragging {
+  opacity: 0.5;
+  transform: rotate(2deg);
+}
+
+.frame-item.drag-over {
+  border-color: #00ff88;
+  background: #1a4d3a;
+}
+
+.frame-thumbnail {
+  width: 48px;
+  height: 48px;
+  border: 1px solid #444;
+  border-radius: 4px;
+  image-rendering: pixelated;
+  image-rendering: -moz-crisp-edges;
+  image-rendering: crisp-edges;
+  background: 
+    linear-gradient(45deg, #555 25%, transparent 25%), 
+    linear-gradient(-45deg, #555 25%, transparent 25%), 
+    linear-gradient(45deg, transparent 75%, #555 75%), 
+    linear-gradient(-45deg, transparent 75%, #555 75%);
+  background-size: 8px 8px;
+  background-position: 0 0, 0 4px, 4px -4px, -4px 0px;
+}
+
+.frame-info {
+  margin-top: 4px;
+  text-align: center;
+  width: 100%;
+}
+
+.frame-name {
+  font-size: 11px;
+  color: #ccc;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 70px;
+}
+
+.frame-number {
+  font-size: 10px;
+  color: #888;
+  margin-top: 2px;
+}
+
+.frame-name-input {
+  font-size: 11px !important;
+  padding: 2px 4px !important;
+  margin: 0 !important;
+  width: 70px !important;
+}
+
+.no-frames {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #666;
+  font-style: italic;
+  flex: 1;
+  min-height: 60px;
+}
+
+/* Animation controls specific styling */
+.animation-controls .btn {
+  min-width: 32px;
+  padding: 4px 6px;
+}
+
+.animation-controls .fas {
+  font-size: 12px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 1200px) {
+  .frames-row {
+    flex-wrap: wrap;
+    min-height: auto;
+  }
+  
+  .frames-toolbar {
+    margin-bottom: 4px;
+    border-right: none;
+    border-bottom: 1px solid #333;
+    padding-bottom: 4px;
+  }
+  
+  .frames-list {
+    width: 100%;
+  }
+}
+
+/* Scrollbar styling for frames list */
+.frames-list::-webkit-scrollbar {
+  height: 6px;
+}
+
+.frames-list::-webkit-scrollbar-track {
+  background: #1a1a1a;
+  border-radius: 3px;
+}
+
+.frames-list::-webkit-scrollbar-thumb {
+  background: #444;
+  border-radius: 3px;
+}
+
+.frames-list::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}

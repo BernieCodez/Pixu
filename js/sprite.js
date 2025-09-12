@@ -8,6 +8,10 @@ class Sprite {
     this.createdAt = new Date().toISOString();
     this.modifiedAt = new Date().toISOString();
 
+    //Frames
+    this.frames = []; // Array of frames for animation
+    this.isAnimated = false; // Flag to indicate if sprite has multiple frames
+
     // Layers support: if layers provided, use them, else create one default layer
     if (Array.isArray(layers) && layers.length > 0) {
       this.layers = layers.map((layer, idx) => this._initLayer(layer, idx));
@@ -82,6 +86,68 @@ class Sprite {
     };
   }
 
+  // Add this method to initialize frames for backward compatibility
+  initializeFrames() {
+    if (!this.frames || this.frames.length === 0) {
+      // Get current layers data directly from this.layers, not getLayersData()
+      let layersData;
+
+      if (this.layers && Array.isArray(this.layers)) {
+        // Use existing layers directly
+        layersData = this.layers.map(layer => ({
+          id: layer.id || Date.now() + Math.random(),
+          name: layer.name || 'Layer',
+          visible: layer.visible !== false,
+          opacity: typeof layer.opacity === 'number' ? layer.opacity : 1,
+          pixels: layer.useTypedArray
+            ? this.convertTypedArrayTo2D(layer.pixels)
+            : layer.pixels.map(row => row.map(pixel => [...pixel])),
+          locked: layer.locked || false,
+          blendMode: layer.blendMode || 'normal'
+        }));
+      } else {
+        // Create default layer from sprite pixels if layers don't exist
+        let pixels;
+        if (this.useTypedArray) {
+          pixels = this.convertTypedArrayTo2D(this.pixels);
+        } else {
+          pixels = this.pixels.map(row => row.map(pixel => [...pixel]));
+        }
+
+        layersData = [{
+          id: Date.now() + Math.random(),
+          name: 'Background',
+          visible: true,
+          opacity: 1,
+          pixels: pixels,
+          locked: false,
+          blendMode: 'normal'
+        }];
+      }
+
+      // Create initial frame
+      this.frames = [{
+        id: Date.now() + Math.random(),
+        name: 'Frame 1',
+        width: this.width,
+        height: this.height,
+        activeLayerIndex: 0,
+        layers: layersData
+      }];
+    }
+
+    return this.frames;
+  }
+
+  // Add method to get current frame (for backward compatibility)
+  getCurrentFrame() {
+    if (this.frames.length === 0) {
+      this.initializeFrames();
+    }
+    return this.frames[0];
+  }
+
+
   createEmptyPixelArray() {
     if (this.width * this.height > 50000) {
       return new Uint8Array(this.width * this.height * 4);
@@ -146,55 +212,35 @@ class Sprite {
   }
   // Add this method to load from LayerManager
   loadFromLayerManager(layerManager) {
-    if (
-      layerManager.width !== this.width ||
-      layerManager.height !== this.height
-    ) {
-      this.resize(layerManager.width, layerManager.height, false);
+    // Initialize frames if needed
+    if (this.frames.length === 0) {
+      this.initializeFrames();
     }
 
-    // Convert LayerManager data to Sprite layer format
-    this.layers = layerManager.layers.map((layer, idx) => ({
+    // Update the current frame (assuming single frame for now)
+    const currentFrame = this.getCurrentFrame();
+    currentFrame.width = layerManager.width;
+    currentFrame.height = layerManager.height;
+    currentFrame.activeLayerIndex = layerManager.activeLayerIndex;
+    currentFrame.layers = layerManager.layers.map(layer => ({
+      id: layer.id,
       name: layer.name,
       visible: layer.visible,
       opacity: layer.opacity,
-      pixels: layer.pixels.map((row) => row.map((pixel) => [...pixel])),
-      useTypedArray: false,
+      pixels: layer.pixels.map(row => row.map(pixel => [...pixel])),
+      locked: layer.locked,
+      blendMode: layer.blendMode
     }));
 
-    // Update backward compatibility reference
-    this.pixels = this.layers[0].pixels;
-    this.useTypedArray = this.layers[0].useTypedArray;
-    this.modifiedAt = new Date().toISOString();
+    // Update sprite dimensions
+    this.width = layerManager.width;
+    this.height = layerManager.height;
 
-    if (typeof this.onChange === "function") {
-      this.onChange(this);
-    }
-  }
-  // Add this method to integrate with LayerManager
-  loadFromLayerManager(layerManager) {
-    if (
-      layerManager.width !== this.width ||
-      layerManager.height !== this.height
-    ) {
-      this.resize(layerManager.width, layerManager.height, false);
-    }
+    // Update main layers for backward compatibility
+    this.layers = currentFrame.layers;
 
-    // Convert LayerManager data to Sprite layer format
-    this.layers = layerManager.layers.map((layer, idx) => ({
-      name: layer.name,
-      visible: layer.visible,
-      opacity: layer.opacity,
-      pixels: layer.pixels.map((row) => row.map((pixel) => [...pixel])),
-      useTypedArray: false,
-    }));
-
-    // Update backward compatibility reference
-    this.pixels = this.layers[0].pixels;
-    this.useTypedArray = this.layers[0].useTypedArray;
-    this.modifiedAt = new Date().toISOString();
-
-    if (typeof this.onChange === "function") {
+    // Trigger change callback
+    if (this.onChange) {
       this.onChange(this);
     }
   }
@@ -303,35 +349,83 @@ class Sprite {
 
   // Get raw pixel arrays for all layers (for saving)
   getLayersData() {
-    return this.layers.map((layer) => {
-      let pixels;
-      if (layer.useTypedArray) {
-        pixels = Array.from(layer.pixels);
-      } else {
-        pixels = layer.pixels.map((row) => row.map((pixel) => [...pixel]));
-      }
-      return {
-        name: layer.name,
-        visible: layer.visible,
-        opacity: layer.opacity,
-        pixels,
-        useTypedArray: layer.useTypedArray,
-      };
-    });
+    // Don't call initializeFrames here to avoid circular dependency
+    if (this.frames && this.frames.length > 0) {
+      // Return layers from current frame
+      const currentFrame = this.frames[0]; // Use first frame as current
+      return currentFrame.layers || [];
+    }
+
+    // Fallback: return current layers if frames don't exist
+    if (this.layers && Array.isArray(this.layers)) {
+      return this.layers.map(layer => ({
+        id: layer.id || Date.now() + Math.random(),
+        name: layer.name || 'Layer',
+        visible: layer.visible !== false,
+        opacity: typeof layer.opacity === 'number' ? layer.opacity : 1,
+        pixels: layer.useTypedArray
+          ? this.convertTypedArrayTo2D(layer.pixels)
+          : layer.pixels.map(row => row.map(pixel => [...pixel])),
+        locked: layer.locked || false,
+        blendMode: layer.blendMode || 'normal'
+      }));
+    }
+
+    return [];
   }
 
   // Set layers from raw data
   setLayersData(layersData) {
-    if (!Array.isArray(layersData) || layersData.length === 0) return false;
-    this.layers = layersData.map((layer, idx) => this._initLayer(layer, idx));
-    this.pixels = this.layers[0].pixels;
-    this.useTypedArray = this.layers[0].useTypedArray;
-    this.modifiedAt = new Date().toISOString();
-    if (typeof this.onChange === "function") {
-      this.onChange(this);
+    // Initialize frames if needed
+    if (this.frames.length === 0) {
+      this.initializeFrames();
     }
-    return true;
+
+    // Set layers in current frame
+    const currentFrame = this.getCurrentFrame();
+    currentFrame.layers = layersData.map(layerData => ({
+      id: layerData.id || Date.now() + Math.random(),
+      name: layerData.name,
+      visible: layerData.visible !== false,
+      opacity: typeof layerData.opacity === 'number' ? layerData.opacity : 1,
+      pixels: layerData.useTypedArray
+        ? this.convertTypedArrayTo2D(layerData.pixels)
+        : layerData.pixels.map(row => row.map(pixel => [...pixel])),
+      locked: layerData.locked || false,
+      blendMode: layerData.blendMode || 'normal'
+    }));
+
+    // Update main layers for backward compatibility
+    this.layers = currentFrame.layers.map(layer => ({
+      ...layer,
+      pixels: layer.pixels.map(row => row.map(pixel => [...pixel]))
+    }));
+
+    // Update pixel reference for backward compatibility
+    this.pixels = this.layers[0].pixels;
+    this.useTypedArray = false; // Set to false since we converted from typed array
+
+    this.modifiedAt = new Date().toISOString();
   }
+
+  // Add method to add frame to sprite
+  addFrame(frame) {
+    if (this.frames.length === 0) {
+      this.initializeFrames();
+    }
+
+    this.frames.push(frame);
+    this.isAnimated = this.frames.length > 1;
+  }
+
+  // Add method to get frame count
+  getFrameCount() {
+    if (this.frames.length === 0) {
+      this.initializeFrames();
+    }
+    return this.frames.length;
+  }
+
 
   // Optimized pixel array setting
   // Set first layer's pixels (for backward compatibility)
@@ -751,6 +845,27 @@ class Sprite {
     return svg;
   }
 
+  // Add this method to the Sprite class
+  convertTypedArrayTo2D(typedArray) {
+    const pixels = [];
+    let index = 0;
+
+    for (let y = 0; y < this.height; y++) {
+      pixels[y] = [];
+      for (let x = 0; x < this.width; x++) {
+        pixels[y][x] = [
+          typedArray[index],
+          typedArray[index + 1],
+          typedArray[index + 2],
+          typedArray[index + 3]
+        ];
+        index += 4;
+      }
+    }
+
+    return pixels;
+  }
+
   /**
    * Get sprite statistics
    */
@@ -770,17 +885,26 @@ class Sprite {
         }
       }
     }
+    if (this.frames.length === 0) {
+      this.initializeFrames();
+    }
+
     return {
+      id: this.id,
+      name: this.name,
       width: this.width,
       height: this.height,
-      totalPixels: this.width * this.height,
+      createdAt: this.createdAt, // Fixed: was this.created
+      modifiedAt: this.modifiedAt, // Fixed: was this.modified
       transparentPixels,
       opaquePixels,
       uniqueColors: colorCounts.size,
-      colorCounts: Object.fromEntries(colorCounts),
-      createdAt: this.createdAt,
-      modifiedAt: this.modifiedAt,
-      layers: this.layers.length,
+      totalPixels: this.width * this.height,
+      frames: this.frames,
+      isAnimated: this.isAnimated,
+      // Keep backward compatibility
+      pixels: this.getPixelArray(),
+      layers: this.layers
     };
   }
 }

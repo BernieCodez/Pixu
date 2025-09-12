@@ -204,25 +204,29 @@ class StorageManager {
   async saveRegularSprite(sprite) {
     await this.ensureDB();
 
-    // CRITICAL FIX: Always save layers data, not just pixels
-    let layersData = sprite.getLayersData();
+    // Ensure frames are initialized
+    if (!sprite.frames || sprite.frames.length === 0) {
+      sprite.initializeFrames();
+    }
+
+    let framesData = sprite.frames;
     let compressed = false;
 
-    // Optionally compress each layer if large enough
+    // Optionally compress frame layers if large enough
     if (sprite.width * sprite.height > this.compressionThreshold) {
-      layersData = layersData.map((layer) => {
-        if (
-          Array.isArray(layer.pixels) &&
-          layer.pixels.length === sprite.height
-        ) {
-          return {
-            ...layer,
-            pixels: this.compressPixelData(layer.pixels),
-            compressed: true,
-          };
-        }
-        return layer;
-      });
+      framesData = framesData.map(frame => ({
+        ...frame,
+        layers: frame.layers.map(layer => {
+          if (Array.isArray(layer.pixels) && layer.pixels.length === sprite.height) {
+            return {
+              ...layer,
+              pixels: this.compressPixelData(layer.pixels),
+              compressed: true
+            };
+          }
+          return layer;
+        })
+      }));
       compressed = true;
     }
 
@@ -231,16 +235,19 @@ class StorageManager {
       name: sprite.name,
       width: sprite.width,
       height: sprite.height,
-      layers: layersData, // SAVE LAYERS DATA
+      frames: framesData, // Save frames instead of just layers
+      layers: sprite.getLayersData(), // Keep backward compatibility
       createdAt: sprite.createdAt,
       modifiedAt: sprite.modifiedAt,
       size: sprite.width * sprite.height,
       compressed: compressed,
       chunked: false,
+      isAnimated: framesData.length > 1
     };
 
     const transaction = this.db.transaction([this.spritesStore], "readwrite");
     const store = transaction.objectStore(this.spritesStore);
+
     return new Promise((resolve, reject) => {
       const request = store.put(spriteData);
       request.onsuccess = () => resolve(true);
@@ -393,86 +400,27 @@ class StorageManager {
   }
 
   // Optimized sprite loading with decompression/chunk assembly
-  // Update the loadSprites method to handle missing layer data better
-  // Update the loadSprites method to handle missing layer data better
   async loadSprites() {
     try {
       await this.ensureDB();
       const transaction = this.db.transaction([this.spritesStore], "readonly");
       const store = transaction.objectStore(this.spritesStore);
+
       return new Promise(async (resolve, reject) => {
         const request = store.getAll();
         request.onsuccess = async () => {
           const spritesData = request.result;
           const sprites = [];
+
           for (const spriteData of spritesData) {
             try {
-              let layersData = spriteData.layers;
-
-              // Enhanced backward compatibility - FIX THE LAYER LOADING
-              if (!Array.isArray(layersData) || layersData.length === 0) {
-                if (spriteData.pixels) {
-                  // Old format: single pixel array
-                  layersData = [
-                    {
-                      name: "Layer 1",
-                      visible: true,
-                      opacity: 1,
-                      pixels: spriteData.pixels,
-                      useTypedArray:
-                        spriteData.useTypedArray ||
-                        spriteData.width * spriteData.height > 50000,
-                    },
-                  ];
-                } else {
-                  // Create empty layer if no data
-                  layersData = [
-                    {
-                      name: "Layer 1",
-                      visible: true,
-                      opacity: 1,
-                      pixels: this.createEmptyPixelArray(
-                        spriteData.width,
-                        spriteData.height
-                      ),
-                      useTypedArray:
-                        spriteData.width * spriteData.height > 50000,
-                    },
-                  ];
-                }
+              const sprite = await this.loadSpriteWithFrames(spriteData);
+              if (sprite) {
+                sprites.push(sprite);
               }
-
-              // Decompress layers if needed
-              if (Array.isArray(layersData)) {
-                layersData = layersData.map((layer) => {
-                  let pixels = layer.pixels;
-                  if (layer.compressed && Array.isArray(pixels)) {
-                    pixels = this.decompressPixelData(
-                      pixels,
-                      spriteData.width,
-                      spriteData.height
-                    );
-                  }
-                  return {
-                    ...layer,
-                    pixels,
-                  };
-                });
-              }
-
-              const sprite = new Sprite(
-                spriteData.width,
-                spriteData.height,
-                spriteData.name,
-                spriteData.id,
-                layersData // Pass the layers data to constructor
-              );
-              sprite.createdAt = spriteData.createdAt;
-              sprite.modifiedAt = spriteData.modifiedAt;
-              sprites.push(sprite);
             } catch (error) {
               console.error("Failed to load sprite:", spriteData.id, error);
-              // Create a fallback sprite with minimal data
+              // Create fallback sprite
               try {
                 const fallbackSprite = new Sprite(
                   spriteData.width || 32,
@@ -481,15 +429,14 @@ class StorageManager {
                 );
                 sprites.push(fallbackSprite);
               } catch (fallbackError) {
-                console.error(
-                  "Failed to create fallback sprite:",
-                  fallbackError
-                );
+                console.error("Failed to create fallback sprite:", fallbackError);
               }
             }
           }
+
           resolve(sprites);
         };
+
         request.onerror = () => {
           console.error("Failed to load sprites:", request.error);
           resolve([]);
@@ -500,7 +447,94 @@ class StorageManager {
       return [];
     }
   }
+  async loadSpriteWithFrames(spriteData) {
+    let layersData = spriteData.layers;
+    let frames = spriteData.frames;
 
+    // Handle backward compatibility and frame initialization
+    if (!Array.isArray(frames) || frames.length === 0) {
+      // No frames data - create from layers or pixels
+      if (Array.isArray(layersData) && layersData.length > 0) {
+        // Create single frame from layers data
+        frames = [{
+          id: Date.now() + Math.random(),
+          name: 'Frame 1',
+          width: spriteData.width,
+          height: spriteData.height,
+          activeLayerIndex: 0,
+          layers: layersData
+        }];
+      } else if (spriteData.pixels) {
+        // Old format: single pixel array - create frame with single layer
+        frames = [{
+          id: Date.now() + Math.random(),
+          name: 'Frame 1',
+          width: spriteData.width,
+          height: spriteData.height,
+          activeLayerIndex: 0,
+          layers: [{
+            id: Date.now() + Math.random(),
+            name: "Layer 1",
+            visible: true,
+            opacity: 1,
+            pixels: spriteData.pixels,
+            locked: false,
+            blendMode: 'normal'
+          }]
+        }];
+      } else {
+        // No pixel data - create empty frame
+        frames = [{
+          id: Date.now() + Math.random(),
+          name: 'Frame 1',
+          width: spriteData.width,
+          height: spriteData.height,
+          activeLayerIndex: 0,
+          layers: [{
+            id: Date.now() + Math.random(),
+            name: "Layer 1",
+            visible: true,
+            opacity: 1,
+            pixels: this.createEmptyPixelArray(spriteData.width, spriteData.height),
+            locked: false,
+            blendMode: 'normal'
+          }]
+        }];
+      }
+    }
+
+    // Process frames - decompress if needed
+    if (Array.isArray(frames)) {
+      frames = frames.map(frame => ({
+        ...frame,
+        layers: frame.layers.map(layer => {
+          let pixels = layer.pixels;
+          if (layer.compressed && Array.isArray(pixels)) {
+            pixels = this.decompressPixelData(pixels, frame.width, frame.height);
+          }
+          return {
+            ...layer,
+            pixels
+          };
+        })
+      }));
+    }
+
+    // Create sprite with frames
+    const sprite = new Sprite(
+      spriteData.width,
+      spriteData.height,
+      spriteData.name,
+      spriteData.id
+    );
+
+    // Set frames data
+    sprite.frames = frames;
+    sprite.createdAt = spriteData.createdAt;
+    sprite.modifiedAt = spriteData.modifiedAt;
+
+    return sprite;
+  }
   // Add this helper method to StorageManager
   createEmptyPixelArray(width, height) {
     const pixels = [];
