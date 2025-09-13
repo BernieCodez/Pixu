@@ -152,57 +152,57 @@ class PixelEditor {
 
   // Add this new method to save layer changes back to sprite
   saveLayersToSprite() {
-  if (!this.currentSprite || !this.layerManager || !this.animationManager) return;
+    if (!this.currentSprite || !this.layerManager || !this.animationManager) return;
 
-  // Save current layer state to current frame
-  this.animationManager.saveLayerManagerToCurrentFrame();
-}
-
-createNewAnimatedSprite(width = 16, height = 16, name = null, frameCount = 1) {
-  const sprite = this.createNewSprite(width, height, name);
-  
-  // Add additional frames if requested
-  for (let i = 1; i < frameCount; i++) {
-    this.animationManager.addFrame();
-  }
-  
-  sprite.isAnimated = frameCount > 1;
-  return sprite;
-}
-
-  // Replace the setCurrentSprite method
-  setCurrentSprite(sprite) {
-  // Save current frame if switching sprites
-  if (this.currentSprite && this.animationManager) {
+    // Save current layer state to current frame
     this.animationManager.saveLayerManagerToCurrentFrame();
   }
 
-  this.currentSprite = sprite;
-  if (sprite) {
-    sprite.onChange = (s) => this.debouncedSave(s);
+  createNewAnimatedSprite(width = 16, height = 16, name = null, frameCount = 1) {
+    const sprite = this.createNewSprite(width, height, name);
 
-    // Initialize frames for backward compatibility
-    if (!sprite.frames || sprite.frames.length === 0) {
-      sprite.initializeFrames();
+    // Add additional frames if requested
+    for (let i = 1; i < frameCount; i++) {
+      this.animationManager.addFrame();
     }
 
-    // Load first frame into animation manager and layer manager
-    if (this.animationManager) {
-      this.animationManager.currentFrameIndex = 0;
-      this.animationManager.loadFrameIntoLayerManager(sprite.frames[0]);
+    sprite.isAnimated = frameCount > 1;
+    return sprite;
+  }
+
+  // Replace the setCurrentSprite method
+  setCurrentSprite(sprite) {
+    // Save current frame if switching sprites
+    if (this.currentSprite && this.animationManager) {
+      this.animationManager.saveLayerManagerToCurrentFrame();
     }
+
+    this.currentSprite = sprite;
+    if (sprite) {
+      sprite.onChange = (s) => this.debouncedSave(s);
+
+      // Initialize frames for backward compatibility
+      if (!sprite.frames || sprite.frames.length === 0) {
+        sprite.initializeFrames();
+      }
+
+      // Load first frame into animation manager and layer manager
+      if (this.animationManager) {
+        this.animationManager.currentFrameIndex = 0;
+        this.animationManager.loadFrameIntoLayerManager(sprite.frames[0]);
+      }
+    }
+
+    // Set sprite in canvas manager
+    this.canvasManager.setSprite(sprite);
+
+    // Force immediate render
+    if (this.canvasManager) {
+      this.canvasManager.render();
+    }
+
+    this.updateUI();
   }
-
-  // Set sprite in canvas manager
-  this.canvasManager.setSprite(sprite);
-
-  // Force immediate render
-  if (this.canvasManager) {
-    this.canvasManager.render();
-  }
-
-  this.updateUI();
-}
 
   // Apply saved tool settings
   // Apply saved tool settings
@@ -359,57 +359,57 @@ createNewAnimatedSprite(width = 16, height = 16, name = null, frameCount = 1) {
    * Resize current canvas
    */
   resizeCanvas(width, height, maintainAspectRatio = false) {
-  if (!this.currentSprite) return false;
+    if (!this.currentSprite) return false;
 
-  // Resize all frames in the sprite
-  if (this.currentSprite.frames) {
-    this.currentSprite.frames.forEach(frame => {
-      frame.width = width;
-      frame.height = height;
-      
-      // Resize each layer in the frame
-      frame.layers.forEach(layer => {
-        const newPixels = [];
-        for (let y = 0; y < height; y++) {
-          newPixels[y] = [];
-          for (let x = 0; x < width; x++) {
-            if (y < layer.pixels.length && x < layer.pixels[y].length) {
-              newPixels[y][x] = [...layer.pixels[y][x]];
-            } else {
-              newPixels[y][x] = [0, 0, 0, 0]; // Transparent
+    // Resize all frames in the sprite
+    if (this.currentSprite.frames) {
+      this.currentSprite.frames.forEach(frame => {
+        frame.width = width;
+        frame.height = height;
+
+        // Resize each layer in the frame
+        frame.layers.forEach(layer => {
+          const newPixels = [];
+          for (let y = 0; y < height; y++) {
+            newPixels[y] = [];
+            for (let x = 0; x < width; x++) {
+              if (y < layer.pixels.length && x < layer.pixels[y].length) {
+                newPixels[y][x] = [...layer.pixels[y][x]];
+              } else {
+                newPixels[y][x] = [0, 0, 0, 0]; // Transparent
+              }
             }
           }
-        }
-        layer.pixels = newPixels;
+          layer.pixels = newPixels;
+        });
       });
-    });
-  }
-
-  // Update sprite dimensions
-  this.currentSprite.width = width;
-  this.currentSprite.height = height;
-
-  // Resize layer manager
-  this.layerManager.resize(width, height);
-  
-  // Reload current frame
-  if (this.animationManager) {
-    const currentFrame = this.animationManager.getCurrentFrame();
-    if (currentFrame) {
-      this.animationManager.loadFrameIntoLayerManager(currentFrame);
     }
+
+    // Update sprite dimensions
+    this.currentSprite.width = width;
+    this.currentSprite.height = height;
+
+    // Resize layer manager
+    this.layerManager.resize(width, height);
+
+    // Reload current frame
+    if (this.animationManager) {
+      const currentFrame = this.animationManager.getCurrentFrame();
+      if (currentFrame) {
+        this.animationManager.loadFrameIntoLayerManager(currentFrame);
+      }
+    }
+
+    this.canvasManager.updateCanvasSize();
+    this.saveSprites();
+    this.updateUI();
+
+    this.uiManager.showNotification(
+      `Canvas resized to ${width}×${height}`,
+      "success"
+    );
+    return true;
   }
-
-  this.canvasManager.updateCanvasSize();
-  this.saveSprites();
-  this.updateUI();
-
-  this.uiManager.showNotification(
-    `Canvas resized to ${width}×${height}`,
-    "success"
-  );
-  return true;
-}
 
   // Add this method to your PixelEditor class
   // This should be inserted in the PixelEditor class after the resizeCanvas method
@@ -874,9 +874,8 @@ createNewAnimatedSprite(width = 16, height = 16, name = null, frameCount = 1) {
         if (a > 0) {
           // Only render non-transparent pixels
           const opacity = a / 255;
-          svgContent += `<rect x="${x * scale}" y="${
-            y * scale
-          }" width="${scale}" height="${scale}" fill="rgb(${r},${g},${b})" opacity="${opacity}"/>`;
+          svgContent += `<rect x="${x * scale}" y="${y * scale
+            }" width="${scale}" height="${scale}" fill="rgb(${r},${g},${b})" opacity="${opacity}"/>`;
         }
       }
     }
@@ -896,342 +895,491 @@ createNewAnimatedSprite(width = 16, height = 16, name = null, frameCount = 1) {
   }
 
   exportAsAnimatedSVG(frameRate = 12) {
-  if (!this.currentSprite || !this.currentSprite.frames || this.currentSprite.frames.length <= 1) {
-    this.showNotification("No animation to export", "warning");
-    return;
-  }
-
-  const sprite = this.currentSprite;
-  const frameDuration = 1000 / frameRate; // Duration in milliseconds
-
-  // Create SVG content with animation
-  let svgContent = `<svg width="${sprite.width}" height="${sprite.height}" xmlns="http://www.w3.org/2000/svg" style="image-rendering: pixelated;">`;
-  
-  // Create animated rectangles for each pixel that changes
-  const pixelAnimations = new Map();
-  
-  // Analyze all frames to find changing pixels
-  for (let y = 0; y < sprite.height; y++) {
-    for (let x = 0; x < sprite.width; x++) {
-      const pixelColors = [];
-      let hasChanges = false;
-      
-      // Get pixel color for each frame
-      sprite.frames.forEach((frame, frameIndex) => {
-        const color = this.getFramePixelColor(frame, x, y);
-        pixelColors.push(color);
-        
-        if (frameIndex > 0 && !this.colorsEqual(color, pixelColors[0])) {
-          hasChanges = true;
-        }
-      });
-      
-      // Only create animation if pixel changes
-      if (hasChanges || pixelColors[0].a > 0) {
-        pixelAnimations.set(`${x}-${y}`, pixelColors);
-      }
-    }
-  }
-  
-  // Create animated rectangles
-  pixelAnimations.forEach((colors, key) => {
-    const [x, y] = key.split('-').map(Number);
-    
-    // Create base rectangle
-    const firstColor = colors[0];
-    if (colors.some(c => c.a > 0)) { // Only if at least one frame has this pixel visible
-      svgContent += `<rect x="${x}" y="${y}" width="1" height="1"`;
-      
-      // Add fill animation if colors change
-      const uniqueColors = [...new Set(colors.map(c => `rgba(${c.r},${c.g},${c.b},${c.a/255})`))];
-      if (uniqueColors.length > 1) {
-        const colorValues = colors.map(c => `rgba(${c.r},${c.g},${c.b},${c.a/255})`).join(';');
-        svgContent += ` fill="${uniqueColors[0]}">`;
-        svgContent += `<animate attributeName="fill" values="${colorValues}" dur="${frameDuration * colors.length}ms" repeatCount="indefinite"/>`;
-        svgContent += `</rect>`;
-      } else {
-        svgContent += ` fill="${uniqueColors[0]}"/>`;
-      }
-    }
-  });
-
-  svgContent += "</svg>";
-
-  // Download the animated SVG
-  const blob = new Blob([svgContent], { type: "image/svg+xml" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `${sprite.name || "animation"}_animated.svg`;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
-}
-
-getFramePixelColor(frame, x, y) {
-  let finalColor = { r: 0, g: 0, b: 0, a: 0 };
-  
-  // Composite all visible layers
-  frame.layers.forEach(layer => {
-    if (!layer.visible || !layer.pixels || !layer.pixels[y] || !layer.pixels[y][x]) return;
-    
-    const [r, g, b, a] = layer.pixels[y][x];
-    if (a > 0) {
-      const opacity = (a / 255) * layer.opacity;
-      
-      // Alpha blending
-      if (finalColor.a === 0) {
-        finalColor = { r, g, b, a: Math.round(opacity * 255) };
-      } else {
-        const alpha = opacity;
-        const invAlpha = 1 - alpha;
-        const currentAlpha = finalColor.a / 255;
-        
-        finalColor.r = Math.round(r * alpha + finalColor.r * invAlpha * currentAlpha);
-        finalColor.g = Math.round(g * alpha + finalColor.g * invAlpha * currentAlpha);
-        finalColor.b = Math.round(b * alpha + finalColor.b * invAlpha * currentAlpha);
-        finalColor.a = Math.round(255 * (alpha + currentAlpha * invAlpha));
-      }
-    }
-  });
-  
-  return finalColor;
-}
-colorsEqual(color1, color2) {
-  return color1.r === color2.r && color1.g === color2.g && 
-         color1.b === color2.b && color1.a === color2.a;
-}
-
-async exportFramesAsZip() {
-  if (!this.currentSprite || !this.currentSprite.frames || this.currentSprite.frames.length <= 1) {
-    this.uiManager.showNotification("No animation to export", "warning");
-    return;
-  }
-
-  // Check if JSZip is available
-  if (typeof JSZip === 'undefined') {
-    this.uiManager.showNotification("JSZip library not available", "error");
-    return;
-  }
-
-  const sprite = this.currentSprite;
-  const zip = new JSZip();
-  const frameFolder = zip.folder("frames");
-  
-  this.uiManager.showNotification("Generating frames...", "info");
-
-  // Create canvas for frame rendering
-  const canvas = document.createElement('canvas');
-  canvas.width = sprite.width;
-  canvas.height = sprite.height;
-  const ctx = canvas.getContext('2d');
-  ctx.imageSmoothingEnabled = false;
-
-  // Generate each frame
-  for (let i = 0; i < sprite.frames.length; i++) {
-    const frame = sprite.frames[i];
-    
-    // Clear canvas
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    
-    // Render frame layers
-    frame.layers.forEach(layer => {
-      if (!layer.visible || !layer.pixels) return;
-      
-      for (let y = 0; y < frame.height; y++) {
-        for (let x = 0; x < frame.width; x++) {
-          if (!layer.pixels[y] || !layer.pixels[y][x]) continue;
-          
-          const [r, g, b, a] = layer.pixels[y][x];
-          if (a > 0) {
-            const opacity = (a / 255) * layer.opacity;
-            ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${opacity})`;
-            ctx.fillRect(x, y, 1, 1);
-          }
-        }
-      }
-    });
-    
-    // Convert to blob and add to zip
-    const blob = await new Promise(resolve => {
-      canvas.toBlob(resolve, 'image/png');
-    });
-    
-    const frameName = `frame_${String(i + 1).padStart(3, '0')}.png`;
-    frameFolder.file(frameName, blob);
-  }
-
-  // Generate and download zip
-  try {
-    const zipBlob = await zip.generateAsync({ type: "blob" });
-    const url = URL.createObjectURL(zipBlob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `${sprite.name || "animation"}_frames.zip`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    
-    this.uiManager.showNotification(`Exported ${sprite.frames.length} frames as ZIP`, "success");
-  } catch (error) {
-    console.error("Failed to create ZIP:", error);
-    this.uiManager.showNotification("Failed to create ZIP file", "error");
-  }
-}
-
-/**
- * Export animation as GIF
- */
-async exportAsGIF(frameRate = 12) {
-  if (!this.currentSprite || !this.currentSprite.frames || this.currentSprite.frames.length <= 1) {
-    this.uiManager.showNotification("No animation to export", "warning");
-    return;
-  }
-
-  // Check if gif.js is available
-  if (typeof GIF === 'undefined') {
-    this.uiManager.showNotification("GIF.js library not available. Loading...", "info");
-    
-    // Try to load gif.js dynamically
-    try {
-      await this.loadGifJS();
-    } catch (error) {
-      this.uiManager.showNotification("Failed to load GIF library", "error");
+    if (!this.currentSprite || !this.currentSprite.frames || this.currentSprite.frames.length <= 1) {
+      this.uiManager.showNotification("No animation to export", "warning");
       return;
     }
-  }
 
-  const sprite = this.currentSprite;
-  const delay = 1000 / frameRate;
+    const sprite = this.currentSprite;
+    const frameDuration = (1000 / frameRate) * sprite.frames.length; // Total animation duration in ms
 
-  this.uiManager.showNotification("Generating GIF... This may take a moment.", "info");
+    // Create SVG content with animation
+    let svgContent = `<svg width="${sprite.width}" height="${sprite.height}" xmlns="http://www.w3.org/2000/svg" style="image-rendering: pixelated;">`;
 
-  const gif = new GIF({
-    workers: 2,
-    quality: 10,
-    width: sprite.width,
-    height: sprite.height,
-    transparent: 0x000000 // Use black as transparent
-  });
+    // Create animated rectangles for each pixel that changes
+    const pixelAnimations = new Map();
 
-  // Create canvas for frame rendering
-  const canvas = document.createElement('canvas');
-  canvas.width = sprite.width;
-  canvas.height = sprite.height;
-  const ctx = canvas.getContext('2d');
-  ctx.imageSmoothingEnabled = false;
+    // Analyze all frames to find changing pixels
+    for (let y = 0; y < sprite.height; y++) {
+      for (let x = 0; x < sprite.width; x++) {
+        const pixelColors = [];
+        let hasChanges = false;
 
-  // Add each frame to GIF
-  for (let i = 0; i < sprite.frames.length; i++) {
-    const frame = sprite.frames[i];
-    
-    // Clear with transparent
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    
-    // Render frame layers
-    frame.layers.forEach(layer => {
-      if (!layer.visible || !layer.pixels) return;
-      
-      for (let y = 0; y < frame.height; y++) {
-        for (let x = 0; x < frame.width; x++) {
-          if (!layer.pixels[y] || !layer.pixels[y][x]) continue;
-          
-          const [r, g, b, a] = layer.pixels[y][x];
-          if (a > 0) {
-            const opacity = (a / 255) * layer.opacity;
-            ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${opacity})`;
-            ctx.fillRect(x, y, 1, 1);
+        // Get pixel color for each frame
+        sprite.frames.forEach((frame, frameIndex) => {
+          const color = this.getFramePixelColor(frame, x, y);
+          pixelColors.push(color);
+
+          if (frameIndex > 0 && !this.colorsEqual(color, pixelColors[0])) {
+            hasChanges = true;
           }
-        }
-      }
-    });
-    
-    gif.addFrame(canvas, { delay: delay });
-  }
+        });
 
-  gif.on('finished', (blob) => {
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${sprite.name || 'animation'}.gif`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    
-    this.uiManager.showNotification("GIF export completed!", "success");
-  });
-
-  gif.on('progress', (progress) => {
-    const percent = Math.round(progress * 100);
-    this.uiManager.showNotification(`Generating GIF... ${percent}%`, "info");
-  });
-
-  gif.render();
-}
-
-/**
- * Load GIF.js library dynamically
- */
-async loadGifJS() {
-  return new Promise((resolve, reject) => {
-    const script = document.createElement('script');
-    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.min.js';
-    script.onload = resolve;
-    script.onerror = reject;
-    document.head.appendChild(script);
-  });
-}
-exportSingleFrame(frameIndex, scale = 1) {
-  if (!this.currentSprite || !this.currentSprite.frames || !this.currentSprite.frames[frameIndex]) {
-    this.uiManager.showNotification("Invalid frame", "error");
-    return;
-  }
-
-  const sprite = this.currentSprite;
-  const frame = sprite.frames[frameIndex];
-  const scaledWidth = sprite.width * scale;
-  const scaledHeight = sprite.height * scale;
-
-  // Create export canvas
-  const canvas = document.createElement('canvas');
-  canvas.width = scaledWidth;
-  canvas.height = scaledHeight;
-  const ctx = canvas.getContext('2d');
-  ctx.imageSmoothingEnabled = false;
-
-  // Render frame layers
-  frame.layers.forEach(layer => {
-    if (!layer.visible || !layer.pixels) return;
-    
-    for (let y = 0; y < frame.height; y++) {
-      for (let x = 0; x < frame.width; x++) {
-        if (!layer.pixels[y] || !layer.pixels[y][x]) continue;
-        
-        const [r, g, b, a] = layer.pixels[y][x];
-        if (a > 0) {
-          const opacity = (a / 255) * layer.opacity;
-          ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${opacity})`;
-          ctx.fillRect(x * scale, y * scale, scale, scale);
+        // Only create animation if pixel changes or is visible
+        if (hasChanges || pixelColors[0].a > 0) {
+          pixelAnimations.set(`${x}-${y}`, pixelColors);
         }
       }
     }
-  });
 
-  // Download frame
-  canvas.toBlob((blob) => {
+    // Create animated rectangles
+    pixelAnimations.forEach((colors, key) => {
+      const [x, y] = key.split('-').map(Number);
+
+      // Create base rectangle
+      const firstColor = colors[0];
+      if (colors.some(c => c.a > 0)) { // Only if at least one frame has this pixel visible
+        svgContent += `<rect x="${x}" y="${y}" width="1" height="1"`;
+
+        // Add fill animation if colors change
+        const uniqueColors = [...new Set(colors.map(c => `rgba(${c.r},${c.g},${c.b},${c.a / 255})`))];
+        if (uniqueColors.length > 1) {
+          const colorValues = colors.map(c => `rgba(${c.r},${c.g},${c.b},${c.a / 255})`).join(';');
+          svgContent += ` fill="${uniqueColors[0]}">`;
+          svgContent += `<animate attributeName="fill" values="${colorValues}" dur="${frameDuration}ms" repeatCount="indefinite"/>`;
+          svgContent += `</rect>`;
+        } else {
+          svgContent += ` fill="${uniqueColors[0]}"/>`;
+        }
+      }
+    });
+
+    svgContent += "</svg>";
+
+    // Download the animated SVG
+    const blob = new Blob([svgContent], { type: "image/svg+xml" });
     const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
+    const link = document.createElement("a");
     link.href = url;
-    link.download = `${sprite.name || 'sprite'}_frame_${frameIndex + 1}_${scale}x.png`;
+    link.download = `${sprite.name || "animation"}_animated.svg`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
-  }, 'image/png');
-}
+  }
+
+  getFramePixelColor(frame, x, y) {
+    let finalColor = { r: 0, g: 0, b: 0, a: 0 };
+
+    // Composite all visible layers
+    frame.layers.forEach(layer => {
+      if (!layer.visible || !layer.pixels || !layer.pixels[y] || !layer.pixels[y][x]) return;
+
+      const [r, g, b, a] = layer.pixels[y][x];
+      if (a > 0) {
+        const opacity = (a / 255) * (layer.opacity || 1);
+
+        // Alpha blending
+        if (finalColor.a === 0) {
+          finalColor = { r, g, b, a: Math.round(opacity * 255) };
+        } else {
+          const alpha = opacity;
+          const invAlpha = 1 - alpha;
+          const currentAlpha = finalColor.a / 255;
+
+          finalColor.r = Math.round(r * alpha + finalColor.r * invAlpha * currentAlpha);
+          finalColor.g = Math.round(g * alpha + finalColor.g * invAlpha * currentAlpha);
+          finalColor.b = Math.round(b * alpha + finalColor.b * invAlpha * currentAlpha);
+          finalColor.a = Math.round(255 * (alpha + currentAlpha * invAlpha));
+        }
+      }
+    });
+
+    return finalColor;
+  }
+  colorsEqual(color1, color2) {
+    return color1.r === color2.r && color1.g === color2.g &&
+      color1.b === color2.b && color1.a === color2.a;
+  }
+
+
+  async exportFramesAsZip() {
+    if (!this.currentSprite || !this.currentSprite.frames || this.currentSprite.frames.length <= 1) {
+      this.uiManager.showNotification("No animation to export", "warning");
+      return;
+    }
+
+    // Check if JSZip is available
+    if (typeof JSZip === 'undefined') {
+      // Try to load JSZip from CDN
+      try {
+        await this.loadJSZip();
+      } catch (error) {
+        this.uiManager.showNotification("JSZip library not available", "error");
+        return;
+      }
+    }
+
+    const sprite = this.currentSprite;
+    const zip = new JSZip();
+    const frameFolder = zip.folder("frames");
+
+    this.uiManager.showNotification("Generating frames...", "info");
+
+    // Create canvas for frame rendering
+    const canvas = document.createElement('canvas');
+    canvas.width = sprite.width;
+    canvas.height = sprite.height;
+    const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+
+    // Generate each frame
+    for (let i = 0; i < sprite.frames.length; i++) {
+      const frame = sprite.frames[i];
+
+      // Clear canvas
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Render frame layers
+      frame.layers.forEach(layer => {
+        if (!layer.visible || !layer.pixels) return;
+
+        for (let y = 0; y < frame.height; y++) {
+          for (let x = 0; x < frame.width; x++) {
+            if (!layer.pixels[y] || !layer.pixels[y][x]) continue;
+
+            const [r, g, b, a] = layer.pixels[y][x];
+            if (a > 0) {
+              const opacity = (a / 255) * (layer.opacity || 1);
+              ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${opacity})`;
+              ctx.fillRect(x, y, 1, 1);
+            }
+          }
+        }
+      });
+
+      // Convert to blob and add to zip
+      const blob = await new Promise(resolve => {
+        canvas.toBlob(resolve, 'image/png');
+      });
+
+      const frameName = `frame_${String(i + 1).padStart(3, '0')}.png`;
+      frameFolder.file(frameName, blob);
+    }
+
+    // Generate and download zip
+    try {
+      const zipBlob = await zip.generateAsync({ type: "blob" });
+      const url = URL.createObjectURL(zipBlob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${sprite.name || "animation"}_frames.zip`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      this.uiManager.showNotification(`Exported ${sprite.frames.length} frames as ZIP`, "success");
+    } catch (error) {
+      console.error("Failed to create ZIP:", error);
+      this.uiManager.showNotification("Failed to create ZIP file", "error");
+    }
+  }
+
+  async loadJSZip() {
+    return new Promise((resolve, reject) => {
+      if (typeof JSZip !== 'undefined') {
+        resolve();
+        return;
+      }
+
+      const script = document.createElement('script');
+      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+      script.onload = resolve;
+      script.onerror = () => reject(new Error('Failed to load JSZip'));
+      document.head.appendChild(script);
+    });
+  }
+
+  /**
+   * Export animation as GIF
+   */
+  // Modified exportAsGIF method in PixelEditor class
+  /**
+  * Export animation as GIF using gif.js library
+  * This function should be added to the PixelEditor class
+  */
+
+
+  /**
+   * Helper method to render a frame to a canvas context
+   * This should also be added to the PixelEditor class
+   */
+  /**
+ * Simplified, direct GIF export that should actually produce a GIF file
+ * Replace your existing exportAsGIF method with this
+ */
+  /**
+   * Debug version of GIF export to identify the exact failure point
+   */
+  async exportAsGIF(frameRate = 12) {
+    if (!this.currentSprite) {
+      this.uiManager.showNotification("No sprite to export", "error");
+      return;
+    }
+
+    const sprite = this.currentSprite;
+    const hasAnimation = sprite.frames && sprite.frames.length > 1;
+
+    if (!hasAnimation) {
+      this.uiManager.showNotification("No animation to export", "warning");
+      return;
+    }
+
+    // Debug: Check gif.js availability
+    console.log("GIF.js available:", typeof GIF !== 'undefined');
+    if (typeof GIF === 'undefined') {
+      this.uiManager.showNotification("GIF.js library not loaded", "error");
+      return;
+    }
+
+    this.uiManager.showNotification("Starting GIF export...", "info");
+
+    try {
+      // Create GIF instance with minimal settings
+      console.log("Creating GIF instance...");
+      const gif = new GIF({
+        workers: 0, // No workers
+        quality: 1, // Highest quality but slowest - try this first
+        width: sprite.width,
+        height: sprite.height,
+        repeat: 0
+      });
+      console.log("GIF instance created successfully");
+
+      const frameDelay = Math.round(1000 / frameRate);
+      console.log("Frame delay:", frameDelay, "ms");
+
+      // Create canvas
+      const canvas = document.createElement('canvas');
+      canvas.width = sprite.width;
+      canvas.height = sprite.height;
+      const ctx = canvas.getContext('2d');
+      ctx.imageSmoothingEnabled = false;
+
+      console.log("Canvas created:", canvas.width, "x", canvas.height);
+
+      // Process each frame
+      for (let i = 0; i < sprite.frames.length; i++) {
+        console.log(`Processing frame ${i + 1}/${sprite.frames.length}`);
+
+        // Clear canvas
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Fill with white background to avoid transparency issues
+        ctx.fillStyle = 'white';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Render frame
+        const frame = sprite.frames[i];
+        if (frame.layers) {
+          frame.layers.forEach(layer => {
+            if (!layer.visible || !layer.pixels) return;
+
+            for (let y = 0; y < frame.height; y++) {
+              for (let x = 0; x < frame.width; x++) {
+                if (!layer.pixels[y] || !layer.pixels[y][x]) continue;
+
+                const [r, g, b, a] = layer.pixels[y][x];
+                if (a > 0) {
+                  ctx.fillStyle = `rgb(${r}, ${g}, ${b})`; // Remove alpha to avoid transparency issues
+                  ctx.fillRect(x, y, 1, 1);
+                }
+              }
+            }
+          });
+        }
+
+        console.log(`Adding frame ${i + 1} to GIF...`);
+        // Add frame - use getImageData instead of canvas context
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        gif.addFrame(imageData, { delay: frameDelay });
+
+        this.uiManager.showNotification(`Added frame ${i + 1}/${sprite.frames.length}`, "info");
+      }
+
+      console.log("All frames added, starting render...");
+
+      // Handle the rendering
+      return new Promise((resolve, reject) => {
+        let renderStarted = false;
+
+        const timeout = setTimeout(() => {
+          console.log("GIF render timeout reached");
+          if (!renderStarted) {
+            reject(new Error('GIF rendering never started'));
+          } else {
+            reject(new Error('GIF rendering timed out'));
+          }
+        }, 10000); // 10 second timeout
+
+        gif.on('start', () => {
+          renderStarted = true;
+          console.log("GIF rendering started");
+          this.uiManager.showNotification("Rendering GIF...", "info");
+        });
+
+        gif.on('progress', (progress) => {
+          console.log("GIF render progress:", Math.round(progress * 100) + "%");
+          this.uiManager.showNotification(`Rendering: ${Math.round(progress * 100)}%`, "info");
+        });
+
+        gif.on('finished', (blob) => {
+          console.log("GIF finished, blob size:", blob.size, "bytes");
+          clearTimeout(timeout);
+
+          if (blob.size === 0) {
+            reject(new Error('Generated GIF is empty'));
+            return;
+          }
+
+          // Test the blob
+          console.log("Blob type:", blob.type);
+          console.log("Creating download URL...");
+
+          try {
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `${sprite.name || 'animation'}.gif`;
+
+            // Debug: log the download attempt
+            console.log("Download URL created:", url);
+            console.log("Triggering download...");
+
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            // Don't revoke URL immediately - wait a bit
+            setTimeout(() => {
+              URL.revokeObjectURL(url);
+              console.log("URL revoked");
+            }, 5000);
+
+            this.uiManager.showNotification("GIF download triggered!", "success");
+            resolve();
+          } catch (downloadError) {
+            console.error("Download error:", downloadError);
+            reject(downloadError);
+          }
+        });
+
+        gif.on('error', (error) => {
+          console.error("GIF rendering error:", error);
+          clearTimeout(timeout);
+          reject(error);
+        });
+
+        // Start rendering
+        console.log("Calling gif.render()...");
+        try {
+          gif.render();
+          console.log("gif.render() called successfully");
+        } catch (renderError) {
+          console.error("Error calling gif.render():", renderError);
+          clearTimeout(timeout);
+          reject(renderError);
+        }
+      });
+
+    } catch (error) {
+      console.error('GIF export failed:', error);
+      this.uiManager.showNotification(`GIF export failed: ${error.message}`, "error");
+    }
+  }
+
+  /**
+   * Alternative: Try a completely different GIF approach using canvas.toBlob
+   */
+  async exportAsGIFAlternative(frameRate = 12) {
+    console.log("Trying alternative GIF method...");
+
+    if (!this.currentSprite) return;
+
+    const sprite = this.currentSprite;
+    if (!sprite.frames || sprite.frames.length <= 1) return;
+
+    // Create individual PNG frames and let user know GIF isn't working
+    const frames = [];
+    const canvas = document.createElement('canvas');
+    canvas.width = sprite.width;
+    canvas.height = sprite.height;
+    const ctx = canvas.getContext('2d');
+
+    for (let i = 0; i < sprite.frames.length; i++) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      const frame = sprite.frames[i];
+      if (frame.layers) {
+        frame.layers.forEach(layer => {
+          if (!layer.visible || !layer.pixels) return;
+
+          for (let y = 0; y < frame.height; y++) {
+            for (let x = 0; x < frame.width; x++) {
+              if (!layer.pixels[y] || !layer.pixels[y][x]) continue;
+
+              const [r, g, b, a] = layer.pixels[y][x];
+              if (a > 0) {
+                ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${a / 255})`;
+                ctx.fillRect(x, y, 1, 1);
+              }
+            }
+          }
+        });
+      }
+
+      // Convert to blob and download immediately
+      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${sprite.name}_frame_${i + 1}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    }
+
+    this.uiManager.showNotification(`Downloaded ${sprite.frames.length} PNG frames`, "success");
+  }
+
+  /**
+   * Debug method to test if gif.js is working
+   */
+  testGifJS() {
+    if (typeof GIF === 'undefined') {
+      console.error("GIF.js not loaded!");
+      return false;
+    }
+
+    console.log("GIF.js version:", GIF.version || "unknown");
+
+    try {
+      const testGif = new GIF({
+        workers: 0,
+        quality: 10,
+        width: 2,
+        height: 2
+      });
+
+      console.log("GIF.js test instance created successfully");
+      return true;
+    } catch (error) {
+      console.error("GIF.js test failed:", error);
+      return false;
+    }
+  }
 
   /**
    * Export current sprite as PNG with current zoom scale
@@ -1325,11 +1473,11 @@ exportSingleFrame(frameIndex, scale = 1) {
     const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
     return result
       ? [
-          parseInt(result[1], 16),
-          parseInt(result[2], 16),
-          parseInt(result[3], 16),
-          255,
-        ]
+        parseInt(result[1], 16),
+        parseInt(result[2], 16),
+        parseInt(result[3], 16),
+        255,
+      ]
       : [0, 0, 0, 255];
   }
 
@@ -1357,10 +1505,10 @@ exportSingleFrame(frameIndex, scale = 1) {
       totalPixels,
       currentSprite: this.currentSprite
         ? {
-            name: this.currentSprite.name,
-            dimensions: `${this.currentSprite.width}×${this.currentSprite.height}`,
-            stats: this.currentSprite.getStats(),
-          }
+          name: this.currentSprite.name,
+          dimensions: `${this.currentSprite.width}×${this.currentSprite.height}`,
+          stats: this.currentSprite.getStats(),
+        }
         : null,
       storageUsage,
       currentTool: this.currentTool?.name,

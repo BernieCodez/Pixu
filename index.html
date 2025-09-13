@@ -17,6 +17,10 @@
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet" />
   <script src="https://cdn.jsdelivr.net/npm/@jaames/iro@5"></script>
   <script src="https://unpkg.com/konva@9/konva.min.js"></script>
+  <!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.min.js"></script> -->
+  <script src="https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.min.js"></script>
+  <!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.js"></script> -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="js/settingsMenu.js"></script>
 </head>
 
@@ -84,6 +88,7 @@
     </header>
 
     <!-- Export Modal -->
+    <!-- Updated Export Modal -->
     <div class="modal" id="export-modal">
       <div class="modal-content">
         <div class="modal-header">
@@ -94,36 +99,55 @@
           <div class="input-group">
             <label for="export-format">Format:</label>
             <select id="export-format" style="
-                  background: #1a1a1a;
-                  border: 1px solid #444;
-                  border-radius: 6px;
-                  padding: 10px;
-                  color: #fff;
-                  font-size: 14px;
-                ">
+              background: #1a1a1a;
+              border: 1px solid #444;
+              border-radius: 6px;
+              padding: 10px;
+              color: #fff;
+              font-size: 14px;
+            ">
               <option value="svg">SVG (Vector)</option>
               <option value="png">PNG (Raster)</option>
+              <option value="gif">GIF (Animated)</option>
             </select>
           </div>
-          <div class="input-group">
+
+          <div class="input-group" id="scale-group">
             <label for="export-scale">Scale: <span id="scale-value">1x</span></label>
             <div class="slider-container">
               <input type="range" id="export-scale" min="1" max="32" value="1" style="
-                    flex: 1;
-                    height: 6px;
-                    border-radius: 3px;
-                    background: #444;
-                    outline: none;
-                  " />
+                flex: 1;
+                height: 6px;
+                border-radius: 3px;
+                background: #444;
+                outline: none;
+              " />
             </div>
           </div>
+
+          <div class="input-group" id="fps-group" style="display: none;">
+            <label for="export-fps">Frame Rate (FPS): <span id="fps-value">12</span></label>
+            <div class="slider-container">
+              <input type="range" id="export-fps" min="1" max="60" value="12" style="
+                flex: 1;
+                height: 6px;
+                border-radius: 3px;
+                background: #444;
+                outline: none;
+              " />
+            </div>
+          </div>
+
           <div class="export-preview" style="
-                margin: 15px 0;
-                text-align: center;
-                color: #ccc;
-                font-size: 14px;
-              ">
+            margin: 15px 0;
+            text-align: center;
+            color: #ccc;
+            font-size: 14px;
+          ">
             <div id="export-dimensions">16x16 → 16x16</div>
+            <div id="export-animation-info" style="display: none; color: #00d4ff; margin-top: 5px;">
+              Animation: <span id="frame-count">1</span> frames
+            </div>
           </div>
         </div>
         <div class="modal-footer">
@@ -255,19 +279,24 @@
         </div>
         <!-- Frames Row -->
         <div class="frames-row" id="frames-row">
-          <div class="frames-toolbar">
-            <button class="btn btn-sm" id="add-frame-btn" title="Add Frame">
-              <i class="fas fa-plus"></i>
-            </button>
-            <button class="btn btn-sm" id="duplicate-frame-btn" title="Duplicate Frame">
-              <i class="fas fa-copy"></i>
-            </button>
-            <button class="btn btn-sm" id="delete-frame-btn" title="Delete Frame">
-              <i class="fas fa-trash"></i>
-            </button>
-          </div>
-          <div class="frames-list" id="frames-list">
-            <!-- Frame thumbnails will be populated here -->
+          <button class="frames-toggle-btn" id="frames-toggle-btn" title="Toggle Frames Panel">
+            <i class="fas fa-chevron-down"></i>
+          </button>
+          <div class="frames-content" id="frames-content">
+            <div class="frames-toolbar">
+              <button class="btn btn-sm" id="add-frame-btn" title="Add Frame">
+                <i class="fas fa-plus"></i>
+              </button>
+              <button class="btn btn-sm" id="duplicate-frame-btn" title="Duplicate Frame">
+                <i class="fas fa-copy"></i>
+              </button>
+              <button class="btn btn-sm" id="delete-frame-btn" title="Delete Frame">
+                <i class="fas fa-trash"></i>
+              </button>
+            </div>
+            <div class="frames-list" id="frames-list">
+              <!-- Frame thumbnails will be populated here -->
+            </div>
           </div>
         </div>
       </main>

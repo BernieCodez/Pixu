@@ -785,8 +785,42 @@ class UIController {
       });
     }
 
+    // Add frames panel toggle functionality
+    this.setupFramesToggle();
+
     // Add animation controls
     this.setupAnimationControls();
+  }
+
+  setupFramesToggle() {
+    const framesToggleBtn = document.getElementById('frames-toggle-btn');
+    const framesRow = document.getElementById('frames-row');
+
+    if (framesToggleBtn && framesRow) {
+      // Load saved state from localStorage
+      const isCollapsed = localStorage.getItem('frames-panel-collapsed') === 'true';
+      if (isCollapsed) {
+        framesRow.classList.add('collapsed');
+      }
+
+      framesToggleBtn.addEventListener('click', () => {
+        const isCurrentlyCollapsed = framesRow.classList.contains('collapsed');
+
+        if (isCurrentlyCollapsed) {
+          framesRow.classList.remove('collapsed');
+          localStorage.setItem('frames-panel-collapsed', 'false');
+          if (this.showNotification) {
+            this.showNotification('Frames panel expanded', 'info');
+          }
+        } else {
+          framesRow.classList.add('collapsed');
+          localStorage.setItem('frames-panel-collapsed', 'true');
+          if (this.showNotification) {
+            this.showNotification('Frames panel collapsed', 'info');
+          }
+        }
+      });
+    }
   }
 
   setupAnimationControls() {
@@ -1428,6 +1462,23 @@ class UIController {
     const exportScaleSlider = document.getElementById("export-scale");
     if (exportScaleSlider) {
       exportScaleSlider.addEventListener("input", () => {
+        this.updateExportPreview();
+      });
+    }
+
+    // Export format selector
+    const exportFormatSelect = document.getElementById("export-format");
+    if (exportFormatSelect) {
+      exportFormatSelect.addEventListener("change", () => {
+        this.updateExportUIForFormat();
+        this.updateExportPreview();
+      });
+    }
+
+    // FPS slider
+    const exportFpsSlider = document.getElementById("export-fps");
+    if (exportFpsSlider) {
+      exportFpsSlider.addEventListener("input", () => {
         this.updateExportPreview();
       });
     }
@@ -2942,27 +2993,47 @@ class UIController {
       // Reset to default values
       document.getElementById("export-format").value = "svg";
       document.getElementById("export-scale").value = "1";
+      document.getElementById("export-fps").value = "12";
 
-      // Add animation export section if sprite has multiple frames
-      this.updateExportModalForAnimation();
+      this.updateExportUIForFormat();
       this.updateExportPreview();
       modal.style.display = "flex";
     }
   }
+  updateExportUIForFormat() {
+    const format = document.getElementById("export-format").value;
+    const scaleGroup = document.getElementById("scale-group");
+    const fpsGroup = document.getElementById("fps-group");
+    const quickExportBtn = document.getElementById("quick-export");
+
+    // Show/hide controls based on format
+    if (format === "gif") {
+      // GIF format - show FPS, hide scale, modify quick export
+      scaleGroup.style.display = "none";
+      fpsGroup.style.display = "block";
+      quickExportBtn.textContent = "Quick Export (12 FPS)";
+    } else {
+      // SVG/PNG formats - show scale, hide FPS
+      scaleGroup.style.display = "block";
+      fpsGroup.style.display = "none";
+      quickExportBtn.textContent = "Quick Export (20x)";
+    }
+  }
+
 
   updateExportModalForAnimation() {
-  const sprite = this.editor.currentSprite;
-  const hasAnimation = sprite && sprite.frames && sprite.frames.length > 1;
-  
-  // Find or create animation export section
-  let animationSection = document.getElementById('animation-export-section');
-  
-  if (hasAnimation) {
-    if (!animationSection) {
-      animationSection = document.createElement('div');
-      animationSection.id = 'animation-export-section';
-      animationSection.className = 'export-section';
-      animationSection.innerHTML = `
+    const sprite = this.editor.currentSprite;
+    const hasAnimation = sprite && sprite.frames && sprite.frames.length > 1;
+
+    // Find or create animation export section
+    let animationSection = document.getElementById('animation-export-section');
+
+    if (hasAnimation) {
+      if (!animationSection) {
+        animationSection = document.createElement('div');
+        animationSection.id = 'animation-export-section';
+        animationSection.className = 'export-section';
+        animationSection.innerHTML = `
         <h3 style="color: #00d4ff; margin-bottom: 15px;">Animation Export</h3>
         <div class="export-row">
           <label for="animation-fps">Frame Rate (FPS):</label>
@@ -2980,38 +3051,39 @@ class UIController {
           </button>
         </div>
       `;
-      
-      // Insert before the regular export options
-      const exportContent = document.querySelector('#export-modal .modal-content');
-      const regularExportSection = exportContent.querySelector('.export-section');
-      exportContent.insertBefore(animationSection, regularExportSection);
-      
-      // Add event listeners
-      document.getElementById('export-animated-svg').addEventListener('click', () => {
-        const fps = parseInt(document.getElementById('animation-fps').value);
-        this.editor.exportAsAnimatedSVG(fps);
-        this.hideExportModal();
-      });
-      
-      document.getElementById('export-gif').addEventListener('click', () => {
-        const fps = parseInt(document.getElementById('animation-fps').value);
-        this.editor.exportAsGIF(fps);
-        this.hideExportModal();
-      });
-      
-      document.getElementById('export-frames-zip').addEventListener('click', () => {
-        this.editor.exportFramesAsZip();
-        this.hideExportModal();
-      });
-    }
-    
-    animationSection.style.display = 'block';
-  } else {
-    if (animationSection) {
-      animationSection.style.display = 'none';
+
+        // Insert before the regular export options
+        const exportContent = document.querySelector('#export-modal .modal-content');
+        const regularExportSection = exportContent.querySelector('.export-section');
+        exportContent.insertBefore(animationSection, regularExportSection);
+
+        // Add event listeners
+        document.getElementById('export-animated-svg').addEventListener('click', () => {
+          const fps = parseInt(document.getElementById('animation-fps').value);
+          this.editor.exportAsAnimatedSVG(fps);
+          this.hideExportModal();
+        });
+
+        document.getElementById('export-gif').addEventListener('click', () => {
+          const fps = parseInt(document.getElementById('animation-fps').value);
+          this.editor.exportAsGIF(fps);
+          this.hideExportModal();
+        });
+
+        document.getElementById('export-frames-zip').addEventListener('click', () => {
+          this.editor.exportFramesAsZip();
+          this.hideExportModal();
+        });
+      }
+
+      animationSection.style.display = 'block';
+    } else {
+      if (animationSection) {
+        animationSection.style.display = 'none';
+      }
     }
   }
-}
+
 
   hideExportModal() {
     const modal = document.getElementById("export-modal");
@@ -3021,53 +3093,165 @@ class UIController {
   }
 
   updateExportPreview() {
+    const format = document.getElementById("export-format").value;
     const scaleSlider = document.getElementById("export-scale");
+    const fpsSlider = document.getElementById("export-fps");
     const scaleValue = document.getElementById("scale-value");
+    const fpsValue = document.getElementById("fps-value");
     const dimensions = document.getElementById("export-dimensions");
+    const animationInfo = document.getElementById("export-animation-info");
+    const frameCount = document.getElementById("frame-count");
 
-    if (scaleSlider && scaleValue && dimensions && this.editor.currentSprite) {
+    if (!this.editor.currentSprite) return;
+
+    const sprite = this.editor.currentSprite;
+    const hasAnimation = sprite.frames && sprite.frames.length > 1;
+
+    // Update scale/fps values
+    if (scaleSlider && scaleValue) {
       const scale = parseInt(scaleSlider.value);
-      const sprite = this.editor.currentSprite;
-      const newWidth = sprite.width * scale;
-      const newHeight = sprite.height * scale;
-
       scaleValue.textContent = `${scale}x`;
-      dimensions.textContent = `${sprite.width}x${sprite.height} → ${newWidth}x${newHeight}`;
+
+      if (format !== "gif") {
+        const newWidth = sprite.width * scale;
+        const newHeight = sprite.height * scale;
+        dimensions.textContent = `${sprite.width}x${sprite.height} → ${newWidth}x${newHeight}`;
+      }
+    }
+
+    if (fpsSlider && fpsValue) {
+      const fps = parseInt(fpsSlider.value);
+      fpsValue.textContent = `${fps}`;
+    }
+
+    // Update animation info
+    if (animationInfo && frameCount) {
+      if (hasAnimation) {
+        frameCount.textContent = sprite.frames.length;
+        animationInfo.style.display = "block";
+
+        if (format === "gif") {
+          dimensions.textContent = `${sprite.width}x${sprite.height} (animated)`;
+        }
+      } else {
+        animationInfo.style.display = "none";
+
+        if (format === "gif") {
+          dimensions.textContent = `${sprite.width}x${sprite.height} (single frame)`;
+        }
+      }
     }
   }
 
-  performExport() {
+  async performExport() {
     const format = document.getElementById("export-format").value;
-    const scale = parseInt(document.getElementById("export-scale").value);
+    const scale = parseInt(document.getElementById("export-scale").value || "1");
+    const fps = parseInt(document.getElementById("export-fps").value || "12");
 
-    if (format === "svg") {
-      this.editor.exportAsSVG(scale);
-    } else {
-      this.editor.exportAsPNG(scale);
+    const sprite = this.editor.currentSprite;
+    if (!sprite) {
+      this.showNotification("No sprite to export", "error");
+      return;
     }
 
+    const hasAnimation = sprite.frames && sprite.frames.length > 1;
+
     this.hideExportModal();
-    this.showNotification(
-      `Exported as ${format.toUpperCase()} at ${scale}x scale`,
-      "success"
-    );
+
+    try {
+      switch (format) {
+        case "svg":
+          if (hasAnimation) {
+            await this.editor.exportAsAnimatedSVG(fps);
+            this.showNotification(`Exported animated SVG with ${sprite.frames.length} frames`, "success");
+          } else {
+            this.editor.exportAsSVG(scale);
+            this.showNotification(`Exported SVG at ${scale}x scale`, "success");
+          }
+          break;
+
+        case "png":
+          if (hasAnimation) {
+            await this.editor.exportFramesAsZip();
+            this.showNotification(`Exported ${sprite.frames.length} frames as ZIP`, "success");
+          } else {
+            this.editor.exportAsPNG(scale);
+            this.showNotification(`Exported PNG at ${scale}x scale`, "success");
+          }
+          break;
+
+        case "gif":
+          if (hasAnimation) {
+            // DON'T show notification here - let exportAsGIF handle it
+            await this.editor.exportAsGIF(fps);
+          } else {
+            // For single frame, export as static PNG instead
+            this.editor.exportAsPNG(scale);
+            this.showNotification("Single frame exported as PNG", "info");
+          }
+          break;
+
+        default:
+          this.showNotification("Unknown export format", "error");
+      }
+    } catch (error) {
+      console.error("Export failed:", error);
+      this.showNotification(`Export failed: ${error.message}`, "error");
+    }
   }
 
-  performQuickExport() {
+  async performQuickExport() {
     const format = document.getElementById("export-format").value;
-    const scale = 20;
+    const sprite = this.editor.currentSprite;
 
-    if (format === "svg") {
-      this.editor.exportAsSVG(scale);
-    } else {
-      this.editor.exportAsPNG(scale);
+    if (!sprite) {
+      this.showNotification("No sprite to export", "error");
+      return;
     }
 
+    const hasAnimation = sprite.frames && sprite.frames.length > 1;
+
     this.hideExportModal();
-    this.showNotification(
-      `Quick exported as ${format.toUpperCase()} at 20x scale`,
-      "success"
-    );
+
+    try {
+      switch (format) {
+        case "svg":
+          if (hasAnimation) {
+            await this.editor.exportAsAnimatedSVG(12); // Quick export at 12 FPS
+            this.showNotification("Quick exported animated SVG at 12 FPS", "success");
+          } else {
+            this.editor.exportAsSVG(20); // Quick export at 20x scale
+            this.showNotification("Quick exported SVG at 20x scale", "success");
+          }
+          break;
+
+        case "png":
+          if (hasAnimation) {
+            await this.editor.exportFramesAsZip();
+            this.showNotification("Quick exported frames as ZIP", "success");
+          } else {
+            this.editor.exportAsPNG(20); // Quick export at 20x scale
+            this.showNotification("Quick exported PNG at 20x scale", "success");
+          }
+          break;
+
+        case "gif":
+          if (hasAnimation) {
+            await this.editor.exportAsGIF(12); // Quick export at 12 FPS
+            this.showNotification("Quick exported animated GIF at 12 FPS", "success");
+          } else {
+            this.editor.exportAsPNG(20); // For single frame, export as PNG
+            this.showNotification("Quick exported single frame as PNG", "info");
+          }
+          break;
+
+        default:
+          this.showNotification("Unknown export format", "error");
+      }
+    } catch (error) {
+      console.error("Quick export failed:", error);
+      this.showNotification(`Quick export failed: ${error.message}`, "error");
+    }
   }
 }
 
