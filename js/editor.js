@@ -1122,263 +1122,267 @@ class PixelEditor {
   /**
    * Debug version of GIF export to identify the exact failure point
    */
-  async exportAsGIF(frameRate = 12) {
-    if (!this.currentSprite) {
-      this.uiManager.showNotification("No sprite to export", "error");
-      return;
-    }
-
-    const sprite = this.currentSprite;
-    const hasAnimation = sprite.frames && sprite.frames.length > 1;
-
-    if (!hasAnimation) {
+  /**
+  * Export animation as GIF using gif.js library
+  * This method should replace the empty exportAsGIF method in your PixelEditor class
+  */
+  async exportAsGIF(frameRate = 12, scale = 1, repeat = true) {
+    if (!this.currentSprite || !this.currentSprite.frames || this.currentSprite.frames.length <= 1) {
       this.uiManager.showNotification("No animation to export", "warning");
       return;
     }
 
-    // Debug: Check gif.js availability
-    console.log("GIF.js available:", typeof GIF !== 'undefined');
+    // Check if GIF library is available
     if (typeof GIF === 'undefined') {
-      this.uiManager.showNotification("GIF.js library not loaded", "error");
+      this.uiManager.showNotification("GIF.js library not available", "error");
       return;
     }
 
-    this.uiManager.showNotification("Starting GIF export...", "info");
+    const sprite = this.currentSprite;
+    const width = sprite.width * scale;
+    const height = sprite.height * scale;
 
     try {
-      // Create GIF instance with minimal settings
-      console.log("Creating GIF instance...");
-      const gif = new GIF({
-        workers: 0, // No workers
-        quality: 1, // Highest quality but slowest - try this first
-        width: sprite.width,
-        height: sprite.height,
-        repeat: 0
-      });
-      console.log("GIF instance created successfully");
+      this.uiManager.showNotification("Generating GIF...", "info");
 
-      const frameDelay = Math.round(1000 / frameRate);
-      console.log("Frame delay:", frameDelay, "ms");
+      // Get current colors to determine if we can preserve them
+      const currentColors = this.getCurrentColors();
+      const MAX_GIF_COLORS = 256;
+      const preserveColors = currentColors.length < MAX_GIF_COLORS;
 
-      // Create canvas
-      const canvas = document.createElement('canvas');
-      canvas.width = sprite.width;
-      canvas.height = sprite.height;
-      const ctx = canvas.getContext('2d');
-      ctx.imageSmoothingEnabled = false;
+      // Find transparent color if needed
+      let transparentColor = null;
+      let transparent = null;
 
-      console.log("Canvas created:", canvas.width, "x", canvas.height);
-
-      // Process each frame
-      for (let i = 0; i < sprite.frames.length; i++) {
-        console.log(`Processing frame ${i + 1}/${sprite.frames.length}`);
-
-        // Clear canvas
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-        // Fill with white background to avoid transparency issues
-        ctx.fillStyle = 'white';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-        // Render frame
-        const frame = sprite.frames[i];
-        if (frame.layers) {
-          frame.layers.forEach(layer => {
-            if (!layer.visible || !layer.pixels) return;
-
-            for (let y = 0; y < frame.height; y++) {
-              for (let x = 0; x < frame.width; x++) {
-                if (!layer.pixels[y] || !layer.pixels[y][x]) continue;
-
-                const [r, g, b, a] = layer.pixels[y][x];
-                if (a > 0) {
-                  ctx.fillStyle = `rgb(${r}, ${g}, ${b})`; // Remove alpha to avoid transparency issues
-                  ctx.fillRect(x, y, 1, 1);
-                }
-              }
-            }
-          });
+      if (preserveColors && this.hasTransparency()) {
+        transparentColor = this.getUnusedColor(currentColors);
+        if (transparentColor) {
+          transparent = parseInt(transparentColor.substring(1), 16);
         }
-
-        console.log(`Adding frame ${i + 1} to GIF...`);
-        // Add frame - use getImageData instead of canvas context
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        gif.addFrame(imageData, { delay: frameDelay });
-
-        this.uiManager.showNotification(`Added frame ${i + 1}/${sprite.frames.length}`, "info");
       }
 
-      console.log("All frames added, starting render...");
-
-      // Handle the rendering
-      return new Promise((resolve, reject) => {
-        let renderStarted = false;
-
-        const timeout = setTimeout(() => {
-          console.log("GIF render timeout reached");
-          if (!renderStarted) {
-            reject(new Error('GIF rendering never started'));
-          } else {
-            reject(new Error('GIF rendering timed out'));
-          }
-        }, 10000); // 10 second timeout
-
-        gif.on('start', () => {
-          renderStarted = true;
-          console.log("GIF rendering started");
-          this.uiManager.showNotification("Rendering GIF...", "info");
-        });
-
-        gif.on('progress', (progress) => {
-          console.log("GIF render progress:", Math.round(progress * 100) + "%");
-          this.uiManager.showNotification(`Rendering: ${Math.round(progress * 100)}%`, "info");
-        });
-
-        gif.on('finished', (blob) => {
-          console.log("GIF finished, blob size:", blob.size, "bytes");
-          clearTimeout(timeout);
-
-          if (blob.size === 0) {
-            reject(new Error('Generated GIF is empty'));
-            return;
-          }
-
-          // Test the blob
-          console.log("Blob type:", blob.type);
-          console.log("Creating download URL...");
-
-          try {
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = `${sprite.name || 'animation'}.gif`;
-
-            // Debug: log the download attempt
-            console.log("Download URL created:", url);
-            console.log("Triggering download...");
-
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-
-            // Don't revoke URL immediately - wait a bit
-            setTimeout(() => {
-              URL.revokeObjectURL(url);
-              console.log("URL revoked");
-            }, 5000);
-
-            this.uiManager.showNotification("GIF download triggered!", "success");
-            resolve();
-          } catch (downloadError) {
-            console.error("Download error:", downloadError);
-            reject(downloadError);
-          }
-        });
-
-        gif.on('error', (error) => {
-          console.error("GIF rendering error:", error);
-          clearTimeout(timeout);
-          reject(error);
-        });
-
-        // Start rendering
-        console.log("Calling gif.render()...");
-        try {
-          gif.render();
-          console.log("gif.render() called successfully");
-        } catch (renderError) {
-          console.error("Error calling gif.render():", renderError);
-          clearTimeout(timeout);
-          reject(renderError);
-        }
+      // Create GIF instance
+      const gif = new GIF({
+        workers: 2, // Reduced workers for better compatibility
+        quality: 1, // Best quality
+        width: width,
+        height: height,
+        preserveColors: preserveColors,
+        repeat: repeat ? 0 : -1, // 0 = repeat forever, -1 = no repeat
+        transparent: transparent,
+        debug: false
       });
 
+      // Create background canvas for transparent color fill
+      const backgroundCanvas = document.createElement('canvas');
+      backgroundCanvas.width = sprite.width;
+      backgroundCanvas.height = sprite.height;
+      const backgroundCtx = backgroundCanvas.getContext('2d');
+      backgroundCtx.imageSmoothingEnabled = false;
+
+      // Process each frame
+      for (let frameIndex = 0; frameIndex < sprite.frames.length; frameIndex++) {
+        const frame = sprite.frames[frameIndex];
+
+        // Clear and fill background if we have a transparent color
+        backgroundCtx.clearRect(0, 0, sprite.width, sprite.height);
+        if (transparentColor) {
+          backgroundCtx.fillStyle = transparentColor;
+          backgroundCtx.fillRect(0, 0, sprite.width, sprite.height);
+        }
+
+        // Render frame layers onto background canvas
+        this.renderFrameToCanvas(frame, backgroundCtx);
+
+        // Scale up if needed
+        let frameCanvas = backgroundCanvas;
+        if (scale > 1) {
+          frameCanvas = this.scaleCanvas(backgroundCanvas, scale);
+        }
+
+        // Add frame to GIF
+        gif.addFrame(frameCanvas.getContext('2d'), {
+          delay: Math.round(1000 / frameRate) // Convert FPS to milliseconds delay
+        });
+      }
+
+      // Set up progress tracking
+      gif.on('progress', (progress) => {
+        const percentage = Math.round(progress * 100);
+        console.log(`GIF generation progress: ${percentage}%`);
+        // You could update a progress bar here if you have one
+      });
+
+      // Handle completion
+      gif.on('finished', (blob) => {
+        this.downloadBlob(blob, `${sprite.name || 'animation'}.gif`);
+        this.uiManager.showNotification(
+          `Exported GIF: ${sprite.frames.length} frames at ${frameRate} FPS`,
+          "success"
+        );
+      });
+
+      // Handle errors
+      gif.on('abort', () => {
+        this.uiManager.showNotification("GIF export was aborted", "error");
+      });
+
+      // Start rendering
+      gif.render();
+
     } catch (error) {
-      console.error('GIF export failed:', error);
+      console.error("GIF export failed:", error);
       this.uiManager.showNotification(`GIF export failed: ${error.message}`, "error");
     }
   }
 
   /**
-   * Alternative: Try a completely different GIF approach using canvas.toBlob
+   * Helper method to render a frame to a canvas context
    */
-  async exportAsGIFAlternative(frameRate = 12) {
-    console.log("Trying alternative GIF method...");
+  renderFrameToCanvas(frame, ctx) {
+    const width = frame.width;
+    const height = frame.height;
 
-    if (!this.currentSprite) return;
+    // Clear canvas
+    ctx.clearRect(0, 0, width, height);
 
-    const sprite = this.currentSprite;
-    if (!sprite.frames || sprite.frames.length <= 1) return;
+    // Render each visible layer
+    frame.layers.forEach(layer => {
+      if (!layer.visible || !layer.pixels) return;
 
-    // Create individual PNG frames and let user know GIF isn't working
-    const frames = [];
-    const canvas = document.createElement('canvas');
-    canvas.width = sprite.width;
-    canvas.height = sprite.height;
-    const ctx = canvas.getContext('2d');
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          if (!layer.pixels[y] || !layer.pixels[y][x]) continue;
 
-    for (let i = 0; i < sprite.frames.length; i++) {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      const frame = sprite.frames[i];
-      if (frame.layers) {
-        frame.layers.forEach(layer => {
-          if (!layer.visible || !layer.pixels) return;
-
-          for (let y = 0; y < frame.height; y++) {
-            for (let x = 0; x < frame.width; x++) {
-              if (!layer.pixels[y] || !layer.pixels[y][x]) continue;
-
-              const [r, g, b, a] = layer.pixels[y][x];
-              if (a > 0) {
-                ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${a / 255})`;
-                ctx.fillRect(x, y, 1, 1);
-              }
-            }
+          const [r, g, b, a] = layer.pixels[y][x];
+          if (a > 0) {
+            const opacity = (a / 255) * (layer.opacity !== undefined ? layer.opacity : 1);
+            ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${opacity})`;
+            ctx.fillRect(x, y, 1, 1);
           }
-        });
+        }
       }
-
-      // Convert to blob and download immediately
-      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `${sprite.name}_frame_${i + 1}.png`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-    }
-
-    this.uiManager.showNotification(`Downloaded ${sprite.frames.length} PNG frames`, "success");
+    });
   }
 
   /**
-   * Debug method to test if gif.js is working
+   * Scale a canvas using pixel-perfect nearest neighbor scaling
    */
-  testGifJS() {
-    if (typeof GIF === 'undefined') {
-      console.error("GIF.js not loaded!");
-      return false;
-    }
+  scaleCanvas(sourceCanvas, scale) {
+    if (scale === 1) return sourceCanvas;
 
-    console.log("GIF.js version:", GIF.version || "unknown");
+    const scaledCanvas = document.createElement('canvas');
+    scaledCanvas.width = sourceCanvas.width * scale;
+    scaledCanvas.height = sourceCanvas.height * scale;
 
-    try {
-      const testGif = new GIF({
-        workers: 0,
-        quality: 10,
-        width: 2,
-        height: 2
+    const scaledCtx = scaledCanvas.getContext('2d');
+    scaledCtx.imageSmoothingEnabled = false;
+    scaledCtx.webkitImageSmoothingEnabled = false;
+    scaledCtx.mozImageSmoothingEnabled = false;
+    scaledCtx.msImageSmoothingEnabled = false;
+
+    // Use drawImage for scaling
+    scaledCtx.drawImage(
+      sourceCanvas,
+      0, 0, sourceCanvas.width, sourceCanvas.height,
+      0, 0, scaledCanvas.width, scaledCanvas.height
+    );
+
+    return scaledCanvas;
+  }
+
+  /**
+   * Get all unique colors used in the current sprite
+   */
+  getCurrentColors() {
+    if (!this.currentSprite || !this.currentSprite.frames) return [];
+
+    const colorSet = new Set();
+
+    this.currentSprite.frames.forEach(frame => {
+      frame.layers.forEach(layer => {
+        if (!layer.visible || !layer.pixels) return;
+
+        layer.pixels.forEach(row => {
+          row.forEach(pixel => {
+            const [r, g, b, a] = pixel;
+            if (a > 0) { // Only count visible pixels
+              const colorHex = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+              colorSet.add(colorHex);
+            }
+          });
+        });
       });
+    });
 
-      console.log("GIF.js test instance created successfully");
-      return true;
-    } catch (error) {
-      console.error("GIF.js test failed:", error);
-      return false;
+    return Array.from(colorSet);
+  }
+
+  /**
+   * Check if the current sprite has any transparency
+   */
+  hasTransparency() {
+    if (!this.currentSprite || !this.currentSprite.frames) return false;
+
+    return this.currentSprite.frames.some(frame =>
+      frame.layers.some(layer =>
+        layer.visible && layer.pixels && layer.pixels.some(row =>
+          row.some(pixel => pixel[3] < 255) // Alpha less than 255
+        )
+      )
+    );
+  }
+
+  /**
+   * Find an unused color for transparency
+   */
+  getUnusedColor(usedColors) {
+    const colorSet = new Set(usedColors);
+
+    // Try some common unused colors first
+    const candidates = [
+      '#FF00FF', // Magenta (common transparent color)
+      '#00FF00', // Bright green
+      '#FF0080', // Hot pink
+      '#80FF00', // Lime
+      '#0080FF', // Blue
+      '#8000FF'  // Purple
+    ];
+
+    for (const color of candidates) {
+      if (!colorSet.has(color)) {
+        return color;
+      }
     }
+
+    // Generate random colors until we find one not used
+    for (let i = 0; i < 1000; i++) {
+      const r = Math.floor(Math.random() * 256);
+      const g = Math.floor(Math.random() * 256);
+      const b = Math.floor(Math.random() * 256);
+      const color = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+
+      if (!colorSet.has(color)) {
+        return color;
+      }
+    }
+
+    console.warn('Could not find unused color for transparency');
+    return '#FF00FF'; // Fallback to magenta
+  }
+
+  /**
+   * Download a blob as a file
+   */
+  downloadBlob(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   }
 
   /**
