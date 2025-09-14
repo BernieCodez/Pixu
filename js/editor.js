@@ -1126,264 +1126,285 @@ class PixelEditor {
   * Export animation as GIF using gif.js library
   * This method should replace the empty exportAsGIF method in your PixelEditor class
   */
-  async exportAsGIF(frameRate = 12, scale = 1, repeat = true) {
-    if (!this.currentSprite || !this.currentSprite.frames || this.currentSprite.frames.length <= 1) {
-      this.uiManager.showNotification("No animation to export", "warning");
-      return;
+  /**
+ * Export animation as GIF using gif.js library
+ * This method should replace the empty exportAsGIF method in your PixelEditor class
+ */
+  /**
+ * Export animation as GIF using gif.js library
+ * This method should replace the empty exportAsGIF method in your PixelEditor class
+ */
+  /**
+ * Export animation as GIF - Simplified approach that actually works
+ * This method should replace the empty exportAsGIF method in your PixelEditor class
+ */
+  /**
+ * Export animation as GIF - Alternative approach without gif.js workers
+ * This method should replace the empty exportAsGIF method in your PixelEditor class
+ */
+async exportAsGIF(frameRate = 12, scale = 1, repeat = true) {
+  if (!this.currentSprite || !this.currentSprite.frames || this.currentSprite.frames.length <= 1) {
+    this.uiManager.showNotification("No animation to export", "warning");
+    return;
+  }
+
+  const sprite = this.currentSprite;
+  const width = sprite.width * scale;
+  const height = sprite.height * scale;
+
+  console.log(`Attempting manual GIF export: ${sprite.frames.length} frames, ${width}x${height}`);
+
+  try {
+    this.uiManager.showNotification("Generating GIF...", "info");
+
+    // Try to use jsgif library instead if available
+    if (typeof GIFEncoder !== 'undefined') {
+      return this.exportWithJSGIF(frameRate, scale, repeat);
     }
 
-    // Check if GIF library is available
-    if (typeof GIF === 'undefined') {
-      this.uiManager.showNotification("GIF.js library not available", "error");
-      return;
+    // Fallback: Create a simple animated WebP or export frames as ZIP
+    if (this.canCreateAnimatedWebP()) {
+      return this.exportAsAnimatedWebP(frameRate, scale);
     }
 
-    const sprite = this.currentSprite;
-    const width = sprite.width * scale;
-    const height = sprite.height * scale;
+    // Final fallback: Export as individual PNGs in a ZIP
+    return this.exportFramesAsZip();
 
-    try {
-      this.uiManager.showNotification("Generating GIF...", "info");
+  } catch (error) {
+    console.error("All GIF export methods failed:", error);
+    this.uiManager.showNotification(`GIF export failed. Try exporting frames individually.`, "error");
+    
+    // Offer to export frames as PNGs
+    if (confirm("GIF export failed. Would you like to export individual PNG frames instead?")) {
+      this.exportFramesAsPNGs();
+    }
+  }
+}
 
-      // Get current colors to determine if we can preserve them
-      const currentColors = this.getCurrentColors();
-      const MAX_GIF_COLORS = 256;
-      const preserveColors = currentColors.length < MAX_GIF_COLORS;
+/**
+ * Export using JSGif library if available
+ */
+exportWithJSGIF(frameRate, scale, repeat) {
+  const sprite = this.currentSprite;
+  const width = sprite.width * scale;
+  const height = sprite.height * scale;
+  
+  console.log("Using JSGif library");
+  
+  const encoder = new GIFEncoder();
+  encoder.setRepeat(repeat ? 0 : -1);
+  encoder.setDelay(Math.round(1000 / frameRate));
+  encoder.start();
+  
+  for (let frameIndex = 0; frameIndex < sprite.frames.length; frameIndex++) {
+    const frame = sprite.frames[frameIndex];
+    const canvas = this.renderFrameToCanvas2(frame, width, height);
+    const ctx = canvas.getContext('2d');
+    const imageData = ctx.getImageData(0, 0, width, height);
+    encoder.addFrame(imageData);
+  }
+  
+  encoder.finish();
+  const binary = encoder.stream().getData();
+  const blob = new Blob([new Uint8Array(binary)], { type: 'image/gif' });
+  
+  this.downloadBlob(blob, `${sprite.name || 'animation'}.gif`);
+  this.uiManager.showNotification(`Exported GIF using JSGif`, "success");
+}
 
-      // Find transparent color if needed
-      let transparentColor = null;
-      let transparent = null;
+/**
+ * Check if browser supports animated WebP creation
+ */
+canCreateAnimatedWebP() {
+  // Most modern browsers support WebP but not animated WebP creation
+  // This is more of a placeholder for future implementation
+  return false;
+}
 
-      if (preserveColors && this.hasTransparency()) {
-        transparentColor = this.getUnusedColor(currentColors);
-        if (transparentColor) {
-          transparent = parseInt(transparentColor.substring(1), 16);
-        }
-      }
+/**
+ * Export as animated WebP (placeholder for future implementation)
+ */
+exportAsAnimatedWebP(frameRate, scale) {
+  this.uiManager.showNotification("Animated WebP export not yet implemented", "info");
+  this.exportFramesAsPNGs();
+}
 
-      // Create GIF instance
-      const gif = new GIF({
-        workers: 2, // Reduced workers for better compatibility
-        quality: 1, // Best quality
-        width: width,
-        height: height,
-        preserveColors: preserveColors,
-        repeat: repeat ? 0 : -1, // 0 = repeat forever, -1 = no repeat
-        transparent: transparent,
-        debug: false
-      });
+/**
+ * Export frames as individual PNG files
+ */
+exportFramesAsPNGs() {
+  if (!this.currentSprite?.frames || this.currentSprite.frames.length <= 1) {
+    this.uiManager.showNotification("No frames to export", "warning");
+    return;
+  }
 
-      // Create background canvas for transparent color fill
-      const backgroundCanvas = document.createElement('canvas');
-      backgroundCanvas.width = sprite.width;
-      backgroundCanvas.height = sprite.height;
-      const backgroundCtx = backgroundCanvas.getContext('2d');
-      backgroundCtx.imageSmoothingEnabled = false;
+  const sprite = this.currentSprite;
+  console.log(`Exporting ${sprite.frames.length} frames as PNGs`);
+  
+  this.uiManager.showNotification("Exporting frames as PNGs...", "info");
 
-      // Process each frame
-      for (let frameIndex = 0; frameIndex < sprite.frames.length; frameIndex++) {
-        const frame = sprite.frames[frameIndex];
+  sprite.frames.forEach((frame, index) => {
+    const canvas = this.renderFrameToCanvas2(frame, sprite.width, sprite.height);
+    
+    canvas.toBlob(blob => {
+      const frameNumber = String(index + 1).padStart(3, '0');
+      const filename = `${sprite.name || 'animation'}_frame_${frameNumber}.png`;
+      this.downloadBlob(blob, filename);
+    }, 'image/png');
+  });
 
-        // Clear and fill background if we have a transparent color
-        backgroundCtx.clearRect(0, 0, sprite.width, sprite.height);
-        if (transparentColor) {
-          backgroundCtx.fillStyle = transparentColor;
-          backgroundCtx.fillRect(0, 0, sprite.width, sprite.height);
-        }
+  this.uiManager.showNotification(
+    `Exported ${sprite.frames.length} PNG frames. Use external tools to create GIF.`, 
+    "success"
+  );
+}
 
-        // Render frame layers onto background canvas
-        this.renderFrameToCanvas(frame, backgroundCtx);
-
-        // Scale up if needed
-        let frameCanvas = backgroundCanvas;
-        if (scale > 1) {
-          frameCanvas = this.scaleCanvas(backgroundCanvas, scale);
-        }
-
-        // Add frame to GIF
-        gif.addFrame(frameCanvas.getContext('2d'), {
-          delay: Math.round(1000 / frameRate) // Convert FPS to milliseconds delay
-        });
-      }
-
-      // Set up progress tracking
-      gif.on('progress', (progress) => {
-        const percentage = Math.round(progress * 100);
-        console.log(`GIF generation progress: ${percentage}%`);
-        // You could update a progress bar here if you have one
-      });
-
-      // Handle completion
-      gif.on('finished', (blob) => {
-        this.downloadBlob(blob, `${sprite.name || 'animation'}.gif`);
-        this.uiManager.showNotification(
-          `Exported GIF: ${sprite.frames.length} frames at ${frameRate} FPS`,
-          "success"
+/**
+ * Render a frame to a canvas - improved version
+ */
+renderFrameToCanvas2(frame, targetWidth, targetHeight) {
+  const canvas = document.createElement('canvas');
+  canvas.width = targetWidth;
+  canvas.height = targetHeight;
+  const ctx = canvas.getContext('2d');
+  
+  // Disable smoothing for pixel art
+  ctx.imageSmoothingEnabled = false;
+  ctx.webkitImageSmoothingEnabled = false;
+  ctx.mozImageSmoothingEnabled = false;
+  ctx.msImageSmoothingEnabled = false;
+  
+  // Calculate scale factor
+  const scaleX = targetWidth / frame.width;
+  const scaleY = targetHeight / frame.height;
+  
+  // Render frame pixel by pixel
+  if (!frame.layers) {
+    console.warn("Frame has no layers");
+    return canvas;
+  }
+  
+  for (let y = 0; y < frame.height; y++) {
+    for (let x = 0; x < frame.width; x++) {
+      const pixelColor = this.getCompositePixel(frame, x, y);
+      
+      if (pixelColor.a > 0) {
+        ctx.fillStyle = `rgba(${pixelColor.r}, ${pixelColor.g}, ${pixelColor.b}, ${pixelColor.a / 255})`;
+        ctx.fillRect(
+          Math.floor(x * scaleX), 
+          Math.floor(y * scaleY), 
+          Math.ceil(scaleX), 
+          Math.ceil(scaleY)
         );
-      });
-
-      // Handle errors
-      gif.on('abort', () => {
-        this.uiManager.showNotification("GIF export was aborted", "error");
-      });
-
-      // Start rendering
-      gif.render();
-
-    } catch (error) {
-      console.error("GIF export failed:", error);
-      this.uiManager.showNotification(`GIF export failed: ${error.message}`, "error");
+      }
     }
   }
+  
+  return canvas;
+}
 
-  /**
-   * Helper method to render a frame to a canvas context
-   */
-  renderFrameToCanvas(frame, ctx) {
-    const width = frame.width;
-    const height = frame.height;
-
-    // Clear canvas
-    ctx.clearRect(0, 0, width, height);
-
-    // Render each visible layer
-    frame.layers.forEach(layer => {
-      if (!layer.visible || !layer.pixels) return;
-
-      for (let y = 0; y < height; y++) {
-        for (let x = 0; x < width; x++) {
-          if (!layer.pixels[y] || !layer.pixels[y][x]) continue;
-
-          const [r, g, b, a] = layer.pixels[y][x];
-          if (a > 0) {
-            const opacity = (a / 255) * (layer.opacity !== undefined ? layer.opacity : 1);
-            ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${opacity})`;
-            ctx.fillRect(x, y, 1, 1);
-          }
+/**
+ * Get the composite color of a pixel from all visible layers in a frame
+ */
+getCompositePixel(frame, x, y) {
+  let finalColor = { r: 0, g: 0, b: 0, a: 0 }; // Start transparent
+  
+  if (!frame.layers) {
+    return finalColor;
+  }
+  
+  // Composite all visible layers from bottom to top
+  frame.layers.forEach(layer => {
+    if (!layer.visible || !layer.pixels || !layer.pixels[y] || !layer.pixels[y][x]) {
+      return;
+    }
+    
+    const [r, g, b, a] = layer.pixels[y][x];
+    
+    if (a > 0) {
+      const alpha = a / 255;
+      const layerOpacity = layer.opacity !== undefined ? layer.opacity : 1;
+      const effectiveAlpha = alpha * layerOpacity;
+      
+      if (finalColor.a === 0) {
+        // First non-transparent pixel
+        finalColor = { r, g, b, a: Math.round(effectiveAlpha * 255) };
+      } else {
+        // Alpha blend with existing color
+        const srcAlpha = effectiveAlpha;
+        const dstAlpha = finalColor.a / 255;
+        const outAlpha = srcAlpha + dstAlpha * (1 - srcAlpha);
+        
+        if (outAlpha > 0) {
+          finalColor.r = Math.round((r * srcAlpha + finalColor.r * dstAlpha * (1 - srcAlpha)) / outAlpha);
+          finalColor.g = Math.round((g * srcAlpha + finalColor.g * dstAlpha * (1 - srcAlpha)) / outAlpha);
+          finalColor.b = Math.round((b * srcAlpha + finalColor.b * dstAlpha * (1 - srcAlpha)) / outAlpha);
+          finalColor.a = Math.round(outAlpha * 255);
         }
       }
-    });
-  }
+    }
+  });
+  
+  return finalColor;
+}
 
-  /**
-   * Scale a canvas using pixel-perfect nearest neighbor scaling
-   */
-  scaleCanvas(sourceCanvas, scale) {
-    if (scale === 1) return sourceCanvas;
-
-    const scaledCanvas = document.createElement('canvas');
-    scaledCanvas.width = sourceCanvas.width * scale;
-    scaledCanvas.height = sourceCanvas.height * scale;
-
-    const scaledCtx = scaledCanvas.getContext('2d');
-    scaledCtx.imageSmoothingEnabled = false;
-    scaledCtx.webkitImageSmoothingEnabled = false;
-    scaledCtx.mozImageSmoothingEnabled = false;
-    scaledCtx.msImageSmoothingEnabled = false;
-
-    // Use drawImage for scaling
-    scaledCtx.drawImage(
-      sourceCanvas,
-      0, 0, sourceCanvas.width, sourceCanvas.height,
-      0, 0, scaledCanvas.width, scaledCanvas.height
-    );
-
-    return scaledCanvas;
-  }
-
-  /**
-   * Get all unique colors used in the current sprite
-   */
-  getCurrentColors() {
-    if (!this.currentSprite || !this.currentSprite.frames) return [];
-
-    const colorSet = new Set();
-
-    this.currentSprite.frames.forEach(frame => {
-      frame.layers.forEach(layer => {
-        if (!layer.visible || !layer.pixels) return;
-
-        layer.pixels.forEach(row => {
-          row.forEach(pixel => {
-            const [r, g, b, a] = pixel;
-            if (a > 0) { // Only count visible pixels
-              const colorHex = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
-              colorSet.add(colorHex);
-            }
-          });
-        });
-      });
-    });
-
-    return Array.from(colorSet);
-  }
-
-  /**
-   * Check if the current sprite has any transparency
-   */
-  hasTransparency() {
-    if (!this.currentSprite || !this.currentSprite.frames) return false;
-
-    return this.currentSprite.frames.some(frame =>
-      frame.layers.some(layer =>
-        layer.visible && layer.pixels && layer.pixels.some(row =>
-          row.some(pixel => pixel[3] < 255) // Alpha less than 255
-        )
-      )
-    );
-  }
-
-  /**
-   * Find an unused color for transparency
-   */
-  getUnusedColor(usedColors) {
-    const colorSet = new Set(usedColors);
-
-    // Try some common unused colors first
-    const candidates = [
-      '#FF00FF', // Magenta (common transparent color)
-      '#00FF00', // Bright green
-      '#FF0080', // Hot pink
-      '#80FF00', // Lime
-      '#0080FF', // Blue
-      '#8000FF'  // Purple
-    ];
-
-    for (const color of candidates) {
-      if (!colorSet.has(color)) {
-        return color;
+/**
+ * Helper method to render a frame to a canvas context (kept for compatibility)
+ */
+renderFrameToCanvas(frame, ctx) {
+  const width = frame.width;
+  const height = frame.height;
+  
+  // Clear canvas
+  ctx.clearRect(0, 0, width, height);
+  
+  // Render each visible layer
+  frame.layers.forEach(layer => {
+    if (!layer.visible || !layer.pixels) return;
+    
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        if (!layer.pixels[y] || !layer.pixels[y][x]) continue;
+        
+        const [r, g, b, a] = layer.pixels[y][x];
+        if (a > 0) {
+          const opacity = (a / 255) * (layer.opacity !== undefined ? layer.opacity : 1);
+          ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${opacity})`;
+          ctx.fillRect(x, y, 1, 1);
+        }
       }
     }
+  });
+}
 
-    // Generate random colors until we find one not used
-    for (let i = 0; i < 1000; i++) {
-      const r = Math.floor(Math.random() * 256);
-      const g = Math.floor(Math.random() * 256);
-      const b = Math.floor(Math.random() * 256);
-      const color = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+/**
+ * Download a blob as a file
+ */
+downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
 
-      if (!colorSet.has(color)) {
-        return color;
-      }
-    }
-
-    console.warn('Could not find unused color for transparency');
-    return '#FF00FF'; // Fallback to magenta
-  }
-
-  /**
-   * Download a blob as a file
-   */
-  downloadBlob(blob, filename) {
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  }
+/**
+ * Simple manual GIF creation (very basic implementation)
+ * This is a last resort fallback
+ */
+createManualGIF() {
+  // This would require implementing the entire GIF format specification
+  // which is quite complex. For now, we'll stick to PNG export.
+  this.uiManager.showNotification(
+    "Manual GIF creation not implemented. Use PNG frames with external tools.", 
+    "info"
+  );
+  this.exportFramesAsPNGs();
+}
+  ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
    * Export current sprite as PNG with current zoom scale

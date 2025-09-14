@@ -27,8 +27,14 @@ body {
     padding: 12px 20px;
     display: flex;
     justify-content: space-between;
+    gap: 40px;
     align-items: center;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    overflow-x: auto;
+    overflow-y: hidden;
+}
+.header::-webkit-scrollbar-track {
+    background: #2d2d2d;
 }
 
 .header-left, .header-center, .header-right {
@@ -161,10 +167,13 @@ body {
 
 /* Toolbar Groups */
 .toolbar-group {
-    display: flex;
-    gap: 5px;
-    align-items: center;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  min-width: 0;
 }
+
 
 .tool-btn {
     width: 40px;
@@ -196,9 +205,10 @@ body {
 
 /* Main Container */
 .main-container {
-    display: flex;
-    flex: 1;
-    overflow: hidden;
+  display: flex;
+  flex: 1;
+  overflow: hidden; /* Prevent any overflow from affecting layout */
+  min-height: 0; /* Allow flex items to shrink */
 }
 
 /* Adjust main container for new sidebar */

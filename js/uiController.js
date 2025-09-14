@@ -2273,6 +2273,11 @@ class UIController {
         label: "Duplicate",
         icon: "fas fa-copy",
         action: () => {
+          // Save current layer state before duplicating
+          if (this.editor.layerManager && this.editor.currentSprite === sprite) {
+            this.editor.saveLayersToSprite();
+          }
+
           this.editor.duplicateSprite(sprite);
           this.hideContextMenu();
         },
@@ -2652,7 +2657,10 @@ class UIController {
     );
   }
   createSpriteFromImageData(imageData, width, height) {
+    // Create new sprite with animation support
     const sprite = this.editor.createNewSprite(width, height);
+
+    // Convert ImageData to pixel array format
     const pixels = [];
 
     // Initialize pixel array
@@ -2661,7 +2669,7 @@ class UIController {
       for (let x = 0; x < width; x++) {
         const index = (y * width + x) * 4;
         pixels[y][x] = [
-          imageData.data[index], // R
+          imageData.data[index],     // R
           imageData.data[index + 1], // G
           imageData.data[index + 2], // B
           imageData.data[index + 3], // A
@@ -2669,8 +2677,146 @@ class UIController {
       }
     }
 
-    sprite.setPixelArray(pixels);
+    // Handle both legacy and animation-enabled sprites
+    if (sprite.frames && sprite.frames.length > 0) {
+      // Animation-enabled sprite - set pixels on the first frame's first layer
+      const firstFrame = sprite.frames[0];
+      if (firstFrame.layers && firstFrame.layers.length > 0) {
+        firstFrame.layers[0].pixels = pixels;
+      } else {
+        // Fallback: create default layer structure
+        firstFrame.layers = [{
+          name: 'Background',
+          visible: true,
+          opacity: 1,
+          pixels: pixels
+        }];
+      }
+    } else {
+      // Legacy sprite - use setPixelArray method
+      sprite.setPixelArray(pixels);
+    }
+
+    // Update layer manager if it exists
+    if (this.editor.layerManager) {
+      this.editor.layerManager.fromSprite(sprite);
+    }
+
+    // Force UI update
     this.editor.updateUI();
+
+    // Force canvas render
+    if (this.editor.canvasManager) {
+      this.editor.canvasManager.render();
+    }
+  }
+
+  createSpriteFromImageDataRobust(imageData, width, height, spriteName = null) {
+    const name = spriteName || `Imported ${width}x${height}`;
+
+    // Convert ImageData to pixel array
+    const pixels = this.imageDataToPixelArray(imageData, width, height);
+
+    // Create sprite using editor's method
+    const sprite = this.editor.createNewSprite(width, height, name);
+
+    // Apply pixels based on sprite structure
+    this.applyPixelsToSprite(sprite, pixels);
+
+    // Ensure proper initialization
+    this.initializeSpriteAfterImport(sprite);
+
+    return sprite;
+  }
+
+  // Helper method to convert ImageData to 2D pixel array
+  imageDataToPixelArray(imageData, width, height) {
+    const pixels = [];
+
+    for (let y = 0; y < height; y++) {
+      pixels[y] = [];
+      for (let x = 0; x < width; x++) {
+        const index = (y * width + x) * 4;
+        pixels[y][x] = [
+          imageData.data[index],     // R
+          imageData.data[index + 1], // G  
+          imageData.data[index + 2], // B
+          imageData.data[index + 3], // A
+        ];
+      }
+    }
+
+    return pixels;
+  }
+
+  // Helper method to apply pixels to sprite regardless of structure
+  applyPixelsToSprite(sprite, pixels) {
+    if (sprite.frames && Array.isArray(sprite.frames) && sprite.frames.length > 0) {
+      // Animation-enabled sprite
+      const firstFrame = sprite.frames[0];
+
+      if (!firstFrame.layers || !Array.isArray(firstFrame.layers)) {
+        // Initialize layers array if it doesn't exist
+        firstFrame.layers = [];
+      }
+
+      if (firstFrame.layers.length === 0) {
+        // Create default layer
+        firstFrame.layers.push({
+          name: 'Background',
+          visible: true,
+          opacity: 1,
+          pixels: pixels
+        });
+      } else {
+        // Use first existing layer
+        firstFrame.layers[0].pixels = pixels;
+      }
+
+      // Ensure frame dimensions are correct
+      firstFrame.width = sprite.width;
+      firstFrame.height = sprite.height;
+
+    } else if (typeof sprite.setPixelArray === 'function') {
+      // Legacy sprite with setPixelArray method
+      sprite.setPixelArray(pixels);
+
+    } else {
+      // Direct pixel assignment fallback
+      sprite.pixels = pixels;
+    }
+  }
+
+  // Helper method to ensure sprite is properly initialized after import
+  initializeSpriteAfterImport(sprite) {
+    // Update layer manager if it exists
+    if (this.editor.layerManager && sprite) {
+      try {
+        this.editor.layerManager.fromSprite(sprite);
+      } catch (error) {
+        console.warn('Failed to sync with layer manager:', error);
+      }
+    }
+
+    // Update animation manager if it exists
+    if (this.editor.animationManager && sprite.frames) {
+      try {
+        this.editor.animationManager.initializeFromSprite(sprite);
+      } catch (error) {
+        console.warn('Failed to sync with animation manager:', error);
+      }
+    }
+
+    // Force UI updates
+    this.editor.updateUI();
+
+    // Force canvas render
+    if (this.editor.canvasManager) {
+      this.editor.canvasManager.render();
+    }
+
+    // Update frames list
+    this.updateFramesList();
   }
 
   // Show rename dialog
