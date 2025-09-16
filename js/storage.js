@@ -209,7 +209,26 @@ class StorageManager {
       sprite.initializeFrames();
     }
 
-    let framesData = sprite.frames;
+    // Get frames data directly from sprite
+    let framesData = sprite.frames.map(frame => ({
+      id: frame.id || Date.now() + Math.random(),
+      name: frame.name || 'Frame',
+      width: frame.width || sprite.width,
+      height: frame.height || sprite.height,
+      activeLayerIndex: frame.activeLayerIndex || 0,
+      layers: frame.layers.map(layer => ({
+        id: layer.id || Date.now() + Math.random(),
+        name: layer.name,
+        visible: layer.visible !== false,
+        opacity: typeof layer.opacity === 'number' ? layer.opacity : 1,
+        pixels: Array.isArray(layer.pixels) ?
+          layer.pixels.map(row => row.map(pixel => [...pixel])) :
+          this.createEmptyPixelArray(frame.width || sprite.width, frame.height || sprite.height),
+        locked: layer.locked || false,
+        blendMode: layer.blendMode || 'normal'
+      }))
+    }));
+
     let compressed = false;
 
     // Optionally compress frame layers if large enough
@@ -235,7 +254,7 @@ class StorageManager {
       name: sprite.name,
       width: sprite.width,
       height: sprite.height,
-      frames: framesData, // Save frames instead of just layers
+      frames: framesData,
       layers: sprite.getLayersData(), // Keep backward compatibility
       createdAt: sprite.createdAt,
       modifiedAt: sprite.modifiedAt,

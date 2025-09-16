@@ -2116,7 +2116,8 @@ class UIController {
     const height = parseInt(heightInput.value);
 
     if (width > 0 && height > 0 && width <= 256 && height <= 256) {
-      this.editor.resizeCanvas(width, height);
+      // Use nearest neighbor scaling instead of cropping
+      this.editor.resizeCanvasWithScaling(width, height, true);
       this.hideResizeModal();
     } else {
       this.showNotification(

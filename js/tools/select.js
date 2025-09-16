@@ -318,7 +318,7 @@ class SelectTool {
 
         // Show handles for new selection
         this.editor.canvasManager.renderSelectionBox(this.selection);
-        
+
         // CRITICAL FIX: Update settings UI immediately after selection is created
         this.updateSettingsUI();
       }
@@ -666,14 +666,14 @@ class SelectTool {
 
     // Use the editor's cropToSelection method
     const success = this.editor.cropToSelection(this.selection);
-    
+
     if (success) {
       // Clear selection after successful crop
       this.clearSelection();
       this.updateSettingsUI();
       return true;
     }
-    
+
     return false;
   }
 
@@ -722,57 +722,49 @@ class SelectTool {
     const isLayerLocked = activeLayer?.locked || false;
 
     return `
-          ${
-            isLayerLocked
-              ? `<div class="setting-group">
+          ${isLayerLocked
+        ? `<div class="setting-group">
                   <div class="warning-message">
                       <i class="fas fa-lock"></i> Layer locked
                   </div>
                </div>`
-              : ""
-          }
+        : ""
+      }
           
           <div class="setting-group">
               <label>
-                  <input type="checkbox" id="rigid-scaling-cb" ${
-                    this.rigidScaling ? "checked" : ""
-                  }>
+                  <input type="checkbox" id="rigid-scaling-cb" ${this.rigidScaling ? "checked" : ""
+      }>
                   Rigid Scaling
               </label>
           </div>
           
           <div class="setting-group">
-              <button class="btn btn-secondary btn-sm" id="copy-btn" ${
-                !hasSelection ? "disabled" : ""
-              }>
+              <button class="btn btn-secondary btn-sm" id="copy-btn" ${!hasSelection ? "disabled" : ""
+      }>
                   <i class="fas fa-copy"></i>
               </button>
-              <button class="btn btn-secondary btn-sm" id="cut-btn" ${
-                !hasSelection || isLayerLocked ? "disabled" : ""
-              }>
+              <button class="btn btn-secondary btn-sm" id="cut-btn" ${!hasSelection || isLayerLocked ? "disabled" : ""
+      }>
                   <i class="fas fa-cut"></i>
               </button>
-              <button class="btn btn-secondary btn-sm" id="paste-btn" ${
-                !hasClipboard || isLayerLocked ? "disabled" : ""
-              }>
+              <button class="btn btn-secondary btn-sm" id="paste-btn" ${!hasClipboard || isLayerLocked ? "disabled" : ""
+      }>
                   <i class="fas fa-paste"></i>
               </button>
-              <button class="btn btn-secondary btn-sm" id="delete-btn" ${
-                !hasSelection || isLayerLocked ? "disabled" : ""
-              }>
+              <button class="btn btn-secondary btn-sm" id="delete-btn" ${!hasSelection || isLayerLocked ? "disabled" : ""
+      }>
                   <i class="fas fa-trash"></i>
               </button>
-              <button class="btn btn-secondary btn-sm" id="clear-selection-btn" ${
-                !hasSelection ? "disabled" : ""
-              }>
+              <button class="btn btn-secondary btn-sm" id="clear-selection-btn" ${!hasSelection ? "disabled" : ""
+      }>
                   <i class="fas fa-times"></i>
               </button>
           </div>
           
           <div class="setting-group">
-              <button class="btn btn-primary btn-sm" id="crop-btn" ${
-                !hasSelection ? "disabled" : ""
-              }>
+              <button class="btn btn-primary btn-sm" id="crop-btn" ${!hasSelection ? "disabled" : ""
+      }>
                   <i class="fas fa-crop"></i> Crop to Selection
               </button>
           </div>

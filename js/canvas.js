@@ -23,15 +23,16 @@ class CanvasManager {
     this.renderScaleHandles(selection);
   }
   // New method: Render scale handles at selection corners
+  // New method: Render scale handles at selection corners
   renderScaleHandles(selection) {
     if (!selection) return;
 
     const handleSize = 8; // Size of the handle squares in screen pixels
     const handles = [
-      { x: selection.left, y: selection.top, type: "nw" }, // Northwest
-      { x: selection.right, y: selection.top, type: "ne" }, // Northeast
-      { x: selection.left, y: selection.bottom, type: "sw" }, // Southwest
-      { x: selection.right, y: selection.bottom, type: "se" }, // Southeast
+      { x: selection.left, y: selection.top, type: "nw" }, // Topleft
+      { x: selection.right + 1, y: selection.top, type: "ne" }, // Topright
+      { x: selection.left, y: selection.bottom + 1, type: "sw" }, // bottom left
+      { x: selection.right + 1, y: selection.bottom + 1, type: "se" }, // bottom right
     ];
 
     this.overlayCtx.setLineDash([]); // Reset line dash

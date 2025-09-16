@@ -541,7 +541,7 @@ class LayerManager {
   }
 
   // Resize all layers
-  resize(newWidth, newHeight) {
+  resize(newWidth, newHeight, useNearestNeighbor = false) {
     const oldWidth = this.width;
     const oldHeight = this.height;
 
@@ -549,20 +549,58 @@ class LayerManager {
     this.height = newHeight;
 
     this.layers.forEach((layer) => {
-      const newPixels = this.createEmptyPixelArray();
+      if (useNearestNeighbor && oldWidth > 0 && oldHeight > 0) {
+        // Nearest neighbor scaling
+        const newPixels = [];
 
-      // Copy existing pixels
-      for (let y = 0; y < Math.min(oldHeight, newHeight); y++) {
-        for (let x = 0; x < Math.min(oldWidth, newWidth); x++) {
-          newPixels[y][x] = [...layer.pixels[y][x]];
+        for (let y = 0; y < newHeight; y++) {
+          newPixels[y] = [];
+          for (let x = 0; x < newWidth; x++) {
+            // Map new coordinates to old coordinates using nearest neighbor
+            const srcX = Math.floor((x / newWidth) * oldWidth);
+            const srcY = Math.floor((y / newHeight) * oldHeight);
+
+            // Clamp to bounds
+            const clampedSrcX = Math.min(Math.max(srcX, 0), oldWidth - 1);
+            const clampedSrcY = Math.min(Math.max(srcY, 0), oldHeight - 1);
+
+            // Copy pixel from source
+            if (clampedSrcY < layer.pixels.length &&
+              clampedSrcX < layer.pixels[clampedSrcY].length) {
+              newPixels[y][x] = [...layer.pixels[clampedSrcY][clampedSrcX]];
+            } else {
+              newPixels[y][x] = [0, 0, 0, 0]; // Transparent fallback
+            }
+          }
         }
-      }
 
-      layer.pixels = newPixels;
+        layer.pixels = newPixels;
+      } else {
+        // Original crop/extend behavior
+        const newPixels = this.createEmptyPixelArray();
+
+        // Copy existing pixels
+        for (let y = 0; y < Math.min(oldHeight, newHeight); y++) {
+          for (let x = 0; x < Math.min(oldWidth, newWidth); x++) {
+            if (y < layer.pixels.length && x < layer.pixels[y].length) {
+              newPixels[y][x] = [...layer.pixels[y][x]];
+            }
+          }
+        }
+
+        layer.pixels = newPixels;
+      }
     });
 
+    // Mark composite as dirty
+    this.compositeDirty = true;
+    this.compositeCache = null;
+
+    // Save to history after resize
+    this.saveToHistory();
+
     this.notifyChange();
-  }
+}
 
   // Clear a layer
   clearLayer(index = null) {
@@ -628,17 +666,17 @@ class LayerManager {
               Math.round(
                 (upperPixel[0] * upperAlpha +
                   lowerPixel[0] * lowerAlpha * (1 - upperAlpha)) /
-                  combinedAlpha
+                combinedAlpha
               ),
               Math.round(
                 (upperPixel[1] * upperAlpha +
                   lowerPixel[1] * lowerAlpha * (1 - upperAlpha)) /
-                  combinedAlpha
+                combinedAlpha
               ),
               Math.round(
                 (upperPixel[2] * upperAlpha +
                   lowerPixel[2] * lowerAlpha * (1 - upperAlpha)) /
-                  combinedAlpha
+                combinedAlpha
               ),
               Math.round(combinedAlpha * 255),
             ];
