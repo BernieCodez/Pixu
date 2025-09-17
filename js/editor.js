@@ -345,14 +345,26 @@ class PixelEditor {
   }
 
   // Duplicate sprite
+  // Replace the duplicateSprite method in PixelEditor class
+
+  // Duplicate sprite - Enhanced to handle frames and layers
   duplicateSprite(sprite) {
+    // Save current frame state before duplicating
+    if (this.currentSprite === sprite && this.animationManager) {
+      this.animationManager.saveLayerManagerToCurrentFrame();
+    }
+
     const duplicate = sprite.clone();
     this.sprites.push(duplicate);
     this.setCurrentSprite(duplicate);
     this.saveSprites();
 
     this.uiManager.showNotification(
-      `Duplicated sprite: ${duplicate.name}`,
+      `Duplicated sprite: ${
+        duplicate.name
+      } (${duplicate.getFrameCount()} frames, ${
+        duplicate.layers.length
+      } layers)`,
       "success"
     );
     return duplicate;

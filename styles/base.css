@@ -282,6 +282,14 @@ body {
     background: #555;
     color: #fff;
 }
+.canvas-data{
+    z-index: 10000;
+    position:absolute;
+    bottom: 20px;
+    left: 20px;
+    color: #00d4ff;
+    transition: all 0.2s ease;
+}
 /* Scrollbars */
 ::-webkit-scrollbar {
     width: 8px;

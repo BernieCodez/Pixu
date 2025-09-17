@@ -982,6 +982,8 @@ class UIController {
 
       framesList.appendChild(frameItem);
     });
+    this.updateFrameDisplay();
+
   }
 
   showFrameContextMenu(event, frame, frameIndex) {
@@ -3400,6 +3402,13 @@ class UIController {
       this.showNotification(`Quick export failed: ${error.message}`, "error");
     }
   }
+
+  // Update frame display when frame changes
+updateFrameDisplay() {
+  if (this.editor && this.editor.canvasManager) {
+    this.editor.canvasManager.updateFrameDisplay();
+  }
+}
 }
 
 // Make UIController globally available

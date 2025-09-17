@@ -101,8 +101,9 @@ class CanvasManager {
       for (let x = 0; x < clipboard.width; x++) {
         const pixel = clipboard.pixels[y][x];
         if (pixel[3] > 0) {
-          this.overlayCtx.fillStyle = `rgba(${pixel[0]},${pixel[1]},${pixel[2]
-            },${pixel[3] / 255})`;
+          this.overlayCtx.fillStyle = `rgba(${pixel[0]},${pixel[1]},${
+            pixel[2]
+          },${pixel[3] / 255})`;
           this.overlayCtx.fillRect(
             (left + x) * this.zoomLevel,
             (top + y) * this.zoomLevel,
@@ -190,8 +191,9 @@ class CanvasManager {
           const shadowR = Math.max(0, pixel[0] * 0.3);
           const shadowG = Math.max(0, pixel[1] * 0.3);
           const shadowB = Math.max(0, pixel[2] * 0.3);
-          this.overlayCtx.fillStyle = `rgba(${shadowR},${shadowG},${shadowB},${pixel[3] / 255
-            })`;
+          this.overlayCtx.fillStyle = `rgba(${shadowR},${shadowG},${shadowB},${
+            pixel[3] / 255
+          })`;
           // Offset shadow slightly down and right
           this.overlayCtx.fillRect(
             (left + x) * this.zoomLevel + 2,
@@ -209,8 +211,9 @@ class CanvasManager {
       for (let x = 0; x < clipboard.width; x++) {
         const pixel = clipboard.pixels[y][x];
         if (pixel[3] > 0) {
-          this.overlayCtx.fillStyle = `rgba(${pixel[0]},${pixel[1]},${pixel[2]
-            },${pixel[3] / 255})`;
+          this.overlayCtx.fillStyle = `rgba(${pixel[0]},${pixel[1]},${
+            pixel[2]
+          },${pixel[3] / 255})`;
           this.overlayCtx.fillRect(
             (left + x) * this.zoomLevel,
             (top + y) * this.zoomLevel,
@@ -262,7 +265,6 @@ class CanvasManager {
     this.panStartOffset = { x: 0, y: 0 };
     this.panOffset = { x: 0, y: 0 }; // Make sure this is explicitly set to {x:0, y:0}
 
-
     // Selection state
     this.selection = {
       active: false,
@@ -278,17 +280,17 @@ class CanvasManager {
   }
 
   /**
- * Start panning
- */
+   * Start panning
+   */
   startPan(screenX, screenY) {
     this.isPanning = true;
     this.panStart = { x: screenX, y: screenY };
     // Capture the current pan offset at the exact moment panning starts
     this.panStartOffset = {
       x: this.panOffset.x || 0,
-      y: this.panOffset.y || 0
+      y: this.panOffset.y || 0,
     };
-    this.mainCanvas.style.cursor = 'grabbing';
+    this.mainCanvas.style.cursor = "grabbing";
   }
 
   updatePan(screenX, screenY) {
@@ -301,11 +303,11 @@ class CanvasManager {
     // Apply the delta to the starting offset
     this.panOffset = {
       x: this.panStartOffset.x + deltaX,
-      y: this.panStartOffset.y + deltaY
+      y: this.panStartOffset.y + deltaY,
     };
 
-    // Apply transform to both canvases
-    const transform = `translate(${this.panOffset.x}px, ${this.panOffset.y}px)`;
+    // Compose transform properly - preserve existing transforms and add pan
+    const transform = `translate(-50%, -50%) translate(${this.panOffset.x}px, ${this.panOffset.y}px)`;
     this.mainCanvas.style.transform = transform;
     this.overlayCanvas.style.transform = transform;
   }
@@ -314,7 +316,7 @@ class CanvasManager {
    */
   endPan() {
     this.isPanning = false;
-    this.mainCanvas.style.cursor = '';
+    this.mainCanvas.style.cursor = "";
   }
 
   /**
@@ -325,10 +327,10 @@ class CanvasManager {
     this.panStartOffset = { x: 0, y: 0 };
     this.isPanning = false;
 
-    // Clear the transform completely - don't set it to translate(0px, 0px)
-    this.mainCanvas.style.transform = '';
-    this.overlayCanvas.style.transform = '';
-    this.mainCanvas.style.cursor = '';
+    // Reset to just the centering transform, removing pan
+    this.mainCanvas.style.transform = "translate(-50%, -50%)";
+    this.overlayCanvas.style.transform = "translate(-50%, -50%)";
+    this.mainCanvas.style.cursor = "";
   }
 
   // Setup canvas properties
@@ -378,6 +380,9 @@ class CanvasManager {
       this.layerManager = window.editor.layerManager;
     }
 
+    // Reset pan when sprite changes to avoid coordinate issues
+    this.resetPan();
+
     // Always update canvas size to match sprite dimensions
     this.mainCanvas.width = sprite.width * this.zoomLevel;
     this.mainCanvas.height = sprite.height * this.zoomLevel;
@@ -389,6 +394,60 @@ class CanvasManager {
     this.overlayCanvas.style.height = `${sprite.height * this.zoomLevel}px`;
 
     this.render();
+    this.updateCanvasData();
+  }
+
+  /**
+   * Debug function to continuously monitor pan state
+   */
+  startPanDebug() {
+    if (this.debugInterval) {
+      clearInterval(this.debugInterval);
+    }
+
+    this.debugInterval = setInterval(() => {
+      const mainRect = this.mainCanvas.getBoundingClientRect();
+      const overlayRect = this.overlayCanvas.getBoundingClientRect();
+
+      console.log("Pan Debug:", {
+        panOffset: this.panOffset,
+        panStartOffset: this.panStartOffset,
+        isPanning: this.isPanning,
+        mainCanvasRect: {
+          left: mainRect.left,
+          top: mainRect.top,
+          width: mainRect.width,
+          height: mainRect.height,
+          transform: this.mainCanvas.style.transform,
+        },
+        overlayCanvasRect: {
+          left: overlayRect.left,
+          top: overlayRect.top,
+          width: overlayRect.width,
+          height: overlayRect.height,
+          transform: this.overlayCanvas.style.transform,
+        },
+        // Show the difference from expected center position
+        expectedCenter: {
+          x: window.innerWidth / 2,
+          y: window.innerHeight / 2,
+        },
+        actualCenter: {
+          x: mainRect.left + mainRect.width / 2,
+          y: mainRect.top + mainRect.height / 2,
+        },
+      });
+    }, 100);
+  }
+
+  /**
+   * Stop pan debugging
+   */
+  stopPanDebug() {
+    if (this.debugInterval) {
+      clearInterval(this.debugInterval);
+      this.debugInterval = null;
+    }
   }
 
   /**
@@ -651,9 +710,12 @@ class CanvasManager {
   /**
    * Convert screen coordinates to sprite coordinates
    */
+  /**
+   * Convert screen coordinates to sprite coordinates
+   */
   screenToSprite(screenX, screenY) {
     const rect = this.mainCanvas.getBoundingClientRect();
-    // Don't account for pan offset here - the transform is already applied to the canvas
+    // Account for pan offset when converting coordinates
     const canvasX = screenX - rect.left;
     const canvasY = screenY - rect.top;
 
@@ -680,6 +742,7 @@ class CanvasManager {
   setZoom(level) {
     this.zoomLevel = Math.max(1, Math.min(64, level));
     this.updateCanvasSize();
+    this.updateZoomDisplay(); // Add this line
   }
 
   /**
@@ -882,7 +945,8 @@ class CanvasManager {
       const pos = this.screenToSprite(e.clientX, e.clientY);
 
       // Handle middle mouse button for panning
-      if (e.button === 1) { // Middle mouse button
+      if (e.button === 1) {
+        // Middle mouse button
         e.preventDefault();
         this.startPan(e.clientX, e.clientY);
         return;
@@ -903,6 +967,10 @@ class CanvasManager {
       }
 
       const pos = this.screenToSprite(e.clientX, e.clientY);
+
+      // Update mouse coordinates display
+      this.updateMouseCoordinates(pos.x, pos.y); // Add this line
+
       if (window.editor && window.editor.currentTool) {
         if (this.isDrawing) {
           window.editor.currentTool.onMouseDrag(
@@ -947,7 +1015,6 @@ class CanvasManager {
 
     // Mouse events on main canvas
 
-
     this.mainCanvas.addEventListener("mouseup", (e) => {
       // Handle middle mouse button release
       if (e.button === 1) {
@@ -963,7 +1030,6 @@ class CanvasManager {
       }
     });
 
-
     this.mainCanvas.addEventListener("mouseleave", (e) => {
       this.isDrawing = false;
       this.endPan(); // Stop panning if mouse leaves canvas
@@ -978,7 +1044,6 @@ class CanvasManager {
         this.renderSelection();
       } else {
         this.clearOverlay();
-
       }
     });
 
@@ -1037,8 +1102,8 @@ class CanvasManager {
    * Create thumbnail canvas for sprite
    */
   createThumbnail(sprite, size = 64) {
-    const thumbnailCanvas = document.createElement('canvas');
-    const thumbnailCtx = thumbnailCanvas.getContext('2d');
+    const thumbnailCanvas = document.createElement("canvas");
+    const thumbnailCtx = thumbnailCanvas.getContext("2d");
     thumbnailCanvas.width = size;
     thumbnailCanvas.height = size;
 
@@ -1068,11 +1133,15 @@ class CanvasManager {
       frameData = {
         width: sprite.width,
         height: sprite.height,
-        layers: [{
-          visible: true,
-          opacity: 1,
-          pixels: sprite.getPixelArray ? sprite.getPixelArray() : this.getSpritePixelArray(sprite)
-        }]
+        layers: [
+          {
+            visible: true,
+            opacity: 1,
+            pixels: sprite.getPixelArray
+              ? sprite.getPixelArray()
+              : this.getSpritePixelArray(sprite),
+          },
+        ],
       };
     }
 
@@ -1084,7 +1153,14 @@ class CanvasManager {
     const offsetY = (size - scaledHeight) / 2;
 
     // Render checkerboard background for transparency
-    this.renderThumbnailBackground(ctx, offsetX, offsetY, scaledWidth, scaledHeight, scale);
+    this.renderThumbnailBackground(
+      ctx,
+      offsetX,
+      offsetY,
+      scaledWidth,
+      scaledHeight,
+      scale
+    );
 
     // Render all visible layers for this frame
     for (const layer of frameData.layers) {
@@ -1118,7 +1194,6 @@ class CanvasManager {
     }
   }
 
-
   getSpritePixelArray(sprite) {
     const pixels = [];
     for (let y = 0; y < sprite.height; y++) {
@@ -1148,8 +1223,13 @@ class CanvasManager {
         animationInterval = setInterval(() => {
           currentFrame = (currentFrame + 1) % sprite.frames.length;
           // Re-render with new frame
-          const ctx = this.getContext('2d');
-          window.editor.canvasManager.renderThumbnailFrame(ctx, sprite, currentFrame, size);
+          const ctx = this.getContext("2d");
+          window.editor.canvasManager.renderThumbnailFrame(
+            ctx,
+            sprite,
+            currentFrame,
+            size
+          );
         }, frameTime);
 
         this._customInterval = animationInterval;
@@ -1161,7 +1241,7 @@ class CanvasManager {
           this._customInterval = null;
         }
         // Reset to first frame
-        const ctx = this.getContext('2d');
+        const ctx = this.getContext("2d");
         window.editor.canvasManager.renderThumbnailFrame(ctx, sprite, 0, size);
       };
     }
@@ -1201,16 +1281,15 @@ class CanvasManager {
     return thumbnails; // Returns array that will be populated asynchronously
   }
 
-
   renderThumbnailBackground(ctx, offsetX, offsetY, width, height, scale) {
     const checkerSize = Math.max(2, scale);
 
     // Fill with white background first
-    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = "#ffffff";
     ctx.fillRect(offsetX, offsetY, width, height);
 
     // Add checkerboard pattern
-    ctx.fillStyle = '#e0e0e0';
+    ctx.fillStyle = "#e0e0e0";
     const checkersX = Math.ceil(width / checkerSize);
     const checkersY = Math.ceil(height / checkerSize);
 
@@ -1237,7 +1316,7 @@ class CanvasManager {
     let isAnimating = false;
 
     // Mouse enter - start animation
-    canvas.addEventListener('mouseenter', () => {
+    canvas.addEventListener("mouseenter", () => {
       if (isAnimating) return;
 
       isAnimating = true;
@@ -1258,7 +1337,7 @@ class CanvasManager {
     });
 
     // Mouse leave - stop animation and return to first frame
-    canvas.addEventListener('mouseleave', () => {
+    canvas.addEventListener("mouseleave", () => {
       if (animationInterval) {
         clearInterval(animationInterval);
         animationInterval = null;
@@ -1284,11 +1363,11 @@ class CanvasManager {
     const y = size - iconSize - margin;
 
     // Semi-transparent background
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+    ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
     ctx.fillRect(x - 1, y - 1, iconSize + 2, iconSize + 2);
 
     // White play triangle
-    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = "#ffffff";
     ctx.beginPath();
     ctx.moveTo(x + 1, y + 1);
     ctx.lineTo(x + iconSize - 1, y + iconSize / 2);
@@ -1296,7 +1375,6 @@ class CanvasManager {
     ctx.closePath();
     ctx.fill();
   }
-
 
   /**
    * Render hover outline for pixel
@@ -1363,7 +1441,7 @@ class CanvasManager {
           break;
         case "brightness":
           color = "#ffd900ff";
-          break
+          break;
         default:
           color = "#ff9800";
       }
@@ -1419,5 +1497,67 @@ class CanvasManager {
     }
 
     this.overlayCtx.restore();
+  }
+  // Update canvas data display
+  updateCanvasData() {
+    this.updateZoomDisplay();
+    this.updateFrameDisplay();
+    this.updateCanvasDimensions();
+  }
+
+  // Update zoom display
+  updateZoomDisplay() {
+    const zoomElement = document.getElementById("current-zoom");
+    if (zoomElement) {
+      zoomElement.textContent = `Zoom: ${this.zoomLevel}x`;
+    }
+  }
+
+  // Update frame display
+  updateFrameDisplay() {
+    const frameElement = document.getElementById("current-frame");
+    if (frameElement && this.currentSprite) {
+      let currentFrame = 1;
+      let totalFrames = 1;
+
+      if (this.currentSprite.frames && this.currentSprite.frames.length > 0) {
+        totalFrames = this.currentSprite.frames.length;
+
+        // Get current frame from animation manager if available
+        if (window.editor && window.editor.animationManager) {
+          currentFrame = window.editor.animationManager.currentFrameIndex + 1;
+        }
+      }
+
+      frameElement.textContent = `Frame: ${currentFrame}/${totalFrames}`;
+    }
+  }
+
+  // Update canvas dimensions display
+  updateCanvasDimensions() {
+    const dimensionsElement = document.getElementById("canvas-dimensions");
+    if (dimensionsElement && this.currentSprite) {
+      dimensionsElement.textContent = `Canvas: ${this.currentSprite.width} x ${this.currentSprite.height}`;
+    }
+  }
+
+  // Update mouse coordinates display
+  updateMouseCoordinates(x, y) {
+    const coordsElement = document.getElementById("mouse-coordinates");
+    if (coordsElement) {
+      if (
+        x !== null &&
+        y !== null &&
+        this.currentSprite &&
+        x >= 0 &&
+        x < this.currentSprite.width &&
+        y >= 0 &&
+        y < this.currentSprite.height
+      ) {
+        coordsElement.textContent = `Cursor X & Y: (${x}, ${y})`;
+      } else {
+        coordsElement.textContent = `Cursor X & Y: (--, --)`;
+      }
+    }
   }
 }
