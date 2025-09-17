@@ -128,6 +128,11 @@ body {
     gap: 6px;
     transition: all 0.2s ease;
     text-decoration: none;
+    outline: none;
+    background: #efefef;
+}
+.btn:hover{
+    background: white;
 }
 
 .btn-sm {
@@ -256,6 +261,7 @@ body {
 
 /* Generate AI Button */
 .generate-ai-button{
+    z-index: 10000;
     position:absolute;
     bottom: 20px;
     right: 20px;
@@ -270,9 +276,12 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: background 0.2s;
+    transition: all 0.2s ease;
 }
-
+.generate-ai-button:hover {
+    background: #555;
+    color: #fff;
+}
 /* Scrollbars */
 ::-webkit-scrollbar {
     width: 8px;

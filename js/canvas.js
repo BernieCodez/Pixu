@@ -143,6 +143,7 @@ class CanvasManager {
   }
 
   // New method: Check if position is over a scale handle
+  // New method: Check if position is over a scale handle
   isOverScaleHandle(x, y, selection) {
     if (!selection) return null;
 
@@ -151,9 +152,9 @@ class CanvasManager {
 
     const handles = [
       { x: selection.left, y: selection.top, type: "nw" },
-      { x: selection.right, y: selection.top, type: "ne" },
-      { x: selection.left, y: selection.bottom, type: "sw" },
-      { x: selection.right, y: selection.bottom, type: "se" },
+      { x: selection.right + 1, y: selection.top, type: "ne" }, // Fixed: added + 1
+      { x: selection.left, y: selection.bottom + 1, type: "sw" }, // Fixed: added + 1
+      { x: selection.right + 1, y: selection.bottom + 1, type: "se" }, // Fixed: added + 1
     ];
 
     for (const handle of handles) {
@@ -255,6 +256,13 @@ class CanvasManager {
     this.isDrawing = false;
     this.lastPos = { x: 0, y: 0 };
 
+    // Add panning state
+    this.isPanning = false;
+    this.panStart = { x: 0, y: 0 };
+    this.panStartOffset = { x: 0, y: 0 };
+    this.panOffset = { x: 0, y: 0 }; // Make sure this is explicitly set to {x:0, y:0}
+
+
     // Selection state
     this.selection = {
       active: false,
@@ -267,6 +275,60 @@ class CanvasManager {
     this.hoveredPixel = null;
     this.setupCanvas();
     this.setupEventListeners();
+  }
+
+  /**
+ * Start panning
+ */
+  startPan(screenX, screenY) {
+    this.isPanning = true;
+    this.panStart = { x: screenX, y: screenY };
+    // Capture the current pan offset at the exact moment panning starts
+    this.panStartOffset = {
+      x: this.panOffset.x || 0,
+      y: this.panOffset.y || 0
+    };
+    this.mainCanvas.style.cursor = 'grabbing';
+  }
+
+  updatePan(screenX, screenY) {
+    if (!this.isPanning) return;
+
+    // Calculate the delta movement
+    const deltaX = screenX - this.panStart.x;
+    const deltaY = screenY - this.panStart.y;
+
+    // Apply the delta to the starting offset
+    this.panOffset = {
+      x: this.panStartOffset.x + deltaX,
+      y: this.panStartOffset.y + deltaY
+    };
+
+    // Apply transform to both canvases
+    const transform = `translate(${this.panOffset.x}px, ${this.panOffset.y}px)`;
+    this.mainCanvas.style.transform = transform;
+    this.overlayCanvas.style.transform = transform;
+  }
+  /**
+   * End panning
+   */
+  endPan() {
+    this.isPanning = false;
+    this.mainCanvas.style.cursor = '';
+  }
+
+  /**
+   * Reset pan to center
+   */
+  resetPan() {
+    this.panOffset = { x: 0, y: 0 };
+    this.panStartOffset = { x: 0, y: 0 };
+    this.isPanning = false;
+
+    // Clear the transform completely - don't set it to translate(0px, 0px)
+    this.mainCanvas.style.transform = '';
+    this.overlayCanvas.style.transform = '';
+    this.mainCanvas.style.cursor = '';
   }
 
   // Setup canvas properties
@@ -591,6 +653,7 @@ class CanvasManager {
    */
   screenToSprite(screenX, screenY) {
     const rect = this.mainCanvas.getBoundingClientRect();
+    // Don't account for pan offset here - the transform is already applied to the canvas
     const canvasX = screenX - rect.left;
     const canvasY = screenY - rect.top;
 
@@ -815,9 +878,16 @@ class CanvasManager {
    * Setup event listeners
    */
   setupEventListeners() {
-    // Mouse events on main canvas
     this.mainCanvas.addEventListener("mousedown", (e) => {
       const pos = this.screenToSprite(e.clientX, e.clientY);
+
+      // Handle middle mouse button for panning
+      if (e.button === 1) { // Middle mouse button
+        e.preventDefault();
+        this.startPan(e.clientX, e.clientY);
+        return;
+      }
+
       this.isDrawing = true;
       this.lastPos = pos;
 
@@ -825,8 +895,13 @@ class CanvasManager {
         window.editor.currentTool.onMouseDown(pos.x, pos.y, e);
       }
     });
-
     this.mainCanvas.addEventListener("mousemove", (e) => {
+      // Handle panning
+      if (this.isPanning) {
+        this.updatePan(e.clientX, e.clientY);
+        return;
+      }
+
       const pos = this.screenToSprite(e.clientX, e.clientY);
       if (window.editor && window.editor.currentTool) {
         if (this.isDrawing) {
@@ -842,7 +917,6 @@ class CanvasManager {
         }
       }
       this.lastPos = pos;
-      // Hover outline logic
       if (
         this.currentSprite &&
         pos.x >= 0 &&
@@ -871,7 +945,16 @@ class CanvasManager {
       }
     });
 
+    // Mouse events on main canvas
+
+
     this.mainCanvas.addEventListener("mouseup", (e) => {
+      // Handle middle mouse button release
+      if (e.button === 1) {
+        this.endPan();
+        return;
+      }
+
       const pos = this.screenToSprite(e.clientX, e.clientY);
       this.isDrawing = false;
 
@@ -880,8 +963,11 @@ class CanvasManager {
       }
     });
 
+
     this.mainCanvas.addEventListener("mouseleave", (e) => {
       this.isDrawing = false;
+      this.endPan(); // Stop panning if mouse leaves canvas
+
       if (window.editor && window.editor.currentTool) {
         window.editor.currentTool.onMouseLeave(e);
       }
@@ -892,6 +978,7 @@ class CanvasManager {
         this.renderSelection();
       } else {
         this.clearOverlay();
+
       }
     });
 
@@ -908,6 +995,11 @@ class CanvasManager {
         case "g":
           if (!e.ctrlKey && !e.metaKey) {
             this.toggleGrid();
+          }
+          break;
+        case "r":
+          if (!e.ctrlKey && !e.metaKey) {
+            this.resetPan(); // Reset pan with 'R' key
           }
           break;
         case "=":
@@ -1269,6 +1361,9 @@ class CanvasManager {
         case "select":
           color = "#00d4ff";
           break;
+        case "brightness":
+          color = "#ffd900ff";
+          break
         default:
           color = "#ff9800";
       }

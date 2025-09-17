@@ -39,7 +39,7 @@
   padding: 8px;
   border-radius: 4px;
   cursor: pointer;
-  transition: background 0.2s ease;
+  transition: all 0.2s ease;
   margin-bottom: 5px;
   border: 1px solid #444;
   transition: all 0.2s ease;
@@ -52,6 +52,17 @@
 .sprite-item.active {
   border-color: #00d4ff;
   background: rgba(0, 212, 255, 0.2);
+}
+
+.sprite-size {
+  font-size: 10px;
+  color: #666;
+  margin-top: 2px;
+  font-weight: 400;
+}
+
+.sprite-item:hover .sprite-size {
+  color: #888;
 }
 
 .sprite-thumbnail {
@@ -90,13 +101,20 @@
 }
 
 .sprite-name {
-  margin-top: 4px;
+  margin-top: 4px;;
+  font-size: 11px;
+  color: #ccc;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 50px;
-  /* Set your desired maximum width */
+  font-weight: 500;
 }
+
+.sprite-item:hover .sprite-name {
+  color: #fff;
+}
+
 
 /* Canvas Area */
 .canvas-area {
@@ -189,7 +207,7 @@
   justify-content: center;
   padding: 20px;
   position: relative;
-  overflow: auto;
+  overflow: hidden;
 }
 
 #main-canvas,
@@ -842,7 +860,7 @@
   user-select: none;
   flex-shrink: 0;
   /* Prevent shrinking */
-    transition: all 0.2s ease;
+  transition: all 0.2s ease;
 
 }
 
@@ -853,15 +871,10 @@
 
 }
 
-.frame-item:hover::before {
-  opacity: 1;
-}
-
 .frame-item.active {
   border-color: #00d4ff;
     background: rgba(0, 212, 255, 0.2);
     color: white;
-  transform: translateY(-1px);
 }
 
 .frame-item.active::before {

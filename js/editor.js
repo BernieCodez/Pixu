@@ -114,6 +114,7 @@ class PixelEditor {
       select: new SelectTool(this),
       eyedropper: new EyedropperTool(this),
       brightness: new BrightnessTool(this),
+      smoothsharpen: new SmoothSharpenTool(this), // Add this line
     };
 
     // Set tool colors and settings from saved preferences
@@ -232,6 +233,13 @@ class PixelEditor {
 
     if (this.tools.brightness) {
       this.tools.brightness.setIntensity(this.settings.brightnessIntensity);
+    }
+
+    // Add smooth/sharpen tool settings
+    if (this.tools.smoothsharpen) {
+      this.tools.smoothsharpen.setIntensity(this.settings.smoothSharpenIntensity || 50);
+      this.tools.smoothsharpen.setSize(this.settings.smoothSharpenSize || 3);
+      this.tools.smoothsharpen.setMode(this.settings.smoothSharpenMode || "smooth");
     }
   }
 
@@ -696,6 +704,13 @@ class PixelEditor {
 
     if (this.tools.brightness) {
       this.settings.brightnessIntensity = this.tools.brightness.intensity;
+    }
+
+    // Add smooth/sharpen tool settings
+    if (this.tools.smoothsharpen) {
+      this.settings.smoothSharpenIntensity = this.tools.smoothsharpen.intensity;
+      this.settings.smoothSharpenSize = this.tools.smoothsharpen.size;
+      this.settings.smoothSharpenMode = this.tools.smoothsharpen.mode;
     }
 
     this.settings.showGrid = this.canvasManager.showGrid;
@@ -1189,9 +1204,9 @@ class PixelEditor {
    * This should also be added to the PixelEditor class
    */
   /**
- * Simplified, direct GIF export that should actually produce a GIF file
- * Replace your existing exportAsGIF method with this
- */
+   * Simplified, direct GIF export that should actually produce a GIF file
+   * Replace your existing exportAsGIF method with this
+   */
   /**
    * Debug version of GIF export to identify the exact failure point
    */
@@ -1200,21 +1215,21 @@ class PixelEditor {
   * This method should replace the empty exportAsGIF method in your PixelEditor class
   */
   /**
- * Export animation as GIF using gif.js library
- * This method should replace the empty exportAsGIF method in your PixelEditor class
- */
+   * Export animation as GIF using gif.js library
+   * This method should replace the empty exportAsGIF method in your PixelEditor class
+   */
   /**
- * Export animation as GIF using gif.js library
- * This method should replace the empty exportAsGIF method in your PixelEditor class
- */
+   * Export animation as GIF using gif.js library
+   * This method should replace the empty exportAsGIF method in your PixelEditor class
+   */
   /**
- * Export animation as GIF - Simplified approach that actually works
- * This method should replace the empty exportAsGIF method in your PixelEditor class
- */
+   * Export animation as GIF - Simplified approach that actually works
+   * This method should replace the empty exportAsGIF method in your PixelEditor class
+   */
   /**
- * Export animation as GIF - Alternative approach without gif.js workers
- * This method should replace the empty exportAsGIF method in your PixelEditor class
- */
+   * Export animation as GIF - Alternative approach without gif.js workers
+   * This method should replace the empty exportAsGIF method in your PixelEditor class
+   */
   async exportAsGIF(frameRate = 12, scale = 1, repeat = true) {
     if (!this.currentSprite || !this.currentSprite.frames || this.currentSprite.frames.length <= 1) {
       this.uiManager.showNotification("No animation to export", "warning");
