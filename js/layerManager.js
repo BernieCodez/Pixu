@@ -565,8 +565,10 @@ class LayerManager {
             const clampedSrcY = Math.min(Math.max(srcY, 0), oldHeight - 1);
 
             // Copy pixel from source
-            if (clampedSrcY < layer.pixels.length &&
-              clampedSrcX < layer.pixels[clampedSrcY].length) {
+            if (
+              clampedSrcY < layer.pixels.length &&
+              clampedSrcX < layer.pixels[clampedSrcY].length
+            ) {
               newPixels[y][x] = [...layer.pixels[clampedSrcY][clampedSrcX]];
             } else {
               newPixels[y][x] = [0, 0, 0, 0]; // Transparent fallback
@@ -600,7 +602,7 @@ class LayerManager {
     this.saveToHistory();
 
     this.notifyChange();
-}
+  }
 
   // Clear a layer
   clearLayer(index = null) {
@@ -666,17 +668,17 @@ class LayerManager {
               Math.round(
                 (upperPixel[0] * upperAlpha +
                   lowerPixel[0] * lowerAlpha * (1 - upperAlpha)) /
-                combinedAlpha
+                  combinedAlpha
               ),
               Math.round(
                 (upperPixel[1] * upperAlpha +
                   lowerPixel[1] * lowerAlpha * (1 - upperAlpha)) /
-                combinedAlpha
+                  combinedAlpha
               ),
               Math.round(
                 (upperPixel[2] * upperAlpha +
                   lowerPixel[2] * lowerAlpha * (1 - upperAlpha)) /
-                combinedAlpha
+                  combinedAlpha
               ),
               Math.round(combinedAlpha * 255),
             ];
@@ -854,7 +856,6 @@ class LayerManager {
   }
 
   // Add to LayerManager class - load from sprite
-  // Add to LayerManager class - load from sprite
   fromSprite(sprite) {
     this.width = sprite.width;
     this.height = sprite.height;
@@ -887,6 +888,9 @@ class LayerManager {
     if (this.onChange) {
       this.onChange(this);
     }
+
+    // CRITICAL FIX: Don't save to history here - let the caller handle it
+    // This prevents saving empty state before sprite data is loaded
   }
 
   // Helper method for TypedArray conversion

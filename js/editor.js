@@ -216,6 +216,14 @@ class PixelEditor {
       this.canvasManager.render();
     }
 
+    // CRITICAL FIX: Save initial state to history after sprite is fully loaded
+    // This ensures the loaded sprite state is preserved in undo history
+    setTimeout(() => {
+      if (this.layerManager) {
+        this.layerManager.saveToHistory();
+      }
+    }, 0);
+
     this.updateUI();
   }
 
@@ -883,6 +891,10 @@ class PixelEditor {
         // Force LayerManager to update and render
         this.layerManager.compositeDirty = true;
         this.layerManager.notifyChange();
+
+        // CRITICAL FIX: Save the imported image state to LayerManager history
+        // This ensures the import is preserved as a separate undo state
+        this.layerManager.saveToHistory();
       }
     }
 
@@ -1301,17 +1313,14 @@ class PixelEditor {
         throw new Error("GIF.js library not available");
       }
 
-      // Initialize GIF encoder
-      // Initialize GIF encoder
+      // Initialize GIF encoder without workers to avoid CORS issues
       const gif = new GIF({
-        workers: 2,
+        workers: 0, // Disable workers to avoid CORS
         quality: 10,
         width: width,
         height: height,
         repeat: repeat ? 0 : -1,
         delay: Math.round(1000 / frameRate),
-        workerScript:
-          "https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.worker.js",
       });
 
       // gif.setRepeat(repeat ? 0 : -1);
