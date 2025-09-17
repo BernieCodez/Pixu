@@ -830,10 +830,10 @@ class UIController {
       const animationControls = document.createElement('div');
       animationControls.className = 'animation-controls';
       animationControls.innerHTML = `
-      <button class="btn btn-sm" id="play-btn" title="Play Animation">
+      <button class="btn btn-sm" id="play-btn">
         <i class="fas fa-play"></i>
       </button>
-      <button class="btn btn-sm" id="stop-btn" title="Stop Animation">
+      <button class="btn btn-sm" id="stop-btn" >
         <i class="fas fa-stop"></i>
       </button>
       <div class="fps-control" style="display: inline-block; margin-left: 8px;">

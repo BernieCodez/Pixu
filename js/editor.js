@@ -153,7 +153,8 @@ class PixelEditor {
 
   // Add this new method to save layer changes back to sprite
   saveLayersToSprite() {
-    if (!this.currentSprite || !this.layerManager || !this.animationManager) return;
+    if (!this.currentSprite || !this.layerManager || !this.animationManager)
+      return;
 
     // Save current layer state to current frame
     this.animationManager.saveLayerManagerToCurrentFrame();
@@ -167,7 +168,12 @@ class PixelEditor {
     }
   }
 
-  createNewAnimatedSprite(width = 16, height = 16, name = null, frameCount = 1) {
+  createNewAnimatedSprite(
+    width = 16,
+    height = 16,
+    name = null,
+    frameCount = 1
+  ) {
     const sprite = this.createNewSprite(width, height, name);
 
     // Add additional frames if requested
@@ -237,9 +243,13 @@ class PixelEditor {
 
     // Add smooth/sharpen tool settings
     if (this.tools.smoothsharpen) {
-      this.tools.smoothsharpen.setIntensity(this.settings.smoothSharpenIntensity || 50);
+      this.tools.smoothsharpen.setIntensity(
+        this.settings.smoothSharpenIntensity || 50
+      );
       this.tools.smoothsharpen.setSize(this.settings.smoothSharpenSize || 3);
-      this.tools.smoothsharpen.setMode(this.settings.smoothSharpenMode || "smooth");
+      this.tools.smoothsharpen.setMode(
+        this.settings.smoothSharpenMode || "smooth"
+      );
     }
   }
 
@@ -428,21 +438,21 @@ class PixelEditor {
     currentFrame.activeLayerIndex = this.layerManager.activeLayerIndex;
 
     // Update frame layers with LayerManager data
-    currentFrame.layers = this.layerManager.layers.map(layer => ({
+    currentFrame.layers = this.layerManager.layers.map((layer) => ({
       id: layer.id || Date.now() + Math.random(),
       name: layer.name,
       visible: layer.visible,
       opacity: layer.opacity,
-      pixels: layer.pixels.map(row => row.map(pixel => [...pixel])), // Deep copy
+      pixels: layer.pixels.map((row) => row.map((pixel) => [...pixel])), // Deep copy
       locked: layer.locked || false,
-      blendMode: layer.blendMode || 'normal'
+      blendMode: layer.blendMode || "normal",
     }));
 
     // Update sprite layers for backward compatibility
-    this.currentSprite.layers = currentFrame.layers.map(layer => ({
+    this.currentSprite.layers = currentFrame.layers.map((layer) => ({
       ...layer,
-      pixels: layer.pixels.map(row => row.map(pixel => [...pixel])),
-      useTypedArray: false
+      pixels: layer.pixels.map((row) => row.map((pixel) => [...pixel])),
+      useTypedArray: false,
     }));
 
     // Update pixel reference for backward compatibility
@@ -499,13 +509,13 @@ class PixelEditor {
 
       // Crop all frames in the sprite
       if (this.currentSprite.frames && this.currentSprite.frames.length > 0) {
-        this.currentSprite.frames.forEach(frame => {
+        this.currentSprite.frames.forEach((frame) => {
           // Update frame dimensions
           frame.width = newWidth;
           frame.height = newHeight;
 
           // Crop each layer in the frame
-          frame.layers.forEach(layer => {
+          frame.layers.forEach((layer) => {
             const newPixels = [];
 
             for (let y = 0; y < newHeight; y++) {
@@ -555,7 +565,10 @@ class PixelEditor {
       this.currentSprite.modifiedAt = new Date().toISOString();
 
       // Force save the sprite
-      if (this.storageManager && typeof this.storageManager.saveSprite === "function") {
+      if (
+        this.storageManager &&
+        typeof this.storageManager.saveSprite === "function"
+      ) {
         this.storageManager.saveSprite(this.currentSprite);
       }
 
@@ -863,7 +876,9 @@ class PixelEditor {
       // Get the active layer and set the imported pixels
       const activeLayer = this.layerManager.getActiveLayer();
       if (activeLayer) {
-        activeLayer.pixels = pixels.map(row => row.map(pixel => [...pixel]));
+        activeLayer.pixels = pixels.map((row) =>
+          row.map((pixel) => [...pixel])
+        );
 
         // Force LayerManager to update and render
         this.layerManager.compositeDirty = true;
@@ -946,6 +961,11 @@ class PixelEditor {
       return;
     }
 
+    // CRITICAL FIX: Save current LayerManager state to sprite before export
+    if (this.animationManager) {
+      this.animationManager.saveLayerManagerToCurrentFrame();
+    }
+
     const sprite = this.currentSprite;
     const scaledWidth = sprite.width * scale;
     const scaledHeight = sprite.height * scale;
@@ -953,17 +973,36 @@ class PixelEditor {
     // Create SVG content
     let svgContent = `<svg width="${scaledWidth}" height="${scaledHeight}" xmlns="http://www.w3.org/2000/svg" style="image-rendering: pixelated;">`;
 
-    // Add each pixel as a rectangle
-    for (let y = 0; y < sprite.height; y++) {
-      for (let x = 0; x < sprite.width; x++) {
-        const pixel = sprite.getPixel(x, y);
-        const [r, g, b, a] = pixel;
+    // FIXED: Use LayerManager composite data instead of sprite.getPixel
+    if (this.layerManager) {
+      // Get all visible layers and composite them
+      for (let y = 0; y < sprite.height; y++) {
+        for (let x = 0; x < sprite.width; x++) {
+          const pixel = this.layerManager.getCompositePixel(x, y);
+          const [r, g, b, a] = pixel;
 
-        if (a > 0) {
-          // Only render non-transparent pixels
-          const opacity = a / 255;
-          svgContent += `<rect x="${x * scale}" y="${y * scale
+          if (a > 0) {
+            // Only render non-transparent pixels
+            const opacity = a / 255;
+            svgContent += `<rect x="${x * scale}" y="${
+              y * scale
             }" width="${scale}" height="${scale}" fill="rgb(${r},${g},${b})" opacity="${opacity}"/>`;
+          }
+        }
+      }
+    } else {
+      // Fallback: Use sprite data
+      for (let y = 0; y < sprite.height; y++) {
+        for (let x = 0; x < sprite.width; x++) {
+          const pixel = sprite.getPixel(x, y);
+          const [r, g, b, a] = pixel;
+
+          if (a > 0) {
+            const opacity = a / 255;
+            svgContent += `<rect x="${x * scale}" y="${
+              y * scale
+            }" width="${scale}" height="${scale}" fill="rgb(${r},${g},${b})" opacity="${opacity}"/>`;
+          }
         }
       }
     }
@@ -983,7 +1022,11 @@ class PixelEditor {
   }
 
   exportAsAnimatedSVG(frameRate = 12) {
-    if (!this.currentSprite || !this.currentSprite.frames || this.currentSprite.frames.length <= 1) {
+    if (
+      !this.currentSprite ||
+      !this.currentSprite.frames ||
+      this.currentSprite.frames.length <= 1
+    ) {
       this.uiManager.showNotification("No animation to export", "warning");
       return;
     }
@@ -1022,17 +1065,24 @@ class PixelEditor {
 
     // Create animated rectangles
     pixelAnimations.forEach((colors, key) => {
-      const [x, y] = key.split('-').map(Number);
+      const [x, y] = key.split("-").map(Number);
 
       // Create base rectangle
       const firstColor = colors[0];
-      if (colors.some(c => c.a > 0)) { // Only if at least one frame has this pixel visible
+      if (colors.some((c) => c.a > 0)) {
+        // Only if at least one frame has this pixel visible
         svgContent += `<rect x="${x}" y="${y}" width="1" height="1"`;
 
         // Add fill animation if colors change
-        const uniqueColors = [...new Set(colors.map(c => `rgba(${c.r},${c.g},${c.b},${c.a / 255})`))];
+        const uniqueColors = [
+          ...new Set(
+            colors.map((c) => `rgba(${c.r},${c.g},${c.b},${c.a / 255})`)
+          ),
+        ];
         if (uniqueColors.length > 1) {
-          const colorValues = colors.map(c => `rgba(${c.r},${c.g},${c.b},${c.a / 255})`).join(';');
+          const colorValues = colors
+            .map((c) => `rgba(${c.r},${c.g},${c.b},${c.a / 255})`)
+            .join(";");
           svgContent += ` fill="${uniqueColors[0]}">`;
           svgContent += `<animate attributeName="fill" values="${colorValues}" dur="${frameDuration}ms" repeatCount="indefinite"/>`;
           svgContent += `</rect>`;
@@ -1060,8 +1110,14 @@ class PixelEditor {
     let finalColor = { r: 0, g: 0, b: 0, a: 0 };
 
     // Composite all visible layers
-    frame.layers.forEach(layer => {
-      if (!layer.visible || !layer.pixels || !layer.pixels[y] || !layer.pixels[y][x]) return;
+    frame.layers.forEach((layer) => {
+      if (
+        !layer.visible ||
+        !layer.pixels ||
+        !layer.pixels[y] ||
+        !layer.pixels[y][x]
+      )
+        return;
 
       const [r, g, b, a] = layer.pixels[y][x];
       if (a > 0) {
@@ -1075,9 +1131,15 @@ class PixelEditor {
           const invAlpha = 1 - alpha;
           const currentAlpha = finalColor.a / 255;
 
-          finalColor.r = Math.round(r * alpha + finalColor.r * invAlpha * currentAlpha);
-          finalColor.g = Math.round(g * alpha + finalColor.g * invAlpha * currentAlpha);
-          finalColor.b = Math.round(b * alpha + finalColor.b * invAlpha * currentAlpha);
+          finalColor.r = Math.round(
+            r * alpha + finalColor.r * invAlpha * currentAlpha
+          );
+          finalColor.g = Math.round(
+            g * alpha + finalColor.g * invAlpha * currentAlpha
+          );
+          finalColor.b = Math.round(
+            b * alpha + finalColor.b * invAlpha * currentAlpha
+          );
           finalColor.a = Math.round(255 * (alpha + currentAlpha * invAlpha));
         }
       }
@@ -1086,19 +1148,26 @@ class PixelEditor {
     return finalColor;
   }
   colorsEqual(color1, color2) {
-    return color1.r === color2.r && color1.g === color2.g &&
-      color1.b === color2.b && color1.a === color2.a;
+    return (
+      color1.r === color2.r &&
+      color1.g === color2.g &&
+      color1.b === color2.b &&
+      color1.a === color2.a
+    );
   }
 
-
   async exportFramesAsZip() {
-    if (!this.currentSprite || !this.currentSprite.frames || this.currentSprite.frames.length <= 1) {
+    if (
+      !this.currentSprite ||
+      !this.currentSprite.frames ||
+      this.currentSprite.frames.length <= 1
+    ) {
       this.uiManager.showNotification("No animation to export", "warning");
       return;
     }
 
     // Check if JSZip is available
-    if (typeof JSZip === 'undefined') {
+    if (typeof JSZip === "undefined") {
       // Try to load JSZip from CDN
       try {
         await this.loadJSZip();
@@ -1115,10 +1184,10 @@ class PixelEditor {
     this.uiManager.showNotification("Generating frames...", "info");
 
     // Create canvas for frame rendering
-    const canvas = document.createElement('canvas');
+    const canvas = document.createElement("canvas");
     canvas.width = sprite.width;
     canvas.height = sprite.height;
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext("2d");
     ctx.imageSmoothingEnabled = false;
 
     // Generate each frame
@@ -1129,7 +1198,7 @@ class PixelEditor {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
       // Render frame layers
-      frame.layers.forEach(layer => {
+      frame.layers.forEach((layer) => {
         if (!layer.visible || !layer.pixels) return;
 
         for (let y = 0; y < frame.height; y++) {
@@ -1147,11 +1216,11 @@ class PixelEditor {
       });
 
       // Convert to blob and add to zip
-      const blob = await new Promise(resolve => {
-        canvas.toBlob(resolve, 'image/png');
+      const blob = await new Promise((resolve) => {
+        canvas.toBlob(resolve, "image/png");
       });
 
-      const frameName = `frame_${String(i + 1).padStart(3, '0')}.png`;
+      const frameName = `frame_${String(i + 1).padStart(3, "0")}.png`;
       frameFolder.file(frameName, blob);
     }
 
@@ -1167,7 +1236,10 @@ class PixelEditor {
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
 
-      this.uiManager.showNotification(`Exported ${sprite.frames.length} frames as ZIP`, "success");
+      this.uiManager.showNotification(
+        `Exported ${sprite.frames.length} frames as ZIP`,
+        "success"
+      );
     } catch (error) {
       console.error("Failed to create ZIP:", error);
       this.uiManager.showNotification("Failed to create ZIP file", "error");
@@ -1176,15 +1248,16 @@ class PixelEditor {
 
   async loadJSZip() {
     return new Promise((resolve, reject) => {
-      if (typeof JSZip !== 'undefined') {
+      if (typeof JSZip !== "undefined") {
         resolve();
         return;
       }
 
-      const script = document.createElement('script');
-      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+      const script = document.createElement("script");
+      script.src =
+        "https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js";
       script.onload = resolve;
-      script.onerror = () => reject(new Error('Failed to load JSZip'));
+      script.onerror = () => reject(new Error("Failed to load JSZip"));
       document.head.appendChild(script);
     });
   }
@@ -1194,76 +1267,124 @@ class PixelEditor {
    */
   // Modified exportAsGIF method in PixelEditor class
   /**
-  * Export animation as GIF using gif.js library
-  * This function should be added to the PixelEditor class
-  */
-
-
-  /**
-   * Helper method to render a frame to a canvas context
-   * This should also be added to the PixelEditor class
-   */
-  /**
-   * Simplified, direct GIF export that should actually produce a GIF file
-   * Replace your existing exportAsGIF method with this
-   */
-  /**
-   * Debug version of GIF export to identify the exact failure point
-   */
-  /**
-  * Export animation as GIF using gif.js library
-  * This method should replace the empty exportAsGIF method in your PixelEditor class
-  */
-  /**
    * Export animation as GIF using gif.js library
-   * This method should replace the empty exportAsGIF method in your PixelEditor class
-   */
-  /**
-   * Export animation as GIF using gif.js library
-   * This method should replace the empty exportAsGIF method in your PixelEditor class
-   */
-  /**
-   * Export animation as GIF - Simplified approach that actually works
-   * This method should replace the empty exportAsGIF method in your PixelEditor class
-   */
-  /**
-   * Export animation as GIF - Alternative approach without gif.js workers
-   * This method should replace the empty exportAsGIF method in your PixelEditor class
+   * This function should be added to the PixelEditor class
    */
   async exportAsGIF(frameRate = 12, scale = 1, repeat = true) {
-    if (!this.currentSprite || !this.currentSprite.frames || this.currentSprite.frames.length <= 1) {
+    if (
+      !this.currentSprite ||
+      !this.currentSprite.frames ||
+      this.currentSprite.frames.length <= 1
+    ) {
       this.uiManager.showNotification("No animation to export", "warning");
       return;
+    }
+
+    // Save current frame before export
+    if (this.animationManager) {
+      this.animationManager.saveLayerManagerToCurrentFrame();
     }
 
     const sprite = this.currentSprite;
     const width = sprite.width * scale;
     const height = sprite.height * scale;
 
-    console.log(`Attempting manual GIF export: ${sprite.frames.length} frames, ${width}x${height}`);
+    console.log(
+      `Exporting GIF: ${sprite.frames.length} frames, ${width}x${height}`
+    );
 
     try {
       this.uiManager.showNotification("Generating GIF...", "info");
 
-      // Try to use jsgif library instead if available
-      if (typeof GIFEncoder !== 'undefined') {
-        return this.exportWithJSGIF(frameRate, scale, repeat);
+      // Check if gif.js is available
+      if (typeof GIF === "undefined") {
+        throw new Error("GIF.js library not available");
       }
 
-      // Fallback: Create a simple animated WebP or export frames as ZIP
-      if (this.canCreateAnimatedWebP()) {
-        return this.exportAsAnimatedWebP(frameRate, scale);
+      // Initialize GIF encoder
+      // Initialize GIF encoder
+      const gif = new GIF({
+        workers: 2,
+        quality: 10,
+        width: width,
+        height: height,
+        repeat: repeat ? 0 : -1,
+        delay: Math.round(1000 / frameRate),
+        workerScript:
+          "https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.worker.js",
+      });
+
+      // gif.setRepeat(repeat ? 0 : -1);
+      // gif.setDelay(Math.round(1000 / frameRate));
+
+      // Process each frame
+      for (
+        let frameIndex = 0;
+        frameIndex < sprite.frames.length;
+        frameIndex++
+      ) {
+        const frame = sprite.frames[frameIndex];
+        console.log(
+          `Processing frame ${frameIndex + 1}/${sprite.frames.length}`
+        );
+
+        // Create canvas for this frame
+        const frameCanvas = document.createElement("canvas");
+        frameCanvas.width = width;
+        frameCanvas.height = height;
+        const frameCtx = frameCanvas.getContext("2d");
+
+        // Disable image smoothing
+        frameCtx.imageSmoothingEnabled = false;
+        frameCtx.webkitImageSmoothingEnabled = false;
+        frameCtx.mozImageSmoothingEnabled = false;
+        frameCtx.msImageSmoothingEnabled = false;
+
+        // Render frame using proper layer compositing
+        this.renderFrameToCanvas(frame, frameCtx, scale);
+
+        // Add frame to GIF
+        gif.addFrame(frameCanvas);
       }
 
-      // Final fallback: Export as individual PNGs in a ZIP
-      return this.exportFramesAsZip();
+      // Render GIF
+      gif.on("finished", (blob) => {
+        console.log("GIF generation completed");
 
+        // Download the GIF
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `${sprite.name || "animation"}.gif`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+
+        this.uiManager.showNotification(
+          `Exported GIF with ${sprite.frames.length} frames`,
+          "success"
+        );
+      });
+
+      gif.on("progress", (progress) => {
+        console.log(`GIF progress: ${Math.round(progress * 100)}%`);
+      });
+
+      gif.render();
     } catch (error) {
-      console.error("All GIF export methods failed:", error);
-      this.uiManager.showNotification(`GIF export failed. Try exporting frames individually.`, "error");
+      console.error("GIF export failed:", error);
+      this.uiManager.showNotification(
+        `GIF export failed: ${error.message}`,
+        "error"
+      );
 
-      // Offer to export frames as PNGs
-      if (confirm("GIF export failed. Would you like to export individual PNG frames instead?")) {
+      // Fallback to PNG frames
+      if (
+        confirm(
+          "GIF export failed. Would you like to export individual PNG frames instead?"
+        )
+      ) {
         this.exportFramesAsPNGs();
       }
     }
@@ -1280,23 +1401,23 @@ class PixelEditor {
     console.log("Using JSGif library");
 
     const encoder = new GIFEncoder();
+    encoder.start();
     encoder.setRepeat(repeat ? 0 : -1);
     encoder.setDelay(Math.round(1000 / frameRate));
-    encoder.start();
 
     for (let frameIndex = 0; frameIndex < sprite.frames.length; frameIndex++) {
       const frame = sprite.frames[frameIndex];
       const canvas = this.renderFrameToCanvas2(frame, width, height);
-      const ctx = canvas.getContext('2d');
+      const ctx = canvas.getContext("2d");
       const imageData = ctx.getImageData(0, 0, width, height);
       encoder.addFrame(imageData);
     }
 
     encoder.finish();
     const binary = encoder.stream().getData();
-    const blob = new Blob([new Uint8Array(binary)], { type: 'image/gif' });
+    const blob = new Blob([new Uint8Array(binary)], { type: "image/gif" });
 
-    this.downloadBlob(blob, `${sprite.name || 'animation'}.gif`);
+    this.downloadBlob(blob, `${sprite.name || "animation"}.gif`);
     this.uiManager.showNotification(`Exported GIF using JSGif`, "success");
   }
 
@@ -1313,7 +1434,10 @@ class PixelEditor {
    * Export as animated WebP (placeholder for future implementation)
    */
   exportAsAnimatedWebP(frameRate, scale) {
-    this.uiManager.showNotification("Animated WebP export not yet implemented", "info");
+    this.uiManager.showNotification(
+      "Animated WebP export not yet implemented",
+      "info"
+    );
     this.exportFramesAsPNGs();
   }
 
@@ -1332,13 +1456,19 @@ class PixelEditor {
     this.uiManager.showNotification("Exporting frames as PNGs...", "info");
 
     sprite.frames.forEach((frame, index) => {
-      const canvas = this.renderFrameToCanvas2(frame, sprite.width, sprite.height);
+      const canvas = this.renderFrameToCanvas2(
+        frame,
+        sprite.width,
+        sprite.height
+      );
 
-      canvas.toBlob(blob => {
-        const frameNumber = String(index + 1).padStart(3, '0');
-        const filename = `${sprite.name || 'animation'}_frame_${frameNumber}.png`;
+      canvas.toBlob((blob) => {
+        const frameNumber = String(index + 1).padStart(3, "0");
+        const filename = `${
+          sprite.name || "animation"
+        }_frame_${frameNumber}.png`;
         this.downloadBlob(blob, filename);
-      }, 'image/png');
+      }, "image/png");
     });
 
     this.uiManager.showNotification(
@@ -1351,10 +1481,10 @@ class PixelEditor {
    * Render a frame to a canvas - improved version
    */
   renderFrameToCanvas2(frame, targetWidth, targetHeight) {
-    const canvas = document.createElement('canvas');
+    const canvas = document.createElement("canvas");
     canvas.width = targetWidth;
     canvas.height = targetHeight;
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext("2d");
 
     // Disable smoothing for pixel art
     ctx.imageSmoothingEnabled = false;
@@ -1377,7 +1507,9 @@ class PixelEditor {
         const pixelColor = this.getCompositePixel(frame, x, y);
 
         if (pixelColor.a > 0) {
-          ctx.fillStyle = `rgba(${pixelColor.r}, ${pixelColor.g}, ${pixelColor.b}, ${pixelColor.a / 255})`;
+          ctx.fillStyle = `rgba(${pixelColor.r}, ${pixelColor.g}, ${
+            pixelColor.b
+          }, ${pixelColor.a / 255})`;
           ctx.fillRect(
             Math.floor(x * scaleX),
             Math.floor(y * scaleY),
@@ -1402,8 +1534,13 @@ class PixelEditor {
     }
 
     // Composite all visible layers from bottom to top
-    frame.layers.forEach(layer => {
-      if (!layer.visible || !layer.pixels || !layer.pixels[y] || !layer.pixels[y][x]) {
+    frame.layers.forEach((layer) => {
+      if (
+        !layer.visible ||
+        !layer.pixels ||
+        !layer.pixels[y] ||
+        !layer.pixels[y][x]
+      ) {
         return;
       }
 
@@ -1424,9 +1561,18 @@ class PixelEditor {
           const outAlpha = srcAlpha + dstAlpha * (1 - srcAlpha);
 
           if (outAlpha > 0) {
-            finalColor.r = Math.round((r * srcAlpha + finalColor.r * dstAlpha * (1 - srcAlpha)) / outAlpha);
-            finalColor.g = Math.round((g * srcAlpha + finalColor.g * dstAlpha * (1 - srcAlpha)) / outAlpha);
-            finalColor.b = Math.round((b * srcAlpha + finalColor.b * dstAlpha * (1 - srcAlpha)) / outAlpha);
+            finalColor.r = Math.round(
+              (r * srcAlpha + finalColor.r * dstAlpha * (1 - srcAlpha)) /
+                outAlpha
+            );
+            finalColor.g = Math.round(
+              (g * srcAlpha + finalColor.g * dstAlpha * (1 - srcAlpha)) /
+                outAlpha
+            );
+            finalColor.b = Math.round(
+              (b * srcAlpha + finalColor.b * dstAlpha * (1 - srcAlpha)) /
+                outAlpha
+            );
             finalColor.a = Math.round(outAlpha * 255);
           }
         }
@@ -1447,7 +1593,7 @@ class PixelEditor {
     ctx.clearRect(0, 0, width, height);
 
     // Render each visible layer
-    frame.layers.forEach(layer => {
+    frame.layers.forEach((layer) => {
       if (!layer.visible || !layer.pixels) return;
 
       for (let y = 0; y < height; y++) {
@@ -1456,7 +1602,8 @@ class PixelEditor {
 
           const [r, g, b, a] = layer.pixels[y][x];
           if (a > 0) {
-            const opacity = (a / 255) * (layer.opacity !== undefined ? layer.opacity : 1);
+            const opacity =
+              (a / 255) * (layer.opacity !== undefined ? layer.opacity : 1);
             ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${opacity})`;
             ctx.fillRect(x, y, 1, 1);
           }
@@ -1470,7 +1617,7 @@ class PixelEditor {
    */
   downloadBlob(blob, filename) {
     const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
+    const link = document.createElement("a");
     link.href = url;
     link.download = filename;
     document.body.appendChild(link);
@@ -1503,6 +1650,11 @@ class PixelEditor {
       return;
     }
 
+    // CRITICAL FIX: Save current LayerManager state to sprite before export
+    if (this.animationManager) {
+      this.animationManager.saveLayerManagerToCurrentFrame();
+    }
+
     const sprite = this.currentSprite;
     const scaledWidth = sprite.width * scale;
     const scaledHeight = sprite.height * scale;
@@ -1519,16 +1671,41 @@ class PixelEditor {
     exportCtx.mozImageSmoothingEnabled = false;
     exportCtx.msImageSmoothingEnabled = false;
 
-    // Draw each pixel scaled up
-    for (let y = 0; y < sprite.height; y++) {
-      for (let x = 0; x < sprite.width; x++) {
-        const pixel = sprite.getPixel(x, y);
-        const [r, g, b, a] = pixel;
+    // FIXED: Use LayerManager's composite data instead of sprite.getPixel
+    if (this.layerManager) {
+      // Get composite image data from LayerManager
+      const imageData = this.layerManager.getCompositeImageDataOptimized();
 
-        if (a > 0) {
-          // Only render non-transparent pixels
-          exportCtx.fillStyle = `rgba(${r}, ${g}, ${b}, ${a / 255})`;
-          exportCtx.fillRect(x * scale, y * scale, scale, scale);
+      // Create temporary canvas to scale from
+      const tempCanvas = document.createElement("canvas");
+      tempCanvas.width = sprite.width;
+      tempCanvas.height = sprite.height;
+      const tempCtx = tempCanvas.getContext("2d");
+      tempCtx.putImageData(imageData, 0, 0);
+
+      // Scale to export canvas
+      exportCtx.drawImage(
+        tempCanvas,
+        0,
+        0,
+        sprite.width,
+        sprite.height,
+        0,
+        0,
+        scaledWidth,
+        scaledHeight
+      );
+    } else {
+      // Fallback: Draw each pixel manually using sprite data
+      for (let y = 0; y < sprite.height; y++) {
+        for (let x = 0; x < sprite.width; x++) {
+          const pixel = sprite.getPixel(x, y);
+          const [r, g, b, a] = pixel;
+
+          if (a > 0) {
+            exportCtx.fillStyle = `rgba(${r}, ${g}, ${b}, ${a / 255})`;
+            exportCtx.fillRect(x * scale, y * scale, scale, scale);
+          }
         }
       }
     }
@@ -1586,11 +1763,11 @@ class PixelEditor {
     const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
     return result
       ? [
-        parseInt(result[1], 16),
-        parseInt(result[2], 16),
-        parseInt(result[3], 16),
-        255,
-      ]
+          parseInt(result[1], 16),
+          parseInt(result[2], 16),
+          parseInt(result[3], 16),
+          255,
+        ]
       : [0, 0, 0, 255];
   }
 
@@ -1618,10 +1795,10 @@ class PixelEditor {
       totalPixels,
       currentSprite: this.currentSprite
         ? {
-          name: this.currentSprite.name,
-          dimensions: `${this.currentSprite.width}×${this.currentSprite.height}`,
-          stats: this.currentSprite.getStats(),
-        }
+            name: this.currentSprite.name,
+            dimensions: `${this.currentSprite.width}×${this.currentSprite.height}`,
+            stats: this.currentSprite.getStats(),
+          }
         : null,
       storageUsage,
       currentTool: this.currentTool?.name,

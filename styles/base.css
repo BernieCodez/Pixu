@@ -334,6 +334,7 @@ body {
 
 /* Special positioning for toolbar tooltips */
 .tool-btn[title]:hover::after {
+    z-index: 10001;
     position: fixed;
     top: 120px;
     left: var(--tooltip-x, 50%);
