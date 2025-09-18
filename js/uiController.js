@@ -2171,6 +2171,9 @@ class UIController {
       this.updateToolButtons();
       this.updateColorDisplay();
       this.updateFramesList();
+      // this.layerManager.updateLayersList();
+      this.updateLayersList();
+
 
 
       // Only update sprites list if sprites are available

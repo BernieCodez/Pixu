@@ -13,9 +13,14 @@ class SelectTool {
 
     // Scaling properties
     this.isScaling = false;
-    this.scaleHandle = null; // 'nw', 'ne', 'sw', 'se'
+    this.scaleHandle = null;
     this.originalClipboard = null;
-    this.rigidScaling = true; // Default to rigid scaling
+    this.rigidScaling = true;
+
+    // NEW: Rotation properties
+    this.isRotating = false;
+    this.rotationAngle = 0;
+    this.rotationCenter = null;
   }
 
   // Get scale handle at position
@@ -178,8 +183,22 @@ class SelectTool {
   }
 
   // Modified onMouseDown - now works with layers
+  // Modified onMouseDown - clear any existing selection display first
   onMouseDown(x, y, event) {
     if (!this.editor.currentSprite || !this.editor.layerManager) return;
+
+    // Check if clicking on rotation handle
+    if (
+      this.selection &&
+      this.editor.canvasManager.isOverRotationHandle(x, y, this.selection)
+    ) {
+      this.isRotating = true;
+      this.rotationCenter = {
+        x: (this.selection.left + this.selection.right + 1) / 2,
+        y: (this.selection.top + this.selection.bottom + 1) / 2,
+      };
+      return;
+    }
 
     // Check if clicking on a scale handle
     if (this.selection) {
@@ -219,6 +238,11 @@ class SelectTool {
       }
     }
 
+    // Only clear selection and overlay when starting a completely new selection
+    if (this.selection) {
+      this.clearSelection();
+    }
+
     // Start new selection
     this.isSelecting = true;
     this.editor.canvasManager.startSelection(x, y);
@@ -228,6 +252,12 @@ class SelectTool {
   onMouseUp(x, y, event) {
     if (!this.editor.currentSprite || !this.editor.layerManager) return;
 
+    if (this.isRotating) {
+      // Handle rotation release
+      this.isRotating = false;
+      this.rotationCenter = null;
+      return;
+    }
     if (this.isScaling && this.selection && this.originalClipboard) {
       // Start batch operation for scaling
       this.editor.layerManager.startBatchOperation();
@@ -660,7 +690,10 @@ class SelectTool {
 
     // Validate crop dimensions
     if (newWidth <= 0 || newHeight <= 0) {
-      this.editor.uiManager?.showNotification("Invalid crop dimensions", "error");
+      this.editor.uiManager?.showNotification(
+        "Invalid crop dimensions",
+        "error"
+      );
       return false;
     }
 
@@ -682,6 +715,7 @@ class SelectTool {
     this.selection = null;
     this.lastDragPosition = null;
     this.editor.canvasManager.endSelection();
+    this.editor.canvasManager.clearOverlay(); // Ensure overlay is cleared
   }
 
   // Called when tool is deactivated
@@ -715,6 +749,7 @@ class SelectTool {
   }
 
   // Get tool settings UI elements
+  // Modified getSettingsHTML to include counter-clockwise rotation
   getSettingsHTML() {
     const hasSelection = this.hasSelection();
     const hasClipboard = this.hasClipboard();
@@ -722,56 +757,88 @@ class SelectTool {
     const isLayerLocked = activeLayer?.locked || false;
 
     return `
-          ${isLayerLocked
-        ? `<div class="setting-group">
-                  <div class="warning-message">
-                      <i class="fas fa-lock"></i> Layer locked
-                  </div>
-               </div>`
-        : ""
-      }
-          
-          <div class="setting-group">
-              <label>
-                  <input type="checkbox" id="rigid-scaling-cb" ${this.rigidScaling ? "checked" : ""
-      }>
-                  Rigid Scaling
-              </label>
-          </div>
-          
-          <div class="setting-group">
-              <button class="btn btn-secondary btn-sm" id="copy-btn" ${!hasSelection ? "disabled" : ""
-      }>
-                  <i class="fas fa-copy"></i>
-              </button>
-              <button class="btn btn-secondary btn-sm" id="cut-btn" ${!hasSelection || isLayerLocked ? "disabled" : ""
-      }>
-                  <i class="fas fa-cut"></i>
-              </button>
-              <button class="btn btn-secondary btn-sm" id="paste-btn" ${!hasClipboard || isLayerLocked ? "disabled" : ""
-      }>
-                  <i class="fas fa-paste"></i>
-              </button>
-              <button class="btn btn-secondary btn-sm" id="delete-btn" ${!hasSelection || isLayerLocked ? "disabled" : ""
-      }>
-                  <i class="fas fa-trash"></i>
-              </button>
-              <button class="btn btn-secondary btn-sm" id="clear-selection-btn" ${!hasSelection ? "disabled" : ""
-      }>
-                  <i class="fas fa-times"></i>
-              </button>
-          </div>
-          
-          <div class="setting-group">
-              <button class="btn btn-primary btn-sm" id="crop-btn" ${!hasSelection ? "disabled" : ""
-      }>
-                  <i class="fas fa-crop"></i> Crop to Selection
-              </button>
-          </div>
-      `;
+        ${
+          isLayerLocked
+            ? `<div class="setting-group">
+                <div class="warning-message">
+                    <i class="fas fa-lock"></i> Layer locked
+                </div>
+             </div>`
+            : ""
+        }
+        
+        <div class="setting-group">
+            <label>
+                <input type="checkbox" id="rigid-scaling-cb" ${
+                  this.rigidScaling ? "checked" : ""
+                }>
+                Rigid Scaling
+            </label>
+        </div>
+        
+        <div class="setting-group">
+            <button class="btn btn-secondary btn-sm" id="copy-btn" ${
+              !hasSelection ? "disabled" : ""
+            }>
+                <i class="fas fa-copy"></i>
+            </button>
+            <button class="btn btn-secondary btn-sm" id="cut-btn" ${
+              !hasSelection || isLayerLocked ? "disabled" : ""
+            }>
+                <i class="fas fa-cut"></i>
+            </button>
+            <button class="btn btn-secondary btn-sm" id="paste-btn" ${
+              !hasClipboard || isLayerLocked ? "disabled" : ""
+            }>
+                <i class="fas fa-paste"></i>
+            </button>
+            <button class="btn btn-secondary btn-sm" id="delete-btn" ${
+              !hasSelection || isLayerLocked ? "disabled" : ""
+            }>
+                <i class="fas fa-trash"></i>
+            </button>
+            <button class="btn btn-secondary btn-sm" id="clear-selection-btn" ${
+              !hasSelection ? "disabled" : ""
+            }>
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        
+        <div class="setting-group">
+            <button class="btn btn-secondary btn-sm" id="rotate-cw-btn" ${
+              !hasSelection || isLayerLocked ? "disabled" : ""
+            }>
+                <i class="fas fa-redo"></i>
+            </button>
+            <button class="btn btn-secondary btn-sm" id="rotate-ccw-btn" ${
+              !hasSelection || isLayerLocked ? "disabled" : ""
+            }>
+                <i class="fas fa-undo"></i>
+            </button>
+            <button class="btn btn-secondary btn-sm" id="flip-h-btn" ${
+              !hasSelection || isLayerLocked ? "disabled" : ""
+            }>
+                <i class="fas fa-arrows-alt-h"></i>
+            </button>
+            <button class="btn btn-secondary btn-sm" id="flip-v-btn" ${
+              !hasSelection || isLayerLocked ? "disabled" : ""
+            }>
+                <i class="fas fa-arrows-alt-v"></i>
+            </button>
+        </div>
+        
+        <div class="setting-group">
+            <button class="btn btn-secondary btn-sm" id="crop-btn" ${
+              !hasSelection ? "disabled" : ""
+            }>
+                <i class="fas fa-crop-simple"></i>
+            </button>
+        </div>
+    `;
   }
 
   // Initialize tool settings event listeners
+  // Modified initializeSettings to handle both rotation buttons
   initializeSettings() {
     const copyBtn = document.getElementById("copy-btn");
     const cutBtn = document.getElementById("cut-btn");
@@ -780,6 +847,12 @@ class SelectTool {
     const clearSelectionBtn = document.getElementById("clear-selection-btn");
     const cropBtn = document.getElementById("crop-btn");
     const rigidScalingCb = document.getElementById("rigid-scaling-cb");
+
+    // Updated button references
+    const rotateCwBtn = document.getElementById("rotate-cw-btn");
+    const rotateCcwBtn = document.getElementById("rotate-ccw-btn");
+    const flipHBtn = document.getElementById("flip-h-btn");
+    const flipVBtn = document.getElementById("flip-v-btn");
 
     if (copyBtn) {
       copyBtn.addEventListener("click", () => {
@@ -816,10 +889,13 @@ class SelectTool {
       });
     }
 
-    // NEW: Crop button event listener
     if (cropBtn) {
       cropBtn.addEventListener("click", () => {
-        if (confirm("Crop the sprite to the current selection? This cannot be undone.")) {
+        if (
+          confirm(
+            "Crop the sprite to the current selection? This cannot be undone."
+          )
+        ) {
           this.crop();
         }
       });
@@ -828,6 +904,31 @@ class SelectTool {
     if (rigidScalingCb) {
       rigidScalingCb.addEventListener("change", (e) => {
         this.rigidScaling = e.target.checked;
+      });
+    }
+
+    // Updated rotation button event listeners
+    if (rotateCwBtn) {
+      rotateCwBtn.addEventListener("click", () => {
+        this.rotateClockwise();
+      });
+    }
+
+    if (rotateCcwBtn) {
+      rotateCcwBtn.addEventListener("click", () => {
+        this.rotateCounterClockwise();
+      });
+    }
+
+    if (flipHBtn) {
+      flipHBtn.addEventListener("click", () => {
+        this.flipHorizontal();
+      });
+    }
+
+    if (flipVBtn) {
+      flipVBtn.addEventListener("click", () => {
+        this.flipVertical();
       });
     }
 
@@ -884,6 +985,214 @@ class SelectTool {
     if (this.editor.currentTool === this) {
       this.editor.updateToolSettings();
     }
+  }
+
+  //ROTATION GO WHIRRR
+  _rotateClipboard(clipboard, rotations) {
+    if (rotations === 0) return clipboard;
+
+    let result = clipboard;
+
+    for (let r = 0; r < rotations; r++) {
+      const rotated = {
+        width: result.height,
+        height: result.width,
+        pixels: [],
+      };
+
+      for (let y = 0; y < rotated.height; y++) {
+        rotated.pixels[y] = [];
+        for (let x = 0; x < rotated.width; x++) {
+          const srcX = y;
+          const srcY = result.height - 1 - x;
+          rotated.pixels[y][x] = result.pixels[srcY][srcX];
+        }
+      }
+      result = rotated;
+    }
+
+    return result;
+  }
+
+  // Flip clipboard horizontally
+  _flipClipboardHorizontal(clipboard) {
+    const flipped = {
+      width: clipboard.width,
+      height: clipboard.height,
+      pixels: [],
+    };
+
+    for (let y = 0; y < clipboard.height; y++) {
+      flipped.pixels[y] = [];
+      for (let x = 0; x < clipboard.width; x++) {
+        const srcX = clipboard.width - 1 - x;
+        flipped.pixels[y][x] = clipboard.pixels[y][srcX];
+      }
+    }
+
+    return flipped;
+  }
+
+  // Flip clipboard vertically
+  _flipClipboardVertical(clipboard) {
+    const flipped = {
+      width: clipboard.width,
+      height: clipboard.height,
+      pixels: [],
+    };
+
+    for (let y = 0; y < clipboard.height; y++) {
+      flipped.pixels[y] = [];
+      const srcY = clipboard.height - 1 - y;
+      for (let x = 0; x < clipboard.width; x++) {
+        flipped.pixels[y][x] = clipboard.pixels[srcY][x];
+      }
+    }
+
+    return flipped;
+  }
+
+  // Rotate selection by 90 degrees clockwise
+  rotateClockwise() {
+    if (!this.selection || !this.editor.layerManager) return false;
+
+    const clipboard = this._copyFromBounds(this.selection);
+    const rotatedClipboard = this._rotateClipboard(clipboard, 1);
+
+    // Start batch operation
+    this.editor.layerManager.startBatchOperation();
+
+    // Clear original selection
+    this._deleteBounds(this.selection);
+
+    // Calculate new selection bounds (rotated dimensions)
+    const centerX = (this.selection.left + this.selection.right) / 2;
+    const centerY = (this.selection.top + this.selection.bottom) / 2;
+    const newWidth = rotatedClipboard.width;
+    const newHeight = rotatedClipboard.height;
+
+    this.selection = {
+      left: Math.round(centerX - newWidth / 2),
+      top: Math.round(centerY - newHeight / 2),
+      right: Math.round(centerX - newWidth / 2) + newWidth - 1,
+      bottom: Math.round(centerY - newHeight / 2) + newHeight - 1,
+    };
+
+    // Paste rotated content
+    this._pasteClipboardAt(
+      rotatedClipboard,
+      this.selection.left,
+      this.selection.top
+    );
+
+    // End batch operation
+    this.editor.layerManager.endBatchOperation();
+
+    // Update display
+    this.editor.canvasManager.render();
+    this.editor.canvasManager.renderSelectionBox(this.selection);
+    this.updateSettingsUI();
+
+    return true;
+  }
+  // Add counter-clockwise rotation method
+  rotateCounterClockwise() {
+    if (!this.selection || !this.editor.layerManager) return false;
+
+    const clipboard = this._copyFromBounds(this.selection);
+    const rotatedClipboard = this._rotateClipboard(clipboard, 3); // 3 rotations = 270° = -90°
+
+    // Start batch operation
+    this.editor.layerManager.startBatchOperation();
+
+    // Clear original selection
+    this._deleteBounds(this.selection);
+
+    // Calculate new selection bounds (rotated dimensions)
+    const centerX = (this.selection.left + this.selection.right) / 2;
+    const centerY = (this.selection.top + this.selection.bottom) / 2;
+    const newWidth = rotatedClipboard.width;
+    const newHeight = rotatedClipboard.height;
+
+    this.selection = {
+      left: Math.round(centerX - newWidth / 2),
+      top: Math.round(centerY - newHeight / 2),
+      right: Math.round(centerX - newWidth / 2) + newWidth - 1,
+      bottom: Math.round(centerY - newHeight / 2) + newHeight - 1,
+    };
+
+    // Paste rotated content
+    this._pasteClipboardAt(
+      rotatedClipboard,
+      this.selection.left,
+      this.selection.top
+    );
+
+    // End batch operation
+    this.editor.layerManager.endBatchOperation();
+
+    // Update display
+    this.editor.canvasManager.render();
+    this.editor.canvasManager.renderSelectionBox(this.selection);
+    this.updateSettingsUI();
+
+    return true;
+  }
+
+  // Flip selection horizontally
+  flipHorizontal() {
+    if (!this.selection || !this.editor.layerManager) return false;
+
+    const clipboard = this._copyFromBounds(this.selection);
+    const flippedClipboard = this._flipClipboardHorizontal(clipboard);
+
+    // Start batch operation
+    this.editor.layerManager.startBatchOperation();
+
+    // Clear and paste flipped content
+    this._deleteBounds(this.selection);
+    this._pasteClipboardAt(
+      flippedClipboard,
+      this.selection.left,
+      this.selection.top
+    );
+
+    // End batch operation
+    this.editor.layerManager.endBatchOperation();
+
+    // Update display
+    this.editor.canvasManager.render();
+    this.editor.canvasManager.renderSelectionBox(this.selection);
+
+    return true;
+  }
+
+  // Flip selection vertically
+  flipVertical() {
+    if (!this.selection || !this.editor.layerManager) return false;
+
+    const clipboard = this._copyFromBounds(this.selection);
+    const flippedClipboard = this._flipClipboardVertical(clipboard);
+
+    // Start batch operation
+    this.editor.layerManager.startBatchOperation();
+
+    // Clear and paste flipped content
+    this._deleteBounds(this.selection);
+    this._pasteClipboardAt(
+      flippedClipboard,
+      this.selection.left,
+      this.selection.top
+    );
+
+    // End batch operation
+    this.editor.layerManager.endBatchOperation();
+
+    // Update display
+    this.editor.canvasManager.render();
+    this.editor.canvasManager.renderSelectionBox(this.selection);
+
+    return true;
   }
 
   // Get tool cursor

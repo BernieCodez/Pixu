@@ -2,8 +2,9 @@
 class CanvasManager {
   // Render only the selection box overlay
   // Modified renderSelectionBox method - always show handles
+  // Modified renderSelectionBox method - always clear first
   renderSelectionBox(selection) {
-    this.clearOverlay();
+    this.clearOverlay(); // Always clear first to prevent flashing
     if (!selection) return;
 
     const startX = selection.left * this.zoomLevel;
@@ -21,6 +22,52 @@ class CanvasManager {
 
     // Always draw scale handles for selections
     this.renderScaleHandles(selection);
+
+    // NEW: Draw size display
+    this.renderSelectionSizeDisplay(selection);
+}
+
+  // NEW: Render selection size display
+  renderSelectionSizeDisplay(selection) {
+    if (!selection) return;
+
+    const selectionWidth = selection.right - selection.left + 1;
+    const selectionHeight = selection.bottom - selection.top + 1;
+    const sizeText = `${selectionWidth} × ${selectionHeight}`;
+
+    // Calculate position for size display
+    const centerX = (selection.left + selection.right + 1) / 2;
+    const centerY = (selection.top + selection.bottom + 1) / 2;
+    const screenCenterX = centerX * this.zoomLevel;
+    const screenCenterY = centerY * this.zoomLevel;
+
+    // Set text styling
+    this.overlayCtx.font = "12px Arial";
+    this.overlayCtx.textAlign = "center";
+    this.overlayCtx.textBaseline = "middle";
+
+    // Measure text to create background
+    const textMetrics = this.overlayCtx.measureText(sizeText);
+    const textWidth = textMetrics.width;
+    const textHeight = 12;
+    const padding = 4;
+
+    // Draw semi-transparent background
+    this.overlayCtx.fillStyle = "rgba(0, 0, 0, 0.7)";
+    this.overlayCtx.fillRect(
+      screenCenterX - textWidth / 2 - padding,
+      screenCenterY - textHeight / 2 - padding,
+      textWidth + padding * 2,
+      textHeight + padding * 2
+    );
+
+    // Draw white text
+    this.overlayCtx.fillStyle = "#ffffff";
+    this.overlayCtx.fillText(sizeText, screenCenterX, screenCenterY);
+
+    // Reset text alignment
+    this.overlayCtx.textAlign = "start";
+    this.overlayCtx.textBaseline = "alphabetic";
   }
   // New method: Render scale handles at selection corners
   // New method: Render scale handles at selection corners
@@ -126,7 +173,7 @@ class CanvasManager {
       clipboard.height * this.zoomLevel
     );
 
-    // Always show scale handles during preview (both dragging and scaling)
+    // Always show scale handles and rotation handle during preview
     if (
       window.editor &&
       window.editor.currentTool &&
@@ -140,6 +187,9 @@ class CanvasManager {
         bottom: top + clipboard.height - 1,
       };
       this.renderScaleHandles(tempSelection);
+      // this.renderRotationHandle(tempSelection);
+      // NEW: Also show size during preview
+      this.renderSelectionSizeDisplay(tempSelection);
     }
   }
 
@@ -855,6 +905,54 @@ class CanvasManager {
       endX - startX + this.zoomLevel,
       endY - startY + this.zoomLevel
     );
+
+    // NEW: Show size display during active selection
+    const tempSelection = {
+      left: Math.min(this.selection.startX, this.selection.endX),
+      top: Math.min(this.selection.startY, this.selection.endY),
+      right: Math.max(this.selection.startX, this.selection.endX),
+      bottom: Math.max(this.selection.startY, this.selection.endY),
+    };
+    this.renderSelectionSizeDisplay(tempSelection);
+  }
+
+  // Show rotation preview overlay
+  showRotationPreview(selection, angle) {
+    this.clearOverlay();
+    if (!selection) return;
+
+    const centerX = (selection.left + selection.right + 1) / 2;
+    const centerY = (selection.top + selection.bottom + 1) / 2;
+    const screenCenterX = centerX * this.zoomLevel;
+    const screenCenterY = centerY * this.zoomLevel;
+
+    // Save context
+    this.overlayCtx.save();
+
+    // Translate to center and rotate
+    this.overlayCtx.translate(screenCenterX, screenCenterY);
+    this.overlayCtx.rotate(angle);
+    this.overlayCtx.translate(-screenCenterX, -screenCenterY);
+
+    // Draw rotated selection box
+    const width = (selection.right - selection.left + 1) * this.zoomLevel;
+    const height = (selection.bottom - selection.top + 1) * this.zoomLevel;
+    const startX = selection.left * this.zoomLevel;
+    const startY = selection.top * this.zoomLevel;
+
+    this.overlayCtx.strokeStyle = "#00d4ff";
+    this.overlayCtx.lineWidth = 2;
+    this.overlayCtx.setLineDash([5, 5]);
+    this.overlayCtx.strokeRect(startX, startY, width, height);
+    this.overlayCtx.fillStyle = "rgba(0, 212, 255, 0.1)";
+    this.overlayCtx.fillRect(startX, startY, width, height);
+
+    // Restore context
+    this.overlayCtx.restore();
+
+    // Draw rotation handles at original position (not rotated)
+    this.renderScaleHandles(selection);
+    // this.renderRotationHandle(selection);
   }
 
   /**
@@ -1037,10 +1135,22 @@ class CanvasManager {
       if (window.editor && window.editor.currentTool) {
         window.editor.currentTool.onMouseLeave(e);
       }
-      // Clear hover outline
+
+      // Clear hover outline but preserve selection
       this.hoveredPixel = null;
-      // Only clear hover outline, not selection overlay
-      if (this.selection.active) {
+
+      // Check if we have a selection that should be preserved
+      const hasSelection =
+        window.editor &&
+        window.editor.currentTool &&
+        window.editor.currentTool.name === "select" &&
+        window.editor.currentTool.selection;
+
+      if (hasSelection) {
+        // Re-render the selection box instead of clearing
+        this.renderSelectionBox(window.editor.currentTool.selection);
+      } else if (this.selection.active) {
+        // Re-render active selection
         this.renderSelection();
       } else {
         this.clearOverlay();
@@ -1392,10 +1502,20 @@ class CanvasManager {
       return;
     }
 
-    // Only clear hover outline, not selection overlay
+    // Check if we have a selection that should be preserved
+    const hasSelection =
+      window.editor &&
+      window.editor.currentTool &&
+      window.editor.currentTool.name === "select" &&
+      window.editor.currentTool.selection;
+
+    // If no hovered pixel, only clear if we don't have a selection to preserve
     if (!this.hoveredPixel || !this.currentSprite) {
-      // If selection is active, re-render selection overlay
-      if (this.selection.active) {
+      if (hasSelection) {
+        // Re-render the selection box instead of clearing
+        this.renderSelectionBox(window.editor.currentTool.selection);
+      } else if (this.selection.active) {
+        // Re-render active selection
         this.renderSelection();
       } else {
         this.clearOverlay();
@@ -1403,13 +1523,16 @@ class CanvasManager {
       return;
     }
 
-    // If selection is active, render selection first, then hover outline
-    if (this.selection.active) {
+    // If we have a selection, render it first, then add hover outline
+    if (hasSelection) {
+      this.renderSelectionBox(window.editor.currentTool.selection);
+    } else if (this.selection.active) {
       this.renderSelection();
     } else {
       this.clearOverlay();
     }
 
+    // Then add hover outline on top
     const { x, y } = this.hoveredPixel;
     this.overlayCtx.save();
 
@@ -1559,5 +1682,72 @@ class CanvasManager {
         coordsElement.textContent = `Cursor X & Y: (--, --)`;
       }
     }
+  }
+  renderRotationHandle(selection) {
+    if (!selection) return;
+
+    const centerX = (selection.left + selection.right + 1) / 2;
+    const handleY = selection.top - 2; // 2 pixels above selection
+    const handleRadius = 6;
+
+    // Don't draw if handle would be off-screen
+    if (handleY < 0) return;
+
+    const screenX = centerX * this.zoomLevel;
+    const screenY = handleY * this.zoomLevel;
+
+    this.overlayCtx.setLineDash([]);
+
+    // Draw connection line from selection to handle
+    this.overlayCtx.strokeStyle = "#00d4ff";
+    this.overlayCtx.lineWidth = 1;
+    this.overlayCtx.beginPath();
+    this.overlayCtx.moveTo(screenX, selection.top * this.zoomLevel);
+    this.overlayCtx.lineTo(screenX, screenY);
+    this.overlayCtx.stroke();
+
+    // Draw circular rotation handle
+    this.overlayCtx.fillStyle = "#ffffff";
+    this.overlayCtx.strokeStyle = "#00d4ff";
+    this.overlayCtx.lineWidth = 2;
+    this.overlayCtx.beginPath();
+    this.overlayCtx.arc(screenX, screenY, handleRadius, 0, Math.PI * 2);
+    this.overlayCtx.fill();
+    this.overlayCtx.stroke();
+
+    // Draw rotation icon inside handle
+    this.overlayCtx.strokeStyle = "#00d4ff";
+    this.overlayCtx.lineWidth = 1.5;
+    this.overlayCtx.beginPath();
+    this.overlayCtx.arc(screenX, screenY, 3, 0, Math.PI * 1.5);
+    this.overlayCtx.stroke();
+
+    // Draw arrow
+    this.overlayCtx.beginPath();
+    this.overlayCtx.moveTo(screenX + 2, screenY - 2);
+    this.overlayCtx.lineTo(screenX + 1, screenY - 3);
+    this.overlayCtx.lineTo(screenX + 3, screenY - 3);
+    this.overlayCtx.stroke();
+  }
+
+  // New method: Check if position is over rotation handle
+  isOverRotationHandle(x, y, selection) {
+    if (!selection) return false;
+
+    const centerX = (selection.left + selection.right + 1) / 2;
+    const handleY = selection.top - 2;
+
+    if (handleY < 0) return false;
+
+    const handleRadius = 6;
+    const tolerance = handleRadius / this.zoomLevel;
+
+    const screenX = centerX;
+    const screenY = handleY;
+
+    return (
+      Math.sqrt(Math.pow(x - screenX, 2) + Math.pow(y - screenY, 2)) <=
+      tolerance
+    );
   }
 }

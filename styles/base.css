@@ -131,13 +131,17 @@ body {
     outline: none;
     background: #efefef;
 }
-.btn:hover{
-    background: white;
-}
+
+
 
 .btn-sm {
     padding: 10px 16px;
     font-size: 12px;
+}
+.btn-sm:hover{
+      transform: translateY(-1px);
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.2);
+    background: white;
 }
 
 .btn-primary {
@@ -147,7 +151,7 @@ body {
 
 .btn-primary:hover {
     background: #00bae6;
-    transform: translateY(-1px);
+    /* transform: translateY(-1px); */
 }
 
 .btn-secondary {
@@ -206,6 +210,10 @@ body {
     background: #00d4ff;
     color: #1a1a1a;
     box-shadow: 0 0 0 2px rgba(0, 212, 255, 0.3);
+}
+.tool-btn.active:hover {
+    background: #00bae6 !important;
+
 }
 
 /* Main Container */
