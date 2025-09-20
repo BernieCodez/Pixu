@@ -44,88 +44,215 @@ class AnimationManager {
   }
 
   // Load a frame's layers into the layer manager
-  loadFrameIntoLayerManager(frame) {
-    if (!frame || !this.editor.layerManager) return;
+  // In AnimationManager class - add validation to loadFrameIntoLayerManager method
+  // (This would be in animation.js)
 
-    // Prevent history saving during frame loading
-    this.editor.layerManager._restoring = true;
+  loadFrameIntoLayerManager(frame) {
+    if (!frame || !this.editor.layerManager) {
+      console.error("Invalid frame or layer manager");
+      return;
+    }
+
+    // CRITICAL FIX: Validate frame structure before loading
+    if (
+      !frame.layers ||
+      !Array.isArray(frame.layers) ||
+      frame.layers.length === 0
+    ) {
+      console.error("Frame has no valid layers, cannot load");
+      return;
+    }
+
+    // CRITICAL FIX: Validate each layer has pixel data
+    const validLayers = frame.layers.filter((layer) => {
+      return (
+        layer &&
+        layer.pixels &&
+        Array.isArray(layer.pixels) &&
+        layer.pixels.length > 0 &&
+        layer.pixels[0] &&
+        Array.isArray(layer.pixels[0])
+      );
+    });
+
+    if (validLayers.length === 0) {
+      console.error("Frame has no layers with valid pixel data");
+      return;
+    }
+
+    // Prevent saving during frame load
+    this.editor._loadingFrame = true;
 
     try {
-      // Validate frame data
+      // Resize layer manager if needed
       if (
-        !frame.layers ||
-        !Array.isArray(frame.layers) ||
-        frame.layers.length === 0
+        this.editor.layerManager.width !== frame.width ||
+        this.editor.layerManager.height !== frame.height
       ) {
-        console.warn("Frame has no valid layers, creating default layer");
-        frame.layers = [
-          {
-            id: Date.now() + Math.random(),
-            name: "Background",
-            visible: true,
-            opacity: 1,
-            pixels: this.createEmptyPixelArray(frame.width, frame.height),
-            locked: false,
-            blendMode: "normal",
-          },
-        ];
+        this.editor.layerManager.resize(frame.width, frame.height);
       }
 
-      // Clear existing layers and load frame layers
-      this.editor.layerManager.layers = frame.layers.map((layerData) => ({
-        id: layerData.id || Date.now() + Math.random(),
-        name: layerData.name || "Layer",
-        visible: layerData.visible !== false,
-        opacity: typeof layerData.opacity === "number" ? layerData.opacity : 1,
-        pixels: this.validateAndCopyPixels(
-          layerData.pixels,
-          frame.width,
-          frame.height
-        ),
-        locked: layerData.locked || false,
-        blendMode: layerData.blendMode || "normal",
-      }));
+      // Load layers with validation
+      this.editor.layerManager.layers = validLayers.map(
+        (frameLayer, index) => ({
+          id: frameLayer.id || Date.now() + Math.random() + index,
+          name: frameLayer.name || `Layer ${index + 1}`,
+          visible: frameLayer.visible !== false,
+          opacity:
+            typeof frameLayer.opacity === "number" ? frameLayer.opacity : 1,
+          pixels: this.validateAndDeepCopyPixels(
+            frameLayer.pixels,
+            frame.width,
+            frame.height
+          ),
+          locked: frameLayer.locked || false,
+          blendMode: frameLayer.blendMode || "normal",
+        })
+      );
 
-      // Set active layer index
+      // Set active layer
       this.editor.layerManager.activeLayerIndex = Math.min(
         Math.max(0, frame.activeLayerIndex || 0),
         this.editor.layerManager.layers.length - 1
       );
 
-      // Update layer manager dimensions
-      this.editor.layerManager.width = frame.width;
-      this.editor.layerManager.height = frame.height;
-
-      // Mark as dirty and update
+      // Force composite update
       this.editor.layerManager.compositeDirty = true;
       this.editor.layerManager.compositeCache = null;
+
+      // Notify change without saving
+      this.editor.layerManager._preventSaveLoop = true;
+      if (this.editor.layerManager.onChange) {
+        this.editor.layerManager.onChange(this.editor.layerManager);
+      }
+      this.editor.layerManager._preventSaveLoop = false;
+
+      console.log(
+        `Loaded frame with ${this.editor.layerManager.layers.length} layers`
+      );
     } catch (error) {
       console.error("Error loading frame into layer manager:", error);
-
-      // Create fallback layer if loading fails
-      this.editor.layerManager.layers = [
-        {
-          id: Date.now() + Math.random(),
-          name: "Background",
-          visible: true,
-          opacity: 1,
-          pixels: this.createEmptyPixelArray(
-            frame.width || 16,
-            frame.height || 16
-          ),
-          locked: false,
-          blendMode: "normal",
-        },
-      ];
-
-      this.editor.layerManager.activeLayerIndex = 0;
     } finally {
-      this.editor.layerManager._restoring = false;
+      this.editor._loadingFrame = false;
+    }
+  }
+
+  // Helper method to validate and deep copy pixel data
+  validateAndDeepCopyPixels(pixels, expectedWidth, expectedHeight) {
+    if (!Array.isArray(pixels) || pixels.length !== expectedHeight) {
+      console.warn("Invalid pixel array structure, creating empty");
+      return this.createEmptyPixelArray(expectedWidth, expectedHeight);
     }
 
-    // Trigger render
-    if (this.editor.canvasManager) {
-      this.editor.canvasManager.render();
+    const validatedPixels = [];
+    for (let y = 0; y < expectedHeight; y++) {
+      if (!Array.isArray(pixels[y]) || pixels[y].length !== expectedWidth) {
+        console.warn(`Invalid pixel row ${y}, filling with empty pixels`);
+        validatedPixels[y] = new Array(expectedWidth)
+          .fill()
+          .map(() => [0, 0, 0, 0]);
+      } else {
+        validatedPixels[y] = pixels[y].map((pixel) => {
+          if (!Array.isArray(pixel) || pixel.length !== 4) {
+            return [0, 0, 0, 0];
+          }
+          return [
+            Math.max(0, Math.min(255, Math.round(pixel[0]) || 0)),
+            Math.max(0, Math.min(255, Math.round(pixel[1]) || 0)),
+            Math.max(0, Math.min(255, Math.round(pixel[2]) || 0)),
+            Math.max(0, Math.min(255, Math.round(pixel[3]) || 0)),
+          ];
+        });
+      }
+    }
+
+    return validatedPixels;
+  }
+
+  // Also fix saveLayerManagerToCurrentFrame to prevent corruption
+  saveLayerManagerToCurrentFrame() {
+    if (
+      !this.editor.layerManager ||
+      !this.editor.currentSprite ||
+      !this.editor.currentSprite.frames ||
+      this.editor._loadingFrame
+    ) {
+      return;
+    }
+
+    // CRITICAL FIX: Don't save if LayerManager has no valid data
+    const activeLayer = this.editor.layerManager.getActiveLayer();
+    if (
+      !activeLayer ||
+      !activeLayer.pixels ||
+      activeLayer.pixels.length === 0
+    ) {
+      console.warn("LayerManager has no valid data, skipping save to frame");
+      return;
+    }
+
+    const currentFrame = this.getCurrentFrame();
+    if (!currentFrame) {
+      console.warn("No current frame to save to");
+      return;
+    }
+
+    try {
+      // Update frame dimensions
+      currentFrame.width = this.editor.layerManager.width;
+      currentFrame.height = this.editor.layerManager.height;
+      currentFrame.activeLayerIndex = this.editor.layerManager.activeLayerIndex;
+
+      // Deep copy layers with validation
+      currentFrame.layers = this.editor.layerManager.layers.map(
+        (layer, index) => {
+          if (
+            !layer.pixels ||
+            !Array.isArray(layer.pixels) ||
+            layer.pixels.length === 0
+          ) {
+            console.warn(`Layer ${index} has no valid pixels during save`);
+            return {
+              id: layer.id || Date.now() + Math.random(),
+              name: layer.name || `Layer ${index + 1}`,
+              visible: layer.visible !== false,
+              opacity: layer.opacity || 1,
+              pixels: this.createEmptyPixelArray(
+                this.editor.layerManager.width,
+                this.editor.layerManager.height
+              ),
+              locked: layer.locked || false,
+              blendMode: layer.blendMode || "normal",
+            };
+          }
+
+          return {
+            id: layer.id || Date.now() + Math.random(),
+            name: layer.name || `Layer ${index + 1}`,
+            visible: layer.visible !== false,
+            opacity: layer.opacity || 1,
+            pixels: layer.pixels.map((row) =>
+              Array.isArray(row)
+                ? row.map((pixel) =>
+                    Array.isArray(pixel) && pixel.length === 4
+                      ? [...pixel]
+                      : [0, 0, 0, 0]
+                  )
+                : new Array(this.editor.layerManager.width)
+                    .fill()
+                    .map(() => [0, 0, 0, 0])
+            ),
+            locked: layer.locked || false,
+            blendMode: layer.blendMode || "normal",
+          };
+        }
+      );
+
+      console.log(
+        `Saved LayerManager state to frame ${this.currentFrameIndex}`
+      );
+    } catch (error) {
+      console.error("Error saving LayerManager to frame:", error);
     }
   }
   validateAndCopyPixels(pixels, width, height) {
@@ -466,7 +593,7 @@ class AnimationManager {
     for (let y = 0; y < height; y++) {
       pixels[y] = [];
       for (let x = 0; x < width; x++) {
-        pixels[y][x] = [0, 0, 0, 0]; // Transparent
+        pixels[y][x] = [0, 0, 0, 0];
       }
     }
     return pixels;

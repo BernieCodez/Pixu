@@ -152,19 +152,50 @@ class PixelEditor {
   }
 
   // Add this new method to save layer changes back to sprite
+  // Also fix the saveLayersToSprite method to prevent corruption
   saveLayersToSprite() {
     if (!this.currentSprite || !this.layerManager || !this.animationManager)
       return;
 
-    // Save current layer state to current frame
-    this.animationManager.saveLayerManagerToCurrentFrame();
+    // Don't save during sprite switching or import
+    if (this._switchingSprites || this._importingSprite) {
+      return;
+    }
 
-    // CRITICAL FIX: Mark sprite as modified to trigger save
-    this.currentSprite.modifiedAt = new Date().toISOString();
+    // CRITICAL FIX: Only save if LayerManager has valid data
+    const activeLayer = this.layerManager.getActiveLayer();
+    if (
+      !activeLayer ||
+      !activeLayer.pixels ||
+      activeLayer.pixels.length === 0
+    ) {
+      console.warn("LayerManager has no valid data to save, skipping");
+      return;
+    }
 
-    // Trigger auto-save
-    if (this.debouncedSave) {
-      this.debouncedSave(this.currentSprite);
+    // CRITICAL FIX: Prevent recursive saves during import
+    if (this._savingLayers) {
+      console.log("Already saving layers, preventing recursion");
+      return;
+    }
+
+    this._savingLayers = true;
+
+    try {
+      // Save current layer state to current frame
+      this.animationManager.saveLayerManagerToCurrentFrame();
+
+      // Mark sprite as modified
+      this.currentSprite.modifiedAt = new Date().toISOString();
+
+      // Trigger auto-save with delay to prevent conflicts
+      if (this.debouncedSave) {
+        this.debouncedSave(this.currentSprite);
+      }
+    } catch (error) {
+      console.error("Error saving layers to sprite:", error);
+    } finally {
+      this._savingLayers = false;
     }
   }
 
@@ -188,43 +219,159 @@ class PixelEditor {
   // Replace the setCurrentSprite method
   setCurrentSprite(sprite) {
     // Save current frame if switching sprites
-    if (this.currentSprite && this.animationManager) {
+    if (
+      this.currentSprite &&
+      this.animationManager &&
+      !this._switchingSprites
+    ) {
       this.animationManager.saveLayerManagerToCurrentFrame();
     }
+
+    this._switchingSprites = true;
 
     this.currentSprite = sprite;
     if (sprite) {
       sprite.onChange = (s) => this.debouncedSave(s);
 
-      // Initialize frames for backward compatibility
+      // CRITICAL FIX: Validate and initialize frames before proceeding
       if (!sprite.frames || sprite.frames.length === 0) {
+        console.log("Sprite has no frames, initializing...");
         sprite.initializeFrames();
+      }
+
+      // CRITICAL FIX: Validate frame data integrity
+      if (
+        sprite.frames[0] &&
+        (!sprite.frames[0].layers || sprite.frames[0].layers.length === 0)
+      ) {
+        console.warn("Frame has no layers, reinitializing sprite structure");
+        sprite.initializeFrames();
+      }
+
+      // CRITICAL FIX: Validate pixel data exists and is valid
+      const firstFrame = sprite.frames[0];
+      if (firstFrame && firstFrame.layers && firstFrame.layers[0]) {
+        const firstLayer = firstFrame.layers[0];
+        if (
+          !firstLayer.pixels ||
+          !Array.isArray(firstLayer.pixels) ||
+          firstLayer.pixels.length === 0
+        ) {
+          console.warn(
+            "Layer has no valid pixel data, creating empty pixel array"
+          );
+          firstLayer.pixels = sprite.createEmptyPixelArray();
+        }
+      }
+
+      // Validate sprite has pixel data for backward compatibility
+      if (!sprite.pixels || sprite.pixels.length === 0) {
+        if (
+          sprite.frames &&
+          sprite.frames[0] &&
+          sprite.frames[0].layers &&
+          sprite.frames[0].layers[0] &&
+          sprite.frames[0].layers[0].pixels
+        ) {
+          sprite.pixels = sprite.frames[0].layers[0].pixels;
+        } else {
+          sprite.pixels = sprite.createEmptyPixelArray();
+        }
       }
 
       // Load first frame into animation manager and layer manager
       if (this.animationManager) {
         this.animationManager.currentFrameIndex = 0;
-        this.animationManager.loadFrameIntoLayerManager(sprite.frames[0]);
+        const frameToLoad = sprite.frames[0];
+        this.animationManager.loadFrameIntoLayerManager(frameToLoad);
       }
     }
 
     // Set sprite in canvas manager
-    this.canvasManager.setSprite(sprite);
+    if (this.canvasManager) {
+      this.canvasManager.setSprite(sprite);
+    }
+
+    this._switchingSprites = false;
 
     // Force immediate render
     if (this.canvasManager) {
       this.canvasManager.render();
     }
 
-    // CRITICAL FIX: Save initial state to history after sprite is fully loaded
-    // This ensures the loaded sprite state is preserved in undo history
+    // Save to history after sprite is loaded
     setTimeout(() => {
-      if (this.layerManager) {
-        this.layerManager.saveToHistory();
+      if (this.layerManager && !this._switchingSprites) {
+        const activeLayer = this.layerManager.getActiveLayer();
+        if (
+          activeLayer &&
+          activeLayer.pixels &&
+          activeLayer.pixels.length > 0
+        ) {
+          this.layerManager.saveToHistory();
+        }
       }
-    }, 0);
+    }, 100);
 
     this.updateUI();
+  }
+
+  // Update saveLayersToSprite to check for sprite switching
+  saveLayersToSprite() {
+    if (!this.currentSprite || !this.layerManager || !this.animationManager)
+      return;
+
+    // Don't save during sprite switching or import
+    if (this._switchingSprites || this._importingSprite) {
+      return;
+    }
+
+    // Only save if LayerManager has valid data
+    const activeLayer = this.layerManager.getActiveLayer();
+    if (
+      !activeLayer ||
+      !activeLayer.pixels ||
+      activeLayer.pixels.length === 0
+    ) {
+      console.warn("LayerManager has no valid data to save, skipping");
+      return;
+    }
+
+    // Prevent recursive saves
+    if (this._savingLayers) {
+      return;
+    }
+
+    this._savingLayers = true;
+
+    try {
+      // Save current layer state to current frame
+      this.animationManager.saveLayerManagerToCurrentFrame();
+
+      // Mark sprite as modified
+      this.currentSprite.modifiedAt = new Date().toISOString();
+
+      // Trigger auto-save
+      if (this.debouncedSave) {
+        this.debouncedSave(this.currentSprite);
+      }
+    } catch (error) {
+      console.error("Error saving layers to sprite:", error);
+    } finally {
+      this._savingLayers = false;
+    }
+  }
+
+  // Add this helper method to PixelEditor class
+  createEmptyPixelArray(width, height) {
+    const pixels = [];
+    for (let y = 0; y < height; y++) {
+      pixels[y] = [];
+      for (let x = 0; x < width; x++) {
+        pixels[y][x] = [0, 0, 0, 0];
+      }
+    }
+    return pixels;
   }
 
   // Apply saved tool settings
@@ -435,49 +582,124 @@ class PixelEditor {
     this.updateUI();
 
     this.uiManager.showNotification(
-      `Canvas resized to ${width}×${height} using nearest neighbor scaling`,
+      `Canvas resized to ${width}×${height}`,
       "success"
     );
     return true;
   }
 
+  // In PixelEditor class - replace updateSpriteFramesFromLayerManager method
   updateSpriteFramesFromLayerManager() {
     if (!this.currentSprite || !this.layerManager) return;
+
+    // CRITICAL FIX: Don't update frames if LayerManager has no valid data
+    const activeLayer = this.layerManager.getActiveLayer();
+    if (
+      !activeLayer ||
+      !activeLayer.pixels ||
+      activeLayer.pixels.length === 0
+    ) {
+      console.warn(
+        "LayerManager has no valid pixel data, skipping frame update"
+      );
+      return;
+    }
 
     // Ensure frames exist
     if (!this.currentSprite.frames || this.currentSprite.frames.length === 0) {
       this.currentSprite.initializeFrames();
     }
 
-    // Get the current frame (assuming single frame for now)
-    const currentFrame = this.currentSprite.frames[0];
+    // CRITICAL FIX: Get the current frame (or create if animation manager exists)
+    let frameIndex = 0;
+    if (
+      this.animationManager &&
+      typeof this.animationManager.currentFrameIndex === "number"
+    ) {
+      frameIndex = this.animationManager.currentFrameIndex;
+    }
+
+    // Ensure we have a frame at the current index
+    if (!this.currentSprite.frames[frameIndex]) {
+      console.warn(`Frame ${frameIndex} doesn't exist, using frame 0`);
+      frameIndex = 0;
+    }
+
+    const currentFrame = this.currentSprite.frames[frameIndex];
+    if (!currentFrame) {
+      console.error("No frame available to update");
+      return;
+    }
 
     // Update frame dimensions
     currentFrame.width = this.layerManager.width;
     currentFrame.height = this.layerManager.height;
     currentFrame.activeLayerIndex = this.layerManager.activeLayerIndex;
 
-    // Update frame layers with LayerManager data
-    currentFrame.layers = this.layerManager.layers.map((layer) => ({
-      id: layer.id || Date.now() + Math.random(),
-      name: layer.name,
-      visible: layer.visible,
-      opacity: layer.opacity,
-      pixels: layer.pixels.map((row) => row.map((pixel) => [...pixel])), // Deep copy
-      locked: layer.locked || false,
-      blendMode: layer.blendMode || "normal",
-    }));
+    // CRITICAL FIX: Deep copy LayerManager data to frame, with validation
+    currentFrame.layers = this.layerManager.layers.map((layer, index) => {
+      // Validate layer has pixel data
+      if (
+        !layer.pixels ||
+        !Array.isArray(layer.pixels) ||
+        layer.pixels.length === 0
+      ) {
+        console.warn(`Layer ${index} has no pixel data during frame update`);
+        return {
+          id: layer.id || Date.now() + Math.random(),
+          name: layer.name || `Layer ${index + 1}`,
+          visible: layer.visible !== false,
+          opacity: layer.opacity || 1,
+          pixels: this.createEmptyPixelArray(
+            this.layerManager.width,
+            this.layerManager.height
+          ),
+          locked: layer.locked || false,
+          blendMode: layer.blendMode || "normal",
+        };
+      }
 
-    // Update sprite layers for backward compatibility
-    this.currentSprite.layers = currentFrame.layers.map((layer) => ({
-      ...layer,
-      pixels: layer.pixels.map((row) => row.map((pixel) => [...pixel])),
-      useTypedArray: false,
-    }));
+      // Deep copy the pixel data
+      return {
+        id: layer.id || Date.now() + Math.random(),
+        name: layer.name || `Layer ${index + 1}`,
+        visible: layer.visible !== false,
+        opacity: layer.opacity || 1,
+        pixels: layer.pixels.map((row) => {
+          if (!Array.isArray(row)) {
+            console.warn("Invalid pixel row detected, creating empty row");
+            return new Array(this.layerManager.width)
+              .fill()
+              .map(() => [0, 0, 0, 0]);
+          }
+          return row.map((pixel) => {
+            if (!Array.isArray(pixel) || pixel.length !== 4) {
+              return [0, 0, 0, 0];
+            }
+            return [...pixel];
+          });
+        }),
+        locked: layer.locked || false,
+        blendMode: layer.blendMode || "normal",
+      };
+    });
 
-    // Update pixel reference for backward compatibility
-    this.currentSprite.pixels = this.currentSprite.layers[0].pixels;
-    this.currentSprite.useTypedArray = false;
+    // CRITICAL FIX: Update sprite layers for backward compatibility - but only if we have valid data
+    if (
+      currentFrame.layers &&
+      currentFrame.layers.length > 0 &&
+      currentFrame.layers[0].pixels
+    ) {
+      this.currentSprite.layers = currentFrame.layers.map((layer) => ({
+        ...layer,
+        pixels: layer.pixels.map((row) => row.map((pixel) => [...pixel])),
+        useTypedArray: false,
+      }));
+
+      // Update main pixel reference for backward compatibility
+      this.currentSprite.pixels = this.currentSprite.layers[0].pixels;
+      this.currentSprite.useTypedArray = false;
+    }
 
     // Mark as modified
     this.currentSprite.modifiedAt = new Date().toISOString();
@@ -647,7 +869,7 @@ class PixelEditor {
         this.canvasManager.render();
       }
       this.updateUI();
-      this.uiManager.showNotification("Undone", "info");
+      // this.uiManager.showNotification("Undone", "info");
       return true;
     }
     return false;
@@ -662,7 +884,7 @@ class PixelEditor {
         this.canvasManager.render();
       }
       this.updateUI();
-      this.uiManager.showNotification("Redone", "info");
+      // this.uiManager.showNotification("Redone", "info");
       return true;
     }
     return false;
@@ -828,92 +1050,231 @@ class PixelEditor {
     reader.readAsText(file);
   }
   importImage(file) {
-    const img = new Image();
-    const canvas = document.createElement("canvas");
-    const ctx = canvas.getContext("2d");
-    const editor = this; // Capture 'this' reference
+  const img = new Image();
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
+  const editor = this;
 
-    img.onload = () => {
-      canvas.width = img.width;
-      canvas.height = img.height;
-      ctx.drawImage(img, 0, 0);
+  this._importingSprite = true;
 
-      // Check if image exceeds maximum size
-      if (img.width > 64 || img.height > 64) {
-        // Show downscale modal
-        const imageData = ctx.getImageData(0, 0, img.width, img.height);
-        editor.uiManager.showDownscaleModal(imageData, img.width, img.height);
-        return;
-      }
+  img.onload = async () => {
+    canvas.width = img.width;
+    canvas.height = img.height;
+    ctx.drawImage(img, 0, 0);
 
-      // Image is within limits, create sprite directly
+    // Check if image exceeds maximum size
+    if (img.width > 64 || img.height > 64) {
+      // Show downscale modal
       const imageData = ctx.getImageData(0, 0, img.width, img.height);
-      editor.createSpriteFromImageData(imageData, img.width, img.height);
+      editor.uiManager.showDownscaleModal(imageData, img.width, img.height);
+      editor._importingSprite = false;
+      return;
+    }
 
-      // CRITICAL FIX: Save the imported image state to LayerManager history
-      // This ensures the import is preserved as a separate undo state
-      if (editor.layerManager) {
-        // Force save the current state (with imported image) to history
-        editor.layerManager.saveToHistory();
-      }
+    // Image is within limits, create sprite directly
+    const imageData = ctx.getImageData(0, 0, img.width, img.height);
 
+    if (!imageData || imageData.width === 0 || imageData.height === 0) {
+      editor.uiManager.showNotification(
+        "Failed to process image data",
+        "error"
+      );
+      editor._importingSprite = false;
+      return;
+    }
+
+    try {
+      // CRITICAL FIX: Save current state before importing
+      await editor.saveSprites();
+      
+      // Create sprite without triggering automatic save
+      const sprite = editor.createSpriteFromImageDataSafe(
+        imageData,
+        img.width,
+        img.height
+      );
+
+      // Save all sprites including the new one
+      await editor.saveSprites();
+      
       editor.uiManager.showNotification(
         `Imported image: ${img.width}x${img.height}`,
         "success"
       );
-    };
+    } catch (error) {
+      console.error("Failed to import image:", error);
+      editor.uiManager.showNotification("Failed to import image", "error");
+    } finally {
+      editor._importingSprite = false;
+    }
+  };
 
-    img.onerror = () => {
-      editor.uiManager.showNotification("Failed to load image", "error");
-    };
+  img.onerror = () => {
+    editor._importingSprite = false;
+    editor.uiManager.showNotification("Failed to load image", "error");
+  };
 
-    img.src = URL.createObjectURL(file);
+  img.src = URL.createObjectURL(file);
+}
+
+createSpriteFromImageDataSafe(imageData, width, height) {
+  // Create sprite directly without triggering save callbacks
+  const spriteName = `Imported Image ${this.sprites.length + 1}`;
+  const sprite = new Sprite(width, height, spriteName);
+
+  // Temporarily disable onChange to prevent auto-saves during setup
+  const originalOnChange = sprite.onChange;
+  sprite.onChange = null;
+
+  // Initialize pixel array from image data
+  const pixels = [];
+  for (let y = 0; y < height; y++) {
+    pixels[y] = [];
+    for (let x = 0; x < width; x++) {
+      const index = (y * width + x) * 4;
+      pixels[y][x] = [
+        imageData.data[index],
+        imageData.data[index + 1],
+        imageData.data[index + 2],
+        imageData.data[index + 3],
+      ];
+    }
   }
 
-  createSpriteFromImageData(imageData, width, height) {
-    const sprite = this.createNewSprite(width, height);
-    const pixels = [];
+  // Initialize frames properly
+  sprite.initializeFrames();
+  sprite.frames[0].layers[0].pixels = pixels.map((row) =>
+    row.map((pixel) => [...pixel])
+  );
 
-    // Initialize pixel array
+  // Set backward compatibility data
+  sprite.layers = sprite.frames[0].layers.map((layer) => ({
+    ...layer,
+    pixels: layer.pixels.map((row) => row.map((pixel) => [...pixel])),
+  }));
+  sprite.pixels = sprite.layers[0].pixels;
+  sprite.useTypedArray = false;
+
+  // Add to sprites array
+  this.sprites.push(sprite);
+
+  // Set as current sprite
+  this.setCurrentSprite(sprite);
+
+  // Restore onChange callback
+  sprite.onChange = originalOnChange || ((s) => {
+    if (this.storageManager && typeof this.storageManager.saveSprite === "function") {
+      this.storageManager.saveSprite(s);
+    }
+  });
+
+  this.updateUI();
+  return sprite;
+}   
+
+  // In PixelEditor class - replace the createSpriteFromImageData method
+  // In PixelEditor class - completely replace createSpriteFromImageData method
+  createSpriteFromImageData(imageData, width, height) {
+    // Create sprite directly without triggering normal creation flow
+    const spriteName = `Imported Image ${this.sprites.length + 1}`;
+    const sprite = new Sprite(width, height, spriteName);
+
+    // Initialize pixel array from image data
+    const pixels = [];
     for (let y = 0; y < height; y++) {
       pixels[y] = [];
       for (let x = 0; x < width; x++) {
         const index = (y * width + x) * 4;
         pixels[y][x] = [
-          imageData.data[index], // R
-          imageData.data[index + 1], // G
-          imageData.data[index + 2], // B
-          imageData.data[index + 3], // A
+          imageData.data[index],
+          imageData.data[index + 1],
+          imageData.data[index + 2],
+          imageData.data[index + 3],
         ];
       }
     }
 
-    sprite.setPixelArray(pixels);
+    // Ensure proper frame initialization BEFORE setting pixels
+    sprite.initializeFrames();
 
-    // CRITICAL FIX: Sync the imported pixels with LayerManager
-    // This ensures the LayerManager has the correct pixel data
-    if (this.layerManager) {
-      // Get the active layer and set the imported pixels
-      const activeLayer = this.layerManager.getActiveLayer();
-      if (activeLayer) {
-        activeLayer.pixels = pixels.map((row) =>
-          row.map((pixel) => [...pixel])
-        );
-
-        // Force LayerManager to update and render
-        this.layerManager.compositeDirty = true;
-        this.layerManager.notifyChange();
-
-        // CRITICAL FIX: Save the imported image state to LayerManager history
-        // This ensures the import is preserved as a separate undo state
-        this.layerManager.saveToHistory();
-      }
+    // Validate frame structure exists
+    if (
+      !sprite.frames ||
+      sprite.frames.length === 0 ||
+      !sprite.frames[0].layers ||
+      sprite.frames[0].layers.length === 0
+    ) {
+      console.error(
+        "Frame structure not properly initialized for imported sprite"
+      );
+      // Reinitialize with proper structure
+      sprite.frames = [
+        {
+          id: Date.now() + Math.random(),
+          name: "Frame 1",
+          width: width,
+          height: height,
+          activeLayerIndex: 0,
+          layers: [
+            {
+              id: Date.now() + Math.random() + 1,
+              name: "Background",
+              visible: true,
+              opacity: 1,
+              pixels: pixels.map((row) => row.map((pixel) => [...pixel])),
+              locked: false,
+              blendMode: "normal",
+            },
+          ],
+        },
+      ];
+    } else {
+      // Set pixel data on the sprite's frame structure
+      sprite.frames[0].layers[0].pixels = pixels.map((row) =>
+        row.map((pixel) => [...pixel])
+      );
     }
 
-    this.updateUI();
+    // Ensure backward compatibility data is properly set
+    sprite.layers = sprite.frames[0].layers.map((layer) => ({
+      ...layer,
+      pixels: layer.pixels.map((row) => row.map((pixel) => [...pixel])),
+    }));
+
+    sprite.pixels = sprite.layers[0].pixels;
+    sprite.useTypedArray = false;
+
+    // Set up auto-save callback
+    sprite.onChange = (s) => {
+      if (
+        this.storageManager &&
+        typeof this.storageManager.saveSprite === "function"
+      ) {
+        this.storageManager.saveSprite(s);
+      }
+    };
+
+    // Add to sprites array BEFORE setting current sprite
+    this.sprites.push(sprite);
+
+    // Save all sprites first to ensure the array is persisted
+    this.saveSprites()
+      .then(() => {
+        console.log("All sprites saved after import");
+        // Only then set the current sprite
+        this.setCurrentSprite(sprite);
+        // Update UI
+        this.updateUI();
+      })
+      .catch((error) => {
+        console.error("Failed to save sprites after import:", error);
+        // Still set current sprite even if save failed
+        this.setCurrentSprite(sprite);
+        this.updateUI();
+      });
+
     return sprite;
   }
-
   /**
    * Import SVG file
    */
@@ -1401,13 +1762,13 @@ class PixelEditor {
       );
 
       // Fallback to PNG frames
-      if (
-        confirm(
-          "GIF export failed. Would you like to export individual PNG frames instead?"
-        )
-      ) {
-        this.exportFramesAsPNGs();
-      }
+      // Fallback to PNG frames
+      this.uiManager.showCustomConfirm(
+        "GIF export failed. Would you like to export individual PNG frames instead?",
+        () => {
+          this.exportFramesAsPNGs();
+        }
+      );
     }
   }
 
@@ -1830,18 +2191,17 @@ class PixelEditor {
    * Clear all data (reset editor)
    */
   reset() {
-    if (
-      confirm(
-        "Are you sure you want to clear all sprites and reset the editor? This cannot be undone."
-      )
-    ) {
-      this.sprites = [];
-      this.storageManager.clearAll();
-      this.createNewSprite();
-      this.updateUI();
+    this.uiManager.showCustomConfirm(
+      "Are you sure you want to clear all sprites and reset the editor? This cannot be undone.",
+      () => {
+        this.sprites = [];
+        this.storageManager.clearAll();
+        this.createNewSprite();
+        this.updateUI();
 
-      this.uiManager.showNotification("Editor reset successfully", "success");
-    }
+        this.uiManager.showNotification("Editor reset successfully", "success");
+      }
+    );
   }
 
   /**

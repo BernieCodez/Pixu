@@ -1,511 +1,571 @@
-I'll add rotation and flip functionality to your selection tool. Here are the modifications:
-
-**In CanvasManager class, add these new methods:**
-
-```javascript
-// New method: Render rotation handle above selection
-renderRotationHandle(selection) {
-  if (!selection) return;
-
-  const centerX = (selection.left + selection.right + 1) / 2;
-  const handleY = selection.top - 2; // 2 pixels above selection
-  const handleRadius = 6;
-
-  // Don't draw if handle would be off-screen
-  if (handleY < 0) return;
-
-  const screenX = centerX * this.zoomLevel;
-  const screenY = handleY * this.zoomLevel;
-
-  this.overlayCtx.setLineDash([]);
-
-  // Draw connection line from selection to handle
-  this.overlayCtx.strokeStyle = "#00d4ff";
-  this.overlayCtx.lineWidth = 1;
-  this.overlayCtx.beginPath();
-  this.overlayCtx.moveTo(screenX, (selection.top * this.zoomLevel));
-  this.overlayCtx.lineTo(screenX, screenY);
-  this.overlayCtx.stroke();
-
-  // Draw circular rotation handle
-  this.overlayCtx.fillStyle = "#ffffff";
-  this.overlayCtx.strokeStyle = "#00d4ff";
-  this.overlayCtx.lineWidth = 2;
-  this.overlayCtx.beginPath();
-  this.overlayCtx.arc(screenX, screenY, handleRadius, 0, Math.PI * 2);
-  this.overlayCtx.fill();
-  this.overlayCtx.stroke();
-
-  // Draw rotation icon inside handle
-  this.overlayCtx.strokeStyle = "#00d4ff";
-  this.overlayCtx.lineWidth = 1.5;
-  this.overlayCtx.beginPath();
-  this.overlayCtx.arc(screenX, screenY, 3, 0, Math.PI * 1.5);
-  this.overlayCtx.stroke();
-  
-  // Draw arrow
-  this.overlayCtx.beginPath();
-  this.overlayCtx.moveTo(screenX + 2, screenY - 2);
-  this.overlayCtx.lineTo(screenX + 1, screenY - 3);
-  this.overlayCtx.lineTo(screenX + 3, screenY - 3);
-  this.overlayCtx.stroke();
-}
-
-// New method: Check if position is over rotation handle
-isOverRotationHandle(x, y, selection) {
-  if (!selection) return false;
-
-  const centerX = (selection.left + selection.right + 1) / 2;
-  const handleY = selection.top - 2;
-  
-  if (handleY < 0) return false;
-
-  const handleRadius = 6;
-  const tolerance = handleRadius / this.zoomLevel;
-
-  const screenX = centerX;
-  const screenY = handleY;
-
-  return Math.sqrt(Math.pow(x - screenX, 2) + Math.pow(y - screenY, 2)) <= tolerance;
-}
-```
-
-**Update the renderSelectionBox method in CanvasManager:**
-
-```javascript
-renderSelectionBox(selection) {
-  this.clearOverlay();
-  if (!selection) return;
-
-  const startX = selection.left * this.zoomLevel;
-  const startY = selection.top * this.zoomLevel;
-  const width = (selection.right - selection.left + 1) * this.zoomLevel;
-  const height = (selection.bottom - selection.top + 1) * this.zoomLevel;
-
-  // Draw selection box
-  this.overlayCtx.strokeStyle = "#00d4ff";
-  this.overlayCtx.lineWidth = 2;
-  this.overlayCtx.setLineDash([5, 5]);
-  this.overlayCtx.strokeRect(startX, startY, width, height);
-  this.overlayCtx.fillStyle = "rgba(0, 212, 255, 0.1)";
-  this.overlayCtx.fillRect(startX, startY, width, height);
-
-  // Always draw scale handles for selections
-  this.renderScaleHandles(selection);
-  
-  // Draw rotation handle
-  this.renderRotationHandle(selection);
-}
-```
-
-**In SelectTool class, add these new properties in constructor:**
-
-```javascript
-constructor(editor) {
-  this.editor = editor;
-  this.name = "select";
-  this.isSelecting = false;
-  this.selection = null;
-  this.clipboard = null;
-  this.isDragging = false;
-  this.dragOffset = null;
-  this.originalSelection = null;
-  this.lastDragPosition = null;
-
-  // Scaling properties
-  this.isScaling = false;
-  this.scaleHandle = null;
-  this.originalClipboard = null;
-  this.rigidScaling = true;
-
-  // NEW: Rotation properties
-  this.isRotating = false;
-  this.rotationAngle = 0;
-  this.rotationCenter = null;
-}
-```
-
-**Add these new methods to SelectTool class:**
-
-```javascript
-// Rotate clipboard by 90-degree increments
-_rotateClipboard(clipboard, rotations) {
-  if (rotations === 0) return clipboard;
-
-  let result = clipboard;
-  
-  for (let r = 0; r < rotations; r++) {
-    const rotated = {
-      width: result.height,
-      height: result.width,
-      pixels: []
-    };
-
-    for (let y = 0; y < rotated.height; y++) {
-      rotated.pixels[y] = [];
-      for (let x = 0; x < rotated.width; x++) {
-        const srcX = y;
-        const srcY = result.height - 1 - x;
-        rotated.pixels[y][x] = result.pixels[srcY][srcX];
-      }
-    }
-    result = rotated;
-  }
-
-  return result;
-}
-
-// Flip clipboard horizontally
-_flipClipboardHorizontal(clipboard) {
-  const flipped = {
-    width: clipboard.width,
-    height: clipboard.height,
-    pixels: []
-  };
-
-  for (let y = 0; y < clipboard.height; y++) {
-    flipped.pixels[y] = [];
-    for (let x = 0; x < clipboard.width; x++) {
-      const srcX = clipboard.width - 1 - x;
-      flipped.pixels[y][x] = clipboard.pixels[y][srcX];
-    }
-  }
-
-  return flipped;
-}
-
-// Flip clipboard vertically
-_flipClipboardVertical(clipboard) {
-  const flipped = {
-    width: clipboard.width,
-    height: clipboard.height,
-    pixels: []
-  };
-
-  for (let y = 0; y < clipboard.height; y++) {
-    flipped.pixels[y] = [];
-    const srcY = clipboard.height - 1 - y;
-    for (let x = 0; x < clipboard.width; x++) {
-      flipped.pixels[y][x] = clipboard.pixels[srcY][x];
-    }
-  }
-
-  return flipped;
-}
-
-// Rotate selection by 90 degrees clockwise
-rotateClockwise() {
-  if (!this.selection || !this.editor.layerManager) return false;
-
-  const clipboard = this._copyFromBounds(this.selection);
-  const rotatedClipboard = this._rotateClipboard(clipboard, 1);
-
-  // Start batch operation
-  this.editor.layerManager.startBatchOperation();
-
-  // Clear original selection
-  this._deleteBounds(this.selection);
-
-  // Calculate new selection bounds (rotated dimensions)
-  const centerX = (this.selection.left + this.selection.right) / 2;
-  const centerY = (this.selection.top + this.selection.bottom) / 2;
-  const newWidth = rotatedClipboard.width;
-  const newHeight = rotatedClipboard.height;
-
-  this.selection = {
-    left: Math.round(centerX - newWidth / 2),
-    top: Math.round(centerY - newHeight / 2),
-    right: Math.round(centerX - newWidth / 2) + newWidth - 1,
-    bottom: Math.round(centerY - newHeight / 2) + newHeight - 1
-  };
-
-  // Paste rotated content
-  this._pasteClipboardAt(rotatedClipboard, this.selection.left, this.selection.top);
-
-  // End batch operation
-  this.editor.layerManager.endBatchOperation();
-
-  // Update display
-  this.editor.canvasManager.render();
-  this.editor.canvasManager.renderSelectionBox(this.selection);
-  this.updateSettingsUI();
-
-  return true;
-}
-
-// Flip selection horizontally
-flipHorizontal() {
-  if (!this.selection || !this.editor.layerManager) return false;
-
-  const clipboard = this._copyFromBounds(this.selection);
-  const flippedClipboard = this._flipClipboardHorizontal(clipboard);
-
-  // Start batch operation
-  this.editor.layerManager.startBatchOperation();
-
-  // Clear and paste flipped content
-  this._deleteBounds(this.selection);
-  this._pasteClipboardAt(flippedClipboard, this.selection.left, this.selection.top);
-
-  // End batch operation
-  this.editor.layerManager.endBatchOperation();
-
-  // Update display
-  this.editor.canvasManager.render();
-  this.editor.canvasManager.renderSelectionBox(this.selection);
-
-  return true;
-}
-
-// Flip selection vertically
-flipVertical() {
-  if (!this.selection || !this.editor.layerManager) return false;
-
-  const clipboard = this._copyFromBounds(this.selection);
-  const flippedClipboard = this._flipClipboardVertical(clipboard);
-
-  // Start batch operation
-  this.editor.layerManager.startBatchOperation();
-
-  // Clear and paste flipped content
-  this._deleteBounds(this.selection);
-  this._pasteClipboardAt(flippedClipboard, this.selection.left, this.selection.top);
-
-  // End batch operation
-  this.editor.layerManager.endBatchOperation();
-
-  // Update display
-  this.editor.canvasManager.render();
-  this.editor.canvasManager.renderSelectionBox(this.selection);
-
-  return true;
-}
-```
-
-**Update the onMouseDown method in SelectTool:**
-
-```javascript
-onMouseDown(x, y, event) {
-  if (!this.editor.currentSprite || !this.editor.layerManager) return;
-
-  // Check if clicking on rotation handle
-  if (this.selection && this.editor.canvasManager.isOverRotationHandle(x, y, this.selection)) {
-    this.isRotating = true;
-    this.rotationCenter = {
-      x: (this.selection.left + this.selection.right + 1) / 2,
-      y: (this.selection.top + this.selection.bottom + 1) / 2
-    };
-    return;
-  }
-
-  // Check if clicking on a scale handle
-  if (this.selection) {
-    const handle = this._getScaleHandle(x, y);
-    if (handle) {
-      this.isScaling = true;
-      this.scaleHandle = handle;
-      this.originalSelection = { ...this.selection };
-      this.originalClipboard = this._copyFromBounds(this.selection);
-
-      // Clear the original content immediately when scaling starts
-      this._deleteBounds(this.selection);
-      this.editor.canvasManager.render();
-
-      return;
-    }
-
-    // Check if clicking inside selection for dragging
-    if (
-      x >= this.selection.left &&
-      x <= this.selection.right &&
-      y >= this.selection.top &&
-      y <= this.selection.bottom
-    ) {
-      this.isDragging = true;
-      this.dragOffset = { x, y };
-      this.lastDragPosition = { x, y };
-      this.originalSelection = { ...this.selection };
-      this.dragClipboard = this._copyFromBounds(this.selection);
-      this._deleteBounds(this.originalSelection);
-      this.editor.canvasManager.render();
-      this.editor.canvasManager.showDraggedSelectionPreview(
-        this.selection,
-        this.dragClipboard
-      );
-      return;
-    }
-  }
-
-  // Start new selection
-  this.isSelecting = true;
-  this.editor.canvasManager.startSelection(x, y);
-}
-```
-
-**Update the onMouseUp method in SelectTool:**
-
-```javascript
-onMouseUp(x, y, event) {
-  if (!this.editor.currentSprite || !this.editor.layerManager) return;
-
-  if (this.isRotating) {
-    // Handle rotation release
-    this.isRotating = false;
-    this.rotationCenter = null;
-    return;
-  }
-
-  // ... rest of existing onMouseUp code remains the same
-}
-```
-
-**Update the getSettingsHTML method in SelectTool:**
-
-```javascript
-getSettingsHTML() {
-  const hasSelection = this.hasSelection();
-  const hasClipboard = this.hasClipboard();
-  const activeLayer = this.editor.layerManager?.getActiveLayer();
-  const isLayerLocked = activeLayer?.locked || false;
-
-  return `
-        ${isLayerLocked
-          ? `<div class="setting-group">
-                <div class="warning-message">
-                    <i class="fas fa-lock"></i> Layer locked
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pixu</title>
+</head>
+
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="header">
+      <div class="header-left">
+        <h1 class="app-title">
+          <i class="fas fa-palette"></i>
+          Pixu
+        </h1>
+      </div>
+      <div class="toolbar-group">
+        <button class="tool-btn" id="zoom-in" title="Zoom In">
+          <i class="fas fa-search-plus"></i>
+        </button>
+        <button class="tool-btn" id="zoom-out" title="Zoom Out">
+          <i class="fas fa-search-minus"></i>
+        </button>
+        <button class="tool-btn" id="toggle-grid" title="Toggle Grid">
+          <i class="fas fa-th"></i>
+        </button>
+      </div>
+      <div class="header-center">
+        <div class="canvas-size-inputs">
+          <label for="canvas-width-header">W:</label>
+          <input type="number" id="canvas-width-header" min="1" max="128" value="16" class="size-input" />
+          <label for="canvas-height-header">H:</label>
+          <input type="number" id="canvas-height-header" min="1" max="128" value="16" class="size-input" />
+        </div>
+        <span id="sprite-name-display" class="sprite-name-display">Untitled</span>
+        <button class="btn btn-sm" id="edit-sprite-name" title="Edit Sprite Name" class="edit-name-btn">
+          <i class="fas fa-edit"></i>
+        </button>
+      </div>
+      <div class="toolbar-group">
+        <button class="tool-btn" id="undo-btn" title="Undo">
+          <i class="fas fa-undo"></i>
+        </button>
+        <button class="tool-btn" id="redo-btn" title="Redo">
+          <i class="fas fa-redo"></i>
+        </button>
+      </div>
+      <div class="header-right">
+        <button class="btn btn-primary" id="new-sprite">
+          <i class="fas fa-plus"></i>
+          New
+        </button>
+        <button class="btn btn-secondary" id="import-btn">
+          <i class="fas fa-file-import"></i>
+          Import
+        </button>
+        <button class="btn btn-success" id="export-btn">
+          <i class="fas fa-download"></i>
+          Export
+        </button>
+        <div id="editor-container"></div>
+        <button class="btn btn-secondary" id="settings-btn" title="Settings">
+          <i class="fas fa-cog"></i>
+        </button>
+      </div>
+    </header>
+
+    <!-- Export Modal -->
+    <div class="modal" id="export-modal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Export Sprite</h3>
+          <button class="modal-close" id="export-modal-close">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="input-group">
+            <label for="export-format">Format:</label>
+            <select id="export-format" class="export-format-select">
+              <option value="svg">SVG (Vector)</option>
+              <option value="png">PNG (Raster)</option>
+              <option value="gif">GIF (Animated)</option>
+            </select>
+          </div>
+
+          <div class="input-group" id="scale-group">
+            <label for="export-scale">Scale: <span id="scale-value">1x</span></label>
+            <div class="slider-container">
+              <input type="range" id="export-scale" min="1" max="32" value="1" class="export-slider" />
+            </div>
+          </div>
+
+          <div class="input-group" id="fps-group" style="display: none;">
+            <label for="export-fps">Frame Rate (FPS): <span id="fps-value">12</span></label>
+            <div class="slider-container">
+              <input type="range" id="export-fps" min="1" max="60" value="12" class="export-slider" />
+            </div>
+          </div>
+
+          <div class="export-preview">
+            <div id="export-dimensions">16x16 → 16x16</div>
+            <div id="export-animation-info" style="display: none;">
+              Animation: <span id="frame-count">1</span> frames
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" id="cancel-export">Cancel</button>
+          <button class="btn btn-primary" id="quick-export">
+            Quick Export (20x)
+          </button>
+          <button class="btn btn-success" id="apply-export">Export</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Settings Menu Modal -->
+    <div id="settings-menu" class="settings-menu">
+      <div class="settings-menu-content">
+        <button id="settings-close" class="settings-close" title="Close">
+          <i class="fas fa-times"></i>
+        </button>
+        <h2>Settings</h2>
+        <!-- Add your settings content here -->
+      </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-container">
+      <!-- Sprite Sidebar (moved to far left) -->
+      <aside class="sidebar" id="sprites-sidebar">
+        <div class="sidebar-section">
+          <h3>Recent Sprites</h3>
+          <button class="btn btn-secondary btn-sm" id="pick-folder">
+            <i class="fas fa-folder-open"></i>
+            Pick Sprites Folder
+          </button>
+          <div class="recent-sprites" id="recent-sprites">
+            <div class="no-sprites-message">
+              <i class="fas fa-image"></i>
+              <p>No sprites folder selected</p>
+              <p class="help-text">Pick a folder to save and load sprites</p>
+            </div>
+          </div>
+        </div>
+        <div class="sidebar-section">
+          <h3>Current Session</h3>
+          <div class="sprites-list" id="sprites-list">
+            <!-- Sprite thumbnails will be populated here -->
+          </div>
+        </div>
+      </aside>
+
+      <!-- Toolbox Sidebar (moved closer to canvas) -->
+      <aside class="toolbox-sidebar">
+        <div class="toolbox-section">
+          <h3>Tools</h3>
+          <div class="toolbox-tools">
+            <button class="tool-btn" data-tool="brush" title="Brush Tool">
+              <i class="fas fa-paintbrush"></i>
+            </button>
+            <button class="tool-btn" data-tool="eraser" title="Eraser Tool">
+              <i class="fas fa-eraser"></i>
+            </button>
+            <button class="tool-btn" data-tool="bucket" title="Bucket Fill">
+              <i class="fas fa-fill-drip"></i>
+            </button>
+            <button class="tool-btn" data-tool="select" title="Select Tool">
+              <i class="fas fa-vector-square"></i>
+            </button>
+            <button class="tool-btn" data-tool="eyedropper" title="Eyedropper">
+              <i class="fas fa-eye-dropper"></i>
+            </button>
+            <button class="tool-btn" data-tool="brightness" title="Brightness Tool">
+              <i class="fas fa-sun"></i>
+            </button>
+            <button class="tool-btn" data-tool="smoothsharpen" title="Smooth/Sharpen Tool">
+              <i class="fas fa-brush"></i>
+            </button>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Canvas Area -->
+      <main class="canvas-area">
+        <div class="canvas-toolbar">
+          <div class="canvas-scroll">
+            <div class="toolbar-group">
+              <!-- Tool Settings (moved from properties panel) -->
+              <div class="tool-settings" id="tool-settings">
+                <div class="setting-group brush-settings">
+                  <label for="brush-size">Brush Size:</label>
+                  <div class="slider-container">
+                    <input type="range" id="brush-size" min="1" max="10" value="1" />
+                    <span class="slider-value">1</span>
+                  </div>
                 </div>
-             </div>`
-          : ""
-        }
-        
-        <div class="setting-group">
-            <label>
-                <input type="checkbox" id="rigid-scaling-cb" ${this.rigidScaling ? "checked" : ""}>
-                Rigid Scaling
-            </label>
+                <div class="setting-group brush-settings">
+                  <label for="brush-opacity">Opacity:</label>
+                  <div class="slider-container">
+                    <input type="range" id="brush-opacity" min="0" max="100" value="100" />
+                    <span class="slider-value">100%</span>
+                  </div>
+                </div>
+                <div class="setting-group bucket-settings" style="display: none">
+                  <label for="bucket-tolerance">Tolerance:</label>
+                  <div class="slider-container">
+                    <input type="range" id="bucket-tolerance" min="0" max="100" value="10" />
+                    <span class="slider-value">10</span>
+                  </div>
+                </div>
+                <div class="setting-group brightness-settings" style="display: none">
+                  <label for="brightness-intensity">Intensity:</label>
+                  <div class="slider-container">
+                    <input type="range" id="brightness-intensity" min="-50" max="50" value="10" />
+                    <span class="slider-value">+10%</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
-        
-        <div class="setting-group">
-            <button class="btn btn-secondary btn-sm" id="copy-btn" ${!hasSelection ? "disabled" : ""}>
+
+        <div class="canvas-container">
+          <button class="btn generate-ai-button" id="generate-ai-button" title="Generate AI Pixel Art">
+            <i class="fa fa-wand-magic-sparkles"></i>
+          </button>
+          <div class="canvas-data" id="canvas-data">
+            <div id="current-zoom">Zoom: 20x</div>
+            <div id="current-frame">Frame: 1/1</div>
+            <div id="canvas-dimensions">Canvas: 16 x 16</div>
+            <div id="mouse-coordinates">Cursor X & Y: (0, 0)</div>
+          </div>
+          <canvas id="main-canvas" width="512" height="512"></canvas>
+          <canvas id="overlay-canvas" width="512" height="512"></canvas>
+          <div id="konva-container"></div>
+        </div>
+        <!-- Frames Row -->
+        <div class="frames-row" id="frames-row">
+          <button class="frames-toggle-btn" id="frames-toggle-btn" title="Toggle Frames Panel">
+            <i class="fas fa-chevron-down"></i>
+          </button>
+          <div class="frames-content" id="frames-content">
+            <div class="frames-toolbar">
+              <button class="btn btn-sm" id="add-frame-btn">
+                <i class="fas fa-plus"></i>
+              </button>
+              <button class="btn btn-sm" id="duplicate-frame-btn">
                 <i class="fas fa-copy"></i>
-            </button>
-            <button class="btn btn-secondary btn-sm" id="cut-btn" ${!hasSelection || isLayerLocked ? "disabled" : ""}>
-                <i class="fas fa-cut"></i>
-            </button>
-            <button class="btn btn-secondary btn-sm" id="paste-btn" ${!hasClipboard || isLayerLocked ? "disabled" : ""}>
-                <i class="fas fa-paste"></i>
-            </button>
-            <button class="btn btn-secondary btn-sm" id="delete-btn" ${!hasSelection || isLayerLocked ? "disabled" : ""}>
+              </button>
+              <button class="btn btn-sm" id="delete-frame-btn">
                 <i class="fas fa-trash"></i>
+              </button>
+            </div>
+            <div class="frames-list" id="frames-list">
+              <!-- Frame thumbnails will be populated here -->
+            </div>
+          </div>
+        </div>
+      </main>
+
+      <!-- Properties Panel -->
+      <aside class="properties-panel">
+        <div class="panel-section">
+          <h3>Color</h3>
+          <div class="color-section">
+            <div class="color-picker-container">
+              <input type="color" id="color-picker" value="#000000" />
+              <div class="color-display">
+                <div class="primary-color" id="primary-color"></div>
+                <div class="secondary-color" id="secondary-color"></div>
+              </div>
+            </div>
+
+            <div class="color-wheel-container">
+              <div id="color-wheel"></div>
+            </div>
+
+            <div id="color-value-container" class="color-value-container">
+              <button id="toggle-color-mode" class="btn btn-secondary color-mode-toggle">
+                Show RGB
+              </button>
+              <label for="color-hex" id="label-hex">HEX:</label>
+              <input type="text" id="color-hex" maxlength="7" size="7" value="#000000" />
+              <label for="color-rgb" id="label-rgb" class="rgb-label">RGB:</label>
+              <input type="text" id="color-rgb" maxlength="16" size="16" value="rgb(0,0,0)" class="rgb-input" />
+            </div>
+
+            <div class="color-palette" id="color-palette">
+              <!-- Color swatches will be populated here -->
+            </div>
+          </div>
+        </div>
+
+        <div class="panel-section">
+          <h3>Layers</h3>
+          <div class="layers-controls">
+            <button class="btn btn-sm" id="add-layer-btn" title="Add Layer" class="layer-control-btn">
+              <i class="fas fa-plus"></i>
             </button>
-            <button class="btn btn-secondary btn-sm" id="clear-selection-btn" ${!hasSelection ? "disabled" : ""}>
-                <i class="fas fa-times"></i>
+            <button class="btn btn-sm" id="duplicate-layer-btn" title="Duplicate Layer" class="layer-control-btn">
+              <i class="fas fa-copy"></i>
             </button>
+            <button class="btn btn-sm" id="delete-layer-btn" title="Delete Layer" class="layer-control-btn">
+              <i class="fas fa-trash"></i>
+            </button>
+          </div>
+          <div class="layers-list" id="layers-list">
+            <!-- Layers will be populated here by JavaScript -->
+          </div>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <!-- Modals -->
+  <div class="modal" id="downscale-modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Image Too Large - Downscale Required</h3>
+        <button class="modal-close" id="downscale-modal-close">
+          &times;
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="downscale-info">
+          <p>
+            The imported image is <span id="original-dimensions"></span> which
+            exceeds the maximum size of 64x64 pixels.
+          </p>
+          <p>Please choose a target size for downscaling:</p>
+        </div>
+
+        <div class="input-group">
+          <label for="target-width">Target Width:</label>
+          <input type="number" id="target-width" min="1" max="64" value="32" />
+        </div>
+
+        <div class="input-group">
+          <label for="target-height">Target Height:</label>
+          <input type="number" id="target-height" min="1" max="64" value="32" />
+        </div>
+
+        <div class="checkbox-group">
+          <label>
+            <input type="checkbox" id="maintain-aspect-downscale" checked />
+            Maintain aspect ratio
+          </label>
+        </div>
+
+        <div class="downscale-preview-container">
+          <div class="preview-section">
+            <h4>Original</h4>
+            <canvas id="original-preview" width="128" height="128"></canvas>
+            <div id="original-size-info"></div>
+          </div>
+          <div class="preview-section">
+            <h4>Downscaled Preview</h4>
+            <canvas id="downscaled-preview" width="128" height="128"></canvas>
+            <div id="downscaled-size-info"></div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="cancel-downscale">
+          Cancel
+        </button>
+        <button class="btn btn-primary" id="apply-downscale">
+          Create Sprite
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="resize-modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Resize Canvas</h3>
+        <button class="modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="input-group">
+          <label for="canvas-width">Width:</label>
+          <input type="number" id="canvas-width" min="1" max="128" value="16" />
+        </div>
+        <div class="input-group">
+          <label for="canvas-height">Height:</label>
+          <input type="number" id="canvas-height" min="1" max="128" value="16" />
+        </div>
+        <div class="checkbox-group">
+          <label>
+            <input type="checkbox" id="maintain-aspect-ratio" />
+            Maintain aspect ratio
+          </label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="cancel-resize">Cancel</button>
+        <button class="btn btn-primary" id="apply-resize">Apply</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Confirm Modal -->
+<div class="confirm-modal-overlay" id="confirm-modal" style="display: none;">
+  <div class="confirm-modal-content">
+    <div class="confirm-modal-header">
+      <i class="fas fa-exclamation-triangle"></i>
+      <h3>Confirm Action</h3>
+    </div>
+    
+    <div class="confirm-modal-message" id="confirm-modal-message">
+      <!-- Message will be inserted here -->
+    </div>
+    
+    <div class="confirm-modal-actions">
+      <button id="confirm-cancel" class="confirm-modal-btn confirm-modal-btn-secondary">
+        Cancel
+      </button>
+      <button id="confirm-confirm" class="confirm-modal-btn confirm-modal-btn-danger">
+        Confirm
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- AI Generator Modal -->
+<div class="modal" id="ai-generator-modal" style="display: none;">
+    <div class="modal-content ai-modal-content">
+        <div class="modal-header">
+            <h3><i class="fas fa-magic"></i> AI Assistant</h3>
+            <button class="modal-close" id="ai-modal-close">&times;</button>
         </div>
         
-        <div class="setting-group">
-            <button class="btn btn-secondary btn-sm" id="rotate-btn" ${!hasSelection || isLayerLocked ? "disabled" : ""}>
-                <i class="fas fa-redo"></i>
+        <!-- Mode Switch Tabs -->
+        <div class="mode-tabs">
+            <button id="generate-tab" class="mode-tab generate active">
+                <i class="fas fa-image"></i> Generate Pixel Art
             </button>
-            <button class="btn btn-secondary btn-sm" id="flip-h-btn" ${!hasSelection || isLayerLocked ? "disabled" : ""}>
-                <i class="fas fa-arrows-alt-h"></i>
+            <button id="chat-tab" class="mode-tab chat">
+                <i class="fas fa-comments"></i> Chat Assistant
             </button>
-            <button class="btn btn-secondary btn-sm" id="flip-v-btn" ${!hasSelection || isLayerLocked ? "disabled" : ""}>
-                <i class="fas fa-arrows-alt-v"></i>
-            </button>
+        </div>
+
+        <div class="modal-body">
+            <!-- Generate Mode -->
+            <div id="generate-mode">
+                <div class="ai-info-box generate">
+                    <h4><i class="fas fa-info-circle"></i> AI Image Generation</h4>
+                    <p>Using Pollinations.AI for real-time image generation with advanced pixel art processing.</p>
+                    <p class="help-text">Generated images are processed with improved color quantization algorithms.</p>
+                </div>
+                
+                <div class="input-group">
+                    <label for="ai-prompt">Prompt:</label>
+                    <textarea id="ai-prompt" class="ai-prompt-textarea" 
+                        placeholder="Describe your pixel art (e.g., 'medieval castle, 16-bit style', 'retro spaceship', 'fantasy sword')"
+                        rows="3">pixel art medieval castle, 16-bit retro game style</textarea>
+                </div>
+                
+                <div class="ai-settings-grid">
+                    <div class="input-group">
+                        <label for="ai-canvas-size">Target Canvas Size:</label>
+                        <select id="ai-canvas-size" class="ai-select">
+                            <option value="16">16x16</option>
+                            <option value="32" selected>32x32</option>
+                            <option value="48">48x48</option>
+                            <option value="64">64x64</option>
+                        </select>
+                    </div>
+                    
+                    <div class="input-group">
+                        <label for="ai-model">AI Model:</label>
+                        <select id="ai-model" class="ai-select">
+                            <option value="flux" selected>Flux</option>
+                            <option value="turbo">Turbo</option>
+                            <option value="flux-realism">Flux Realism</option>
+                            <option value="flux-cablyai">Flux CablyAI</option>
+                            <option value="flux-anime">Flux Anime</option>
+                            <option value="any-dark">Any Dark</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="ai-settings-grid">
+                    <div class="input-group">
+                        <label for="ai-color-palette">Color Palette:</label>
+                        <select id="ai-color-palette" class="ai-select">
+                            <option value="full" selected>Full Color</option>
+                            <option value="retro">Retro 16-Color</option>
+                            <option value="gameboy">Game Boy Green</option>
+                            <option value="nes">NES Palette</option>
+                            <option value="c64">Commodore 64</option>
+                            <option value="pico8">PICO-8</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="ai-status" id="ai-status"></div>
+                
+                <div class="ai-preview-container" id="ai-preview-container" style="display: none;">
+                    <div class="ai-preview-grid">
+                        <div class="ai-preview-section">
+                            <h4>AI Generated</h4>
+                            <canvas id="ai-original-canvas" class="ai-preview-canvas"></canvas>
+                        </div>
+                        <div class="ai-preview-section">
+                            <h4>Pixel Art Result</h4>
+                            <canvas id="ai-pixel-canvas" class="ai-preview-canvas pixelated"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chat Mode -->
+            <div id="chat-mode" style="display: none;">
+                <div class="ai-info-box chat">
+                    <h4><i class="fas fa-info-circle"></i> AI Chat Assistant</h4>
+                    <p>Get help with pixel art techniques, color theory, design ideas, and creative inspiration.</p>
+                    <p class="help-text">Ask about palettes, art styles, or any creative questions!</p>
+                </div>
+                
+                <div class="chat-container">
+                    <div id="chat-messages" class="chat-messages">
+                        <div class="chat-message assistant">
+                            <div class="chat-message-sender">AI Assistant</div>
+                            <div class="chat-message-content">Hello! I'm here to help with your pixel art projects. Ask me about color palettes, art techniques, creative themes, or any design questions you have!</div>
+                        </div>
+                    </div>
+                    
+                    <div class="chat-input-container">
+                        <input type="text" id="chat-input" class="chat-input" 
+                            placeholder="Ask me about pixel art, color theory, design ideas..." 
+                            onkeypress="if(event.key==='Enter') window.aiGenerator.sendChatMessage()">
+                        <button id="chat-send" class="chat-send-btn">
+                            <i class="fas fa-paper-plane"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
         </div>
         
-        <div class="setting-group">
-            <button class="btn btn-primary btn-sm" id="crop-btn" ${!hasSelection ? "disabled" : ""}>
-                <i class="fas fa-crop"></i> Crop to Selection
-            </button>
+        <div class="modal-footer">
+            <div id="generate-buttons" class="modal-footer-buttons">
+                <button class="btn btn-secondary" id="ai-cancel">Cancel</button>
+                <button class="btn btn-primary" id="ai-generate">
+                    <i class="fas fa-magic"></i> Generate
+                </button>
+                <button class="btn btn-success" id="ai-apply" style="display: none;">
+                    <i class="fas fa-plus"></i> Add to Canvas
+                </button>
+            </div>
+            
+            <div id="chat-buttons" class="modal-footer-buttons" style="display: none;">
+                <button class="btn btn-secondary" id="chat-close">Close</button>
+                <button class="btn btn-warning" id="chat-clear">
+                    <i class="fas fa-trash"></i> Clear Chat
+                </button>
+            </div>
         </div>
-    `;
-}
-```
+    </div>
+</div>
 
-**Update the initializeSettings method in SelectTool:**
+  <input type="file" id="file-input" accept=".png,.jpg,.jpeg,.svg" style="display: none" />
 
-```javascript
-initializeSettings() {
-  const copyBtn = document.getElementById("copy-btn");
-  const cutBtn = document.getElementById("cut-btn");
-  const pasteBtn = document.getElementById("paste-btn");
-  const deleteBtn = document.getElementById("delete-btn");
-  const clearSelectionBtn = document.getElementById("clear-selection-btn");
-  const cropBtn = document.getElementById("crop-btn");
-  const rigidScalingCb = document.getElementById("rigid-scaling-cb");
   
-  // NEW: Get new button references
-  const rotateBtn = document.getElementById("rotate-btn");
-  const flipHBtn = document.getElementById("flip-h-btn");
-  const flipVBtn = document.getElementById("flip-v-btn");
+</body>
 
-  // ... existing button event listeners remain the same ...
-
-  // NEW: Add event listeners for new buttons
-  if (rotateBtn) {
-    rotateBtn.addEventListener("click", () => {
-      this.rotateClockwise();
-    });
-  }
-
-  if (flipHBtn) {
-    flipHBtn.addEventListener("click", () => {
-      this.flipHorizontal();
-    });
-  }
-
-  if (flipVBtn) {
-    flipVBtn.addEventListener("click", () => {
-      this.flipVertical();
-    });
-  }
-
-  // ... rest of existing event listeners and keyboard shortcuts remain the same ...
-
-  // Add rotation keyboard shortcut to existing keydown listener
-  document.addEventListener("keydown", (e) => {
-    if (
-      this.editor.currentTool === this &&
-      !e.target.matches("input, textarea")
-    ) {
-      const activeLayer = this.editor.layerManager?.getActiveLayer();
-      const isLayerLocked = activeLayer?.locked || false;
-
-      switch (e.key.toLowerCase()) {
-        // ... existing cases remain the same ...
-        case "r":
-          if (!e.ctrlKey && !e.metaKey && !isLayerLocked && this.hasSelection()) {
-            e.preventDefault();
-            this.rotateClockwise();
-          }
-          break;
-        case "h":
-          if (!e.ctrlKey && !e.metaKey && !isLayerLocked && this.hasSelection()) {
-            e.preventDefault();
-            this.flipHorizontal();
-          }
-          break;
-        case "v":
-          if (!e.ctrlKey && !e.metaKey && !isLayerLocked && this.hasSelection()) {
-            e.preventDefault();
-            this.flipVertical();
-          }
-          break;
-      }
-    }
-  });
-}
-```
-
-This implementation adds:
-
-1. **Rotation handle**: A circular handle that appears above selections with a rotation icon
-2. **90-degree rotation**: Click the rotate button or press 'R' to rotate clockwise by 90 degrees
-3. **Horizontal flip**: Click the horizontal arrows button or press 'H'
-4. **Vertical flip**: Click the vertical arrows button or press 'V'
-5. **Visual feedback**: The rotation handle shows a connection line and rotation icon
-6. **Proper positioning**: The rotation handle adjusts based on zoom level and doesn't appear if it would be off-screen
-
-The rotation is constrained to 90-degree increments to maintain pixel-perfect results, which is ideal for pixel art. The flip operations work instantly and maintain the selection bounds.
+</html>

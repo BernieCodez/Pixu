@@ -275,7 +275,8 @@ class UIController {
           (layer.opacity || 1) * 100
         )}%</span>
         <button class="btn btn-sm layer-visibility" title="Toggle Visibility">
-          <i class="fas ${layer.visible !== false ? "fa-eye" : "fa-eye-slash"
+          <i class="fas ${
+            layer.visible !== false ? "fa-eye" : "fa-eye-slash"
           }"></i>
         </button>
       `;
@@ -290,10 +291,10 @@ class UIController {
           ) {
             this.editor.layerManager.setActiveLayer(i);
             this.updateLayersList();
-            this.showNotification(
-              `Selected ${layer.name || `Layer ${i + 1}`}`,
-              "info"
-            );
+            // this.showNotification(
+            //   `Selected ${layer.name || `Layer ${i + 1}`}`,
+            //   "info"
+            // );
           }
         });
 
@@ -435,14 +436,17 @@ class UIController {
         label: "Delete Layer",
         icon: "fas fa-trash",
         action: () => {
-          if (confirm(`Are you sure you want to delete "${layer.name}"?`)) {
-            if (this.editor.layerManager.deleteLayer(index)) {
-              this.updateLayersList();
-              this.showNotification(`Deleted ${layer.name}`, "success");
-            } else {
-              this.showNotification("Cannot delete the last layer", "error");
+          this.showCustomConfirm(
+            `Are you sure you want to delete "${layer.name}"?`,
+            () => {
+              if (this.editor.layerManager.deleteLayer(index)) {
+                this.updateLayersList();
+                this.showNotification(`Deleted ${layer.name}`, "success");
+              } else {
+                this.showNotification("Cannot delete the last layer", "error");
+              }
             }
-          }
+          );
           this.hideContextMenu();
         },
         danger: true,
@@ -747,39 +751,39 @@ class UIController {
 
   setupFrameControls() {
     // Frame control buttons
-    const addFrameBtn = document.getElementById('add-frame-btn');
-    const duplicateFrameBtn = document.getElementById('duplicate-frame-btn');
-    const deleteFrameBtn = document.getElementById('delete-frame-btn');
+    const addFrameBtn = document.getElementById("add-frame-btn");
+    const duplicateFrameBtn = document.getElementById("duplicate-frame-btn");
+    const deleteFrameBtn = document.getElementById("delete-frame-btn");
 
     if (addFrameBtn) {
-      addFrameBtn.addEventListener('click', () => {
+      addFrameBtn.addEventListener("click", () => {
         if (this.editor.animationManager) {
           this.editor.animationManager.addFrame();
           this.updateFramesList();
-          this.showNotification('Frame added', 'success');
+          this.showNotification("Frame added", "success");
         }
       });
     }
 
     if (duplicateFrameBtn) {
-      duplicateFrameBtn.addEventListener('click', () => {
+      duplicateFrameBtn.addEventListener("click", () => {
         if (this.editor.animationManager) {
           this.editor.animationManager.duplicateFrame();
           this.updateFramesList();
-          this.showNotification('Frame duplicated', 'success');
+          this.showNotification("Frame duplicated", "success");
         }
       });
     }
 
     if (deleteFrameBtn) {
-      deleteFrameBtn.addEventListener('click', () => {
+      deleteFrameBtn.addEventListener("click", () => {
         if (this.editor.animationManager) {
           const success = this.editor.animationManager.deleteFrame();
           if (success) {
             this.updateFramesList();
-            this.showNotification('Frame deleted', 'success');
+            this.showNotification("Frame deleted", "success");
           } else {
-            this.showNotification('Cannot delete the last frame', 'warning');
+            this.showNotification("Cannot delete the last frame", "warning");
           }
         }
       });
@@ -793,31 +797,32 @@ class UIController {
   }
 
   setupFramesToggle() {
-    const framesToggleBtn = document.getElementById('frames-toggle-btn');
-    const framesRow = document.getElementById('frames-row');
+    const framesToggleBtn = document.getElementById("frames-toggle-btn");
+    const framesRow = document.getElementById("frames-row");
 
     if (framesToggleBtn && framesRow) {
       // Load saved state from localStorage
-      const isCollapsed = localStorage.getItem('frames-panel-collapsed') === 'true';
+      const isCollapsed =
+        localStorage.getItem("frames-panel-collapsed") === "true";
       if (isCollapsed) {
-        framesRow.classList.add('collapsed');
+        framesRow.classList.add("collapsed");
       }
 
-      framesToggleBtn.addEventListener('click', () => {
-        const isCurrentlyCollapsed = framesRow.classList.contains('collapsed');
+      framesToggleBtn.addEventListener("click", () => {
+        const isCurrentlyCollapsed = framesRow.classList.contains("collapsed");
 
         if (isCurrentlyCollapsed) {
-          framesRow.classList.remove('collapsed');
-          localStorage.setItem('frames-panel-collapsed', 'false');
-          if (this.showNotification) {
-            this.showNotification('Frames panel expanded', 'info');
-          }
+          framesRow.classList.remove("collapsed");
+          localStorage.setItem("frames-panel-collapsed", "false");
+          // if (this.showNotification) {
+          //   // this.showNotification("Frames panel expanded", "info");
+          // }
         } else {
-          framesRow.classList.add('collapsed');
-          localStorage.setItem('frames-panel-collapsed', 'true');
-          if (this.showNotification) {
-            this.showNotification('Frames panel collapsed', 'info');
-          }
+          framesRow.classList.add("collapsed");
+          localStorage.setItem("frames-panel-collapsed", "true");
+          // if (this.showNotification) {
+          //   this.showNotification("Frames panel collapsed", "info");
+          // }
         }
       });
     }
@@ -825,10 +830,10 @@ class UIController {
 
   setupAnimationControls() {
     // Create animation controls if they don't exist
-    const framesToolbar = document.querySelector('.frames-toolbar');
-    if (framesToolbar && !document.getElementById('play-btn')) {
-      const animationControls = document.createElement('div');
-      animationControls.className = 'animation-controls';
+    const framesToolbar = document.querySelector(".frames-toolbar");
+    if (framesToolbar && !document.getElementById("play-btn")) {
+      const animationControls = document.createElement("div");
+      animationControls.className = "animation-controls";
       animationControls.innerHTML = `
       <button class="btn btn-sm" id="play-btn">
         <i class="fas fa-play"></i>
@@ -845,40 +850,40 @@ class UIController {
       framesToolbar.appendChild(animationControls);
 
       // Add event listeners
-      const playBtn = document.getElementById('play-btn');
-      const stopBtn = document.getElementById('stop-btn');
-      const fpsInput = document.getElementById('fps-input');
+      const playBtn = document.getElementById("play-btn");
+      const stopBtn = document.getElementById("stop-btn");
+      const fpsInput = document.getElementById("fps-input");
 
       if (playBtn) {
-        playBtn.addEventListener('click', () => {
+        playBtn.addEventListener("click", () => {
           if (this.editor.animationManager) {
             if (this.editor.animationManager.isPlaying) {
               this.editor.animationManager.stop();
               playBtn.innerHTML = '<i class="fas fa-play"></i>';
-              playBtn.title = 'Play Animation';
+              playBtn.title = "Play Animation";
             } else {
               this.editor.animationManager.play();
               playBtn.innerHTML = '<i class="fas fa-pause"></i>';
-              playBtn.title = 'Pause Animation';
+              playBtn.title = "Pause Animation";
             }
           }
         });
       }
 
       if (stopBtn) {
-        stopBtn.addEventListener('click', () => {
+        stopBtn.addEventListener("click", () => {
           if (this.editor.animationManager) {
             this.editor.animationManager.stop();
             if (playBtn) {
               playBtn.innerHTML = '<i class="fas fa-play"></i>';
-              playBtn.title = 'Play Animation';
+              playBtn.title = "Play Animation";
             }
           }
         });
       }
 
       if (fpsInput) {
-        fpsInput.addEventListener('change', (e) => {
+        fpsInput.addEventListener("change", (e) => {
           const fps = parseInt(e.target.value);
           if (this.editor.animationManager && fps > 0 && fps <= 60) {
             this.editor.animationManager.setFrameRate(fps);
@@ -890,7 +895,7 @@ class UIController {
 
   // Update frames list UI
   updateFramesList() {
-    const framesList = document.getElementById('frames-list');
+    const framesList = document.getElementById("frames-list");
     if (!framesList || !this.editor.animationManager) return;
 
     const sprite = this.editor.currentSprite;
@@ -900,28 +905,30 @@ class UIController {
     }
 
     // Clear existing frames
-    framesList.innerHTML = '';
+    framesList.innerHTML = "";
 
     // Create frame thumbnails
     sprite.frames.forEach((frame, index) => {
-      const frameItem = document.createElement('div');
-      frameItem.className = `frame-item ${index === this.editor.animationManager.currentFrameIndex ? 'active' : ''}`;
+      const frameItem = document.createElement("div");
+      frameItem.className = `frame-item ${
+        index === this.editor.animationManager.currentFrameIndex ? "active" : ""
+      }`;
       frameItem.draggable = true;
       frameItem.dataset.frameIndex = index;
 
       // Create thumbnail canvas
-      const thumbnail = document.createElement('canvas');
+      const thumbnail = document.createElement("canvas");
       thumbnail.width = 64;
       thumbnail.height = 64;
-      thumbnail.className = 'frame-thumbnail';
-      const ctx = thumbnail.getContext('2d');
+      thumbnail.className = "frame-thumbnail";
+      const ctx = thumbnail.getContext("2d");
 
       // Render frame thumbnail
       this.renderFrameThumbnail(ctx, frame, 64, 64);
 
       // Create frame info
-      const frameInfo = document.createElement('div');
-      frameInfo.className = 'frame-info';
+      const frameInfo = document.createElement("div");
+      frameInfo.className = "frame-info";
       frameInfo.innerHTML = `
       <div class="frame-name">${frame.name || `Frame ${index + 1}`}</div>
       <div class="frame-number">${index + 1}</div>
@@ -931,47 +938,47 @@ class UIController {
       frameItem.appendChild(frameInfo);
 
       // Add event listeners
-      frameItem.addEventListener('click', () => {
+      frameItem.addEventListener("click", () => {
         this.editor.animationManager.setCurrentFrame(index);
         this.updateFramesList();
         this.updateLayersList();
       });
 
       // ADDED: Right-click context menu for frame export
-      frameItem.addEventListener('contextmenu', (e) => {
+      frameItem.addEventListener("contextmenu", (e) => {
         e.preventDefault();
         this.showFrameContextMenu(e, frame, index);
       });
 
       // Double-click to rename
-      frameInfo.addEventListener('dblclick', () => {
-        this.editFrameName(frame, frameInfo.querySelector('.frame-name'));
+      frameInfo.addEventListener("dblclick", () => {
+        this.editFrameName(frame, frameInfo.querySelector(".frame-name"));
       });
 
       // Existing drag and drop code...
-      frameItem.addEventListener('dragstart', (e) => {
-        e.dataTransfer.setData('text/plain', index.toString());
-        frameItem.classList.add('dragging');
+      frameItem.addEventListener("dragstart", (e) => {
+        e.dataTransfer.setData("text/plain", index.toString());
+        frameItem.classList.add("dragging");
       });
 
-      frameItem.addEventListener('dragend', () => {
-        frameItem.classList.remove('dragging');
+      frameItem.addEventListener("dragend", () => {
+        frameItem.classList.remove("dragging");
       });
 
-      frameItem.addEventListener('dragover', (e) => {
+      frameItem.addEventListener("dragover", (e) => {
         e.preventDefault();
-        frameItem.classList.add('drag-over');
+        frameItem.classList.add("drag-over");
       });
 
-      frameItem.addEventListener('dragleave', () => {
-        frameItem.classList.remove('drag-over');
+      frameItem.addEventListener("dragleave", () => {
+        frameItem.classList.remove("drag-over");
       });
 
-      frameItem.addEventListener('drop', (e) => {
+      frameItem.addEventListener("drop", (e) => {
         e.preventDefault();
-        frameItem.classList.remove('drag-over');
+        frameItem.classList.remove("drag-over");
 
-        const fromIndex = parseInt(e.dataTransfer.getData('text/plain'));
+        const fromIndex = parseInt(e.dataTransfer.getData("text/plain"));
         const toIndex = index;
 
         if (fromIndex !== toIndex) {
@@ -983,14 +990,13 @@ class UIController {
       framesList.appendChild(frameItem);
     });
     this.updateFrameDisplay();
-
   }
 
   showFrameContextMenu(event, frame, frameIndex) {
     this.hideContextMenu();
 
-    const contextMenu = document.createElement('div');
-    contextMenu.className = 'frame-context-menu';
+    const contextMenu = document.createElement("div");
+    contextMenu.className = "frame-context-menu";
     contextMenu.style.cssText = `
     position: fixed;
     background: #2d2d2d;
@@ -1007,75 +1013,79 @@ class UIController {
 
     const menuItems = [
       {
-        label: 'Export Frame (1x)',
-        icon: 'fas fa-download',
+        label: "Export Frame (1x)",
+        icon: "fas fa-download",
         action: () => {
           this.editor.exportSingleFrame(frameIndex, 1);
           this.hideContextMenu();
-        }
+        },
       },
       {
-        label: 'Export Frame (4x)',
-        icon: 'fas fa-download',
+        label: "Export Frame (4x)",
+        icon: "fas fa-download",
         action: () => {
           this.editor.exportSingleFrame(frameIndex, 4);
           this.hideContextMenu();
-        }
+        },
       },
       {
-        label: 'Export Frame (10x)',
-        icon: 'fas fa-download',
+        label: "Export Frame (10x)",
+        icon: "fas fa-download",
         action: () => {
           this.editor.exportSingleFrame(frameIndex, 10);
           this.hideContextMenu();
-        }
+        },
       },
-      { type: 'separator' },
+      { type: "separator" },
       {
-        label: 'Duplicate Frame',
-        icon: 'fas fa-copy',
+        label: "Duplicate Frame",
+        icon: "fas fa-copy",
         action: () => {
           this.editor.animationManager.duplicateFrame(frameIndex);
           this.updateFramesList();
           this.hideContextMenu();
-        }
+        },
       },
       {
-        label: 'Delete Frame',
-        icon: 'fas fa-trash',
+        label: "Delete Frame",
+        icon: "fas fa-trash",
         action: () => {
           if (this.editor.currentSprite.frames.length > 1) {
-            if (confirm(`Delete "${frame.name || `Frame ${frameIndex + 1}`}"?`)) {
-              this.editor.animationManager.deleteFrame(frameIndex);
-              this.updateFramesList();
-            }
+            this.showCustomConfirm(
+              `Delete "${frame.name || `Frame ${frameIndex + 1}`}"?`,
+              () => {
+                this.editor.animationManager.deleteFrame(frameIndex);
+                this.updateFramesList();
+              }
+            );
           } else {
-            this.showNotification('Cannot delete the last frame', 'warning');
+            this.showNotification("Cannot delete the last frame", "warning");
           }
           this.hideContextMenu();
         },
         danger: true,
-        disabled: this.editor.currentSprite.frames.length <= 1
-      }
+        disabled: this.editor.currentSprite.frames.length <= 1,
+      },
     ];
 
     // Build menu items
-    menuItems.forEach(item => {
-      if (item.type === 'separator') {
-        const separator = document.createElement('div');
-        separator.style.cssText = 'height: 1px; background: #444; margin: 4px 0;';
+    menuItems.forEach((item) => {
+      if (item.type === "separator") {
+        const separator = document.createElement("div");
+        separator.style.cssText =
+          "height: 1px; background: #444; margin: 4px 0;";
         contextMenu.appendChild(separator);
       } else {
-        const menuItem = document.createElement('div');
+        const menuItem = document.createElement("div");
         menuItem.style.cssText = `
         padding: 8px 12px;
-        cursor: ${item.disabled ? 'not-allowed' : 'pointer'};
+        cursor: ${item.disabled ? "not-allowed" : "pointer"};
         display: flex;
         align-items: center;
         gap: 8px;
         transition: background-color 0.15s ease;
-        opacity: ${item.disabled ? '0.5' : '1'};
-        ${item.danger && !item.disabled ? 'color: #ff6b6b;' : ''}
+        opacity: ${item.disabled ? "0.5" : "1"};
+        ${item.danger && !item.disabled ? "color: #ff6b6b;" : ""}
       `;
 
         menuItem.innerHTML = `
@@ -1084,17 +1094,17 @@ class UIController {
       `;
 
         if (!item.disabled) {
-          menuItem.addEventListener('mouseenter', () => {
+          menuItem.addEventListener("mouseenter", () => {
             menuItem.style.backgroundColor = item.danger
-              ? 'rgba(255, 107, 107, 0.1)'
-              : 'rgba(255, 255, 255, 0.1)';
+              ? "rgba(255, 107, 107, 0.1)"
+              : "rgba(255, 255, 255, 0.1)";
           });
 
-          menuItem.addEventListener('mouseleave', () => {
-            menuItem.style.backgroundColor = 'transparent';
+          menuItem.addEventListener("mouseleave", () => {
+            menuItem.style.backgroundColor = "transparent";
           });
 
-          menuItem.addEventListener('click', item.action);
+          menuItem.addEventListener("click", item.action);
         }
 
         contextMenu.appendChild(menuItem);
@@ -1118,7 +1128,11 @@ class UIController {
     document.body.appendChild(contextMenu);
     this.activeContextMenu = contextMenu;
 
-    document.addEventListener('click', this.handleContextMenuOutsideClick.bind(this), { once: true });
+    document.addEventListener(
+      "click",
+      this.handleContextMenuOutsideClick.bind(this),
+      { once: true }
+    );
   }
 
   // Render frame thumbnail
@@ -1137,7 +1151,7 @@ class UIController {
     const offsetY = (height - scaledHeight) / 2;
 
     // Render each visible layer
-    frame.layers.forEach(layer => {
+    frame.layers.forEach((layer) => {
       if (!layer.visible || !layer.pixels) return;
 
       for (let y = 0; y < frame.height; y++) {
@@ -1163,7 +1177,7 @@ class UIController {
   // Draw transparency checkerboard pattern
   drawTransparencyPattern(ctx, x, y, width, height) {
     const checkSize = 4;
-    ctx.fillStyle = '#404040';
+    ctx.fillStyle = "#404040";
 
     for (let py = y; py < y + height; py += checkSize) {
       for (let px = x; px < x + width; px += checkSize) {
@@ -1179,11 +1193,11 @@ class UIController {
 
   // Edit frame name
   editFrameName(frame, nameElement) {
-    const currentName = frame.name || 'Frame';
-    const input = document.createElement('input');
-    input.type = 'text';
+    const currentName = frame.name || "Frame";
+    const input = document.createElement("input");
+    input.type = "text";
     input.value = currentName;
-    input.className = 'frame-name-input';
+    input.className = "frame-name-input";
     input.style.cssText = `
     background: #1a1a1a;
     border: 1px solid #00d4ff;
@@ -1199,11 +1213,11 @@ class UIController {
     input.select();
 
     const finishEdit = () => {
-      const newName = input.value.trim() || 'Frame';
+      const newName = input.value.trim() || "Frame";
       frame.name = newName;
 
-      const newNameElement = document.createElement('div');
-      newNameElement.className = 'frame-name';
+      const newNameElement = document.createElement("div");
+      newNameElement.className = "frame-name";
       newNameElement.textContent = newName;
 
       input.replaceWith(newNameElement);
@@ -1212,22 +1226,22 @@ class UIController {
       this.editor.saveSprites();
 
       // Add double-click listener to new element
-      newNameElement.addEventListener('dblclick', () => {
+      newNameElement.addEventListener("dblclick", () => {
         this.editFrameName(frame, newNameElement);
       });
     };
 
-    input.addEventListener('blur', finishEdit);
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
+    input.addEventListener("blur", finishEdit);
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
         finishEdit();
-      } else if (e.key === 'Escape') {
-        const nameElement = document.createElement('div');
-        nameElement.className = 'frame-name';
+      } else if (e.key === "Escape") {
+        const nameElement = document.createElement("div");
+        nameElement.className = "frame-name";
         nameElement.textContent = currentName;
         input.replaceWith(nameElement);
 
-        nameElement.addEventListener('dblclick', () => {
+        nameElement.addEventListener("dblclick", () => {
           this.editFrameName(frame, nameElement);
         });
       }
@@ -1677,8 +1691,9 @@ class UIController {
 
     this.editor.sprites.forEach((sprite, index) => {
       const spriteItem = document.createElement("div");
-      spriteItem.className = `sprite-item ${sprite === this.editor.currentSprite ? "active" : ""
-        }`;
+      spriteItem.className = `sprite-item ${
+        sprite === this.editor.currentSprite ? "active" : ""
+      }`;
 
       // Create thumbnail
       const thumbnail = this.createSpriteThumbnail(sprite);
@@ -1727,7 +1742,6 @@ class UIController {
       const storedOnlySprites = allStoredSprites.filter(
         (sprite) => !sessionSpriteIds.has(sprite.id)
       );
-
     } catch (error) {
       console.error("Failed to load session sprites:", error);
     }
@@ -1803,14 +1817,17 @@ class UIController {
         label: "Delete from Storage",
         icon: "fas fa-trash",
         action: async () => {
-          if (confirm(`Delete "${sprite.name}" from storage permanently?`)) {
-            await this.editor.storageManager.deleteSprite(sprite.id);
-            this.editor.updateUI();
-            this.showNotification(
-              `Deleted from storage: ${sprite.name}`,
-              "success"
-            );
-          }
+          this.showCustomConfirm(
+            `Delete "${sprite.name}" from storage permanently?`,
+            async () => {
+              await this.editor.storageManager.deleteSprite(sprite.id);
+              this.editor.updateUI();
+              this.showNotification(
+                `Deleted from storage: ${sprite.name}`,
+                "success"
+              );
+            }
+          );
           this.hideContextMenu();
         },
         danger: true,
@@ -1901,19 +1918,24 @@ class UIController {
 
     // Add hover animation functionality if sprite has multiple frames
     if (sprite.frames && sprite.frames.length > 1) {
-      canvas.addEventListener('mouseenter', () => {
+      canvas.addEventListener("mouseenter", () => {
         if (!canvas._isAnimating) {
           canvas._isAnimating = true;
           canvas._currentFrameIndex = 0;
 
           canvas._animationInterval = setInterval(() => {
-            canvas._currentFrameIndex = (canvas._currentFrameIndex + 1) % sprite.frames.length;
-            this.renderThumbnailFrame(canvas, sprite, canvas._currentFrameIndex);
+            canvas._currentFrameIndex =
+              (canvas._currentFrameIndex + 1) % sprite.frames.length;
+            this.renderThumbnailFrame(
+              canvas,
+              sprite,
+              canvas._currentFrameIndex
+            );
           }, 150); // ~6.7 FPS for smooth preview
         }
       });
 
-      canvas.addEventListener('mouseleave', () => {
+      canvas.addEventListener("mouseleave", () => {
         if (canvas._animationInterval) {
           clearInterval(canvas._animationInterval);
           canvas._animationInterval = null;
@@ -1925,8 +1947,8 @@ class UIController {
       });
 
       // Visual indicator for animated sprites
-      canvas.style.position = 'relative';
-      canvas.style.cursor = 'pointer';
+      canvas.style.position = "relative";
+      canvas.style.cursor = "pointer";
       canvas.title = `${sprite.name} (${sprite.frames.length} frames - hover to preview)`;
     } else {
       canvas.title = sprite.name;
@@ -1959,7 +1981,7 @@ class UIController {
 
       // Render each visible layer in the frame
       if (frame.layers && Array.isArray(frame.layers)) {
-        frame.layers.forEach(layer => {
+        frame.layers.forEach((layer) => {
           if (!layer.visible || !layer.pixels) return;
 
           for (let y = 0; y < frame.height; y++) {
@@ -2174,8 +2196,6 @@ class UIController {
       // this.layerManager.updateLayersList();
       this.updateLayersList();
 
-
-
       // Only update sprites list if sprites are available
       if (this.editor.sprites && Array.isArray(this.editor.sprites)) {
         this.updateSpritesList();
@@ -2237,11 +2257,11 @@ class UIController {
     const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
     return result
       ? [
-        parseInt(result[1], 16),
-        parseInt(result[2], 16),
-        parseInt(result[3], 16),
-        255,
-      ]
+          parseInt(result[1], 16),
+          parseInt(result[2], 16),
+          parseInt(result[3], 16),
+          255,
+        ]
       : [0, 0, 0, 255];
   }
 
@@ -2280,7 +2300,10 @@ class UIController {
         icon: "fas fa-copy",
         action: () => {
           // Save current layer state before duplicating
-          if (this.editor.layerManager && this.editor.currentSprite === sprite) {
+          if (
+            this.editor.layerManager &&
+            this.editor.currentSprite === sprite
+          ) {
             this.editor.saveLayersToSprite();
           }
 
@@ -2312,20 +2335,23 @@ class UIController {
         label: "Delete",
         icon: "fas fa-trash",
         action: () => {
-          if (confirm(`Are you sure you want to delete "${sprite.name}"?`)) {
-            this.editor.deleteSprite(index);
-            //set current sprite to another if available
-            if (this.editor.sprites.length > 0) {
-              this.editor.setCurrentSprite(
-                this.editor.sprites[
-                Math.min(index, this.editor.sprites.length - 1)
-                ]
-              );
-            } else {
-              this.editor.currentSprite = null;
+          this.showCustomConfirm(
+            `Are you sure you want to delete "${sprite.name}"?`,
+            () => {
+              this.editor.deleteSprite(index);
+              //set current sprite to another if available
+              if (this.editor.sprites.length > 0) {
+                this.editor.setCurrentSprite(
+                  this.editor.sprites[
+                    Math.min(index, this.editor.sprites.length - 1)
+                  ]
+                );
+              } else {
+                this.editor.currentSprite = null;
+              }
+              this.showNotification(`Deleted: ${sprite.name}`, "success");
             }
-            this.showNotification(`Deleted: ${sprite.name}`, "success");
-          }
+          );
           this.hideContextMenu();
         },
         danger: true,
@@ -2606,7 +2632,7 @@ class UIController {
     this.originalImageHeight = null;
   }
 
-  applyDownscale() {
+  async applyDownscale() {
     const targetWidth = parseInt(document.getElementById("target-width").value);
     const targetHeight = parseInt(
       document.getElementById("target-height").value
@@ -2625,95 +2651,139 @@ class UIController {
       return;
     }
 
-    // Create downscaled image data
-    const canvas = document.createElement("canvas");
-    canvas.width = this.originalImageWidth;
-    canvas.height = this.originalImageHeight;
-    const ctx = canvas.getContext("2d");
-    ctx.putImageData(this.originalImageData, 0, 0);
+    try {
+      // CRITICAL FIX: Save existing sprites before creating new one
+      // await this.editor.saveSprites();
 
-    // Create final downscaled canvas
-    const finalCanvas = document.createElement("canvas");
-    finalCanvas.width = targetWidth;
-    finalCanvas.height = targetHeight;
-    const finalCtx = finalCanvas.getContext("2d");
-    finalCtx.imageSmoothingEnabled = true;
-    finalCtx.imageSmoothingQuality = "high";
-    finalCtx.drawImage(canvas, 0, 0, targetWidth, targetHeight);
+      // Create downscaled image data
+      const canvas = document.createElement("canvas");
+      canvas.width = this.originalImageWidth;
+      canvas.height = this.originalImageHeight;
+      const ctx = canvas.getContext("2d");
+      ctx.putImageData(this.originalImageData, 0, 0);
 
-    // Get downscaled image data
-    const downscaledImageData = finalCtx.getImageData(
-      0,
-      0,
-      targetWidth,
-      targetHeight
-    );
+      // Create final downscaled canvas
+      const finalCanvas = document.createElement("canvas");
+      finalCanvas.width = targetWidth;
+      finalCanvas.height = targetHeight;
+      const finalCtx = finalCanvas.getContext("2d");
+      finalCtx.imageSmoothingEnabled = true;
+      finalCtx.imageSmoothingQuality = "high";
+      finalCtx.drawImage(canvas, 0, 0, targetWidth, targetHeight);
 
-    // Create sprite from downscaled data
-    this.createSpriteFromImageData(
-      downscaledImageData,
-      targetWidth,
-      targetHeight
-    );
+      // Get downscaled image data
+      const downscaledImageData = finalCtx.getImageData(
+        0,
+        0,
+        targetWidth,
+        targetHeight
+      );
 
-    this.hideDownscaleModal();
-    this.showNotification(
-      `Image downscaled to ${targetWidth}x${targetHeight}`,
-      "success"
-    );
+      // Create sprite from downscaled data
+      this.createSpriteFromImageData(
+        downscaledImageData,
+        targetWidth,
+        targetHeight
+      );
+
+      // CRITICAL FIX: Save all sprites after creating the new one
+      await this.editor.saveSprites();
+
+      this.hideDownscaleModal();
+      this.showNotification(
+        `Image downscaled to ${targetWidth}x${targetHeight}`,
+        "success"
+      );
+    } catch (error) {
+      console.error("Failed to apply downscale:", error);
+      this.showNotification("Failed to downscale image", "error");
+      this.hideDownscaleModal();
+    }
   }
   createSpriteFromImageData(imageData, width, height) {
-    // Create new sprite with animation support
-    const sprite = this.editor.createNewSprite(width, height);
+    // CRITICAL FIX: Set importing flag to prevent auto-clearing of sprites
+    this.editor._importingSprite = true;
 
-    // Convert ImageData to pixel array format
-    const pixels = [];
+    try {
+      // Create new sprite with animation support
+      const sprite = this.editor.createNewSprite(width, height);
 
-    // Initialize pixel array
-    for (let y = 0; y < height; y++) {
-      pixels[y] = [];
-      for (let x = 0; x < width; x++) {
-        const index = (y * width + x) * 4;
-        pixels[y][x] = [
-          imageData.data[index],     // R
-          imageData.data[index + 1], // G
-          imageData.data[index + 2], // B
-          imageData.data[index + 3], // A
-        ];
+      // Convert ImageData to pixel array format
+      const pixels = [];
+
+      // Initialize pixel array
+      for (let y = 0; y < height; y++) {
+        pixels[y] = [];
+        for (let x = 0; x < width; x++) {
+          const index = (y * width + x) * 4;
+          pixels[y][x] = [
+            imageData.data[index], // R
+            imageData.data[index + 1], // G
+            imageData.data[index + 2], // B
+            imageData.data[index + 3], // A
+          ];
+        }
       }
-    }
 
-    // Handle both legacy and animation-enabled sprites
-    if (sprite.frames && sprite.frames.length > 0) {
-      // Animation-enabled sprite - set pixels on the first frame's first layer
-      const firstFrame = sprite.frames[0];
-      if (firstFrame.layers && firstFrame.layers.length > 0) {
-        firstFrame.layers[0].pixels = pixels;
+      // Ensure sprite has proper frame structure
+      if (!sprite.frames || sprite.frames.length === 0) {
+        sprite.initializeFrames();
+      }
+
+      // Handle both legacy and animation-enabled sprites
+      if (sprite.frames && sprite.frames.length > 0) {
+        // Animation-enabled sprite - set pixels on the first frame's first layer
+        const firstFrame = sprite.frames[0];
+        if (firstFrame.layers && firstFrame.layers.length > 0) {
+          firstFrame.layers[0].pixels = pixels.map((row) =>
+            row.map((pixel) => [...pixel])
+          );
+        } else {
+          // Fallback: create default layer structure
+          firstFrame.layers = [
+            {
+              id: Date.now() + Math.random(),
+              name: "Background",
+              visible: true,
+              opacity: 1,
+              pixels: pixels.map((row) => row.map((pixel) => [...pixel])),
+              locked: false,
+              blendMode: "normal",
+            },
+          ];
+        }
+
+        // Update sprite's backward compatibility properties
+        sprite.layers = firstFrame.layers.map((layer) => ({
+          ...layer,
+          pixels: layer.pixels.map((row) => row.map((pixel) => [...pixel])),
+        }));
+        sprite.pixels = sprite.layers[0].pixels;
       } else {
-        // Fallback: create default layer structure
-        firstFrame.layers = [{
-          name: 'Background',
-          visible: true,
-          opacity: 1,
-          pixels: pixels
-        }];
+        // Legacy sprite - use setPixelArray method
+        sprite.setPixelArray(pixels);
       }
-    } else {
-      // Legacy sprite - use setPixelArray method
-      sprite.setPixelArray(pixels);
-    }
 
-    // Update layer manager if it exists
-    if (this.editor.layerManager) {
-      this.editor.layerManager.fromSprite(sprite);
-    }
+      // Update layer manager if it exists
+      if (this.editor.layerManager) {
+        this.editor.layerManager.fromSprite(sprite);
+      }
 
-    // Force UI update
-    this.editor.updateUI();
+      // Force UI update
+      this.editor.updateUI();
 
-    // Force canvas render
-    if (this.editor.canvasManager) {
-      this.editor.canvasManager.render();
+      // Force canvas render
+      if (this.editor.canvasManager) {
+        this.editor.canvasManager.render();
+      }
+    } catch (error) {
+      console.error("Error creating sprite from image data:", error);
+      this.showNotification("Failed to create sprite from image", "error");
+    } finally {
+      // Always reset the importing flag
+      setTimeout(() => {
+        this.editor._importingSprite = false;
+      }, 1000);
     }
   }
 
@@ -2744,8 +2814,8 @@ class UIController {
       for (let x = 0; x < width; x++) {
         const index = (y * width + x) * 4;
         pixels[y][x] = [
-          imageData.data[index],     // R
-          imageData.data[index + 1], // G  
+          imageData.data[index], // R
+          imageData.data[index + 1], // G
           imageData.data[index + 2], // B
           imageData.data[index + 3], // A
         ];
@@ -2757,7 +2827,11 @@ class UIController {
 
   // Helper method to apply pixels to sprite regardless of structure
   applyPixelsToSprite(sprite, pixels) {
-    if (sprite.frames && Array.isArray(sprite.frames) && sprite.frames.length > 0) {
+    if (
+      sprite.frames &&
+      Array.isArray(sprite.frames) &&
+      sprite.frames.length > 0
+    ) {
       // Animation-enabled sprite
       const firstFrame = sprite.frames[0];
 
@@ -2769,10 +2843,10 @@ class UIController {
       if (firstFrame.layers.length === 0) {
         // Create default layer
         firstFrame.layers.push({
-          name: 'Background',
+          name: "Background",
           visible: true,
           opacity: 1,
-          pixels: pixels
+          pixels: pixels,
         });
       } else {
         // Use first existing layer
@@ -2782,11 +2856,9 @@ class UIController {
       // Ensure frame dimensions are correct
       firstFrame.width = sprite.width;
       firstFrame.height = sprite.height;
-
-    } else if (typeof sprite.setPixelArray === 'function') {
+    } else if (typeof sprite.setPixelArray === "function") {
       // Legacy sprite with setPixelArray method
       sprite.setPixelArray(pixels);
-
     } else {
       // Direct pixel assignment fallback
       sprite.pixels = pixels;
@@ -2800,7 +2872,7 @@ class UIController {
       try {
         this.editor.layerManager.fromSprite(sprite);
       } catch (error) {
-        console.warn('Failed to sync with layer manager:', error);
+        console.warn("Failed to sync with layer manager:", error);
       }
     }
 
@@ -2809,7 +2881,7 @@ class UIController {
       try {
         this.editor.animationManager.initializeFromSprite(sprite);
       } catch (error) {
-        console.warn('Failed to sync with animation manager:', error);
+        console.warn("Failed to sync with animation manager:", error);
       }
     }
 
@@ -3172,19 +3244,18 @@ class UIController {
     }
   }
 
-
   updateExportModalForAnimation() {
     const sprite = this.editor.currentSprite;
     const hasAnimation = sprite && sprite.frames && sprite.frames.length > 1;
 
     // Find or create animation export section
-    let animationSection = document.getElementById('animation-export-section');
+    let animationSection = document.getElementById("animation-export-section");
 
     if (hasAnimation) {
       if (!animationSection) {
-        animationSection = document.createElement('div');
-        animationSection.id = 'animation-export-section';
-        animationSection.className = 'export-section';
+        animationSection = document.createElement("div");
+        animationSection.id = "animation-export-section";
+        animationSection.className = "export-section";
         animationSection.innerHTML = `
         <h3 style="color: #00d4ff; margin-bottom: 15px;">Animation Export</h3>
         <div class="export-row">
@@ -3205,37 +3276,45 @@ class UIController {
       `;
 
         // Insert before the regular export options
-        const exportContent = document.querySelector('#export-modal .modal-content');
-        const regularExportSection = exportContent.querySelector('.export-section');
+        const exportContent = document.querySelector(
+          "#export-modal .modal-content"
+        );
+        const regularExportSection =
+          exportContent.querySelector(".export-section");
         exportContent.insertBefore(animationSection, regularExportSection);
 
         // Add event listeners
-        document.getElementById('export-animated-svg').addEventListener('click', () => {
-          const fps = parseInt(document.getElementById('animation-fps').value);
-          this.editor.exportAsAnimatedSVG(fps);
-          this.hideExportModal();
-        });
+        document
+          .getElementById("export-animated-svg")
+          .addEventListener("click", () => {
+            const fps = parseInt(
+              document.getElementById("animation-fps").value
+            );
+            this.editor.exportAsAnimatedSVG(fps);
+            this.hideExportModal();
+          });
 
-        document.getElementById('export-gif').addEventListener('click', () => {
-          const fps = parseInt(document.getElementById('animation-fps').value);
+        document.getElementById("export-gif").addEventListener("click", () => {
+          const fps = parseInt(document.getElementById("animation-fps").value);
           this.editor.exportAsGIF(fps);
           this.hideExportModal();
         });
 
-        document.getElementById('export-frames-zip').addEventListener('click', () => {
-          this.editor.exportFramesAsZip();
-          this.hideExportModal();
-        });
+        document
+          .getElementById("export-frames-zip")
+          .addEventListener("click", () => {
+            this.editor.exportFramesAsZip();
+            this.hideExportModal();
+          });
       }
 
-      animationSection.style.display = 'block';
+      animationSection.style.display = "block";
     } else {
       if (animationSection) {
-        animationSection.style.display = 'none';
+        animationSection.style.display = "none";
       }
     }
   }
-
 
   hideExportModal() {
     const modal = document.getElementById("export-modal");
@@ -3297,7 +3376,9 @@ class UIController {
 
   async performExport() {
     const format = document.getElementById("export-format").value;
-    const scale = parseInt(document.getElementById("export-scale").value || "1");
+    const scale = parseInt(
+      document.getElementById("export-scale").value || "1"
+    );
     const fps = parseInt(document.getElementById("export-fps").value || "12");
 
     const sprite = this.editor.currentSprite;
@@ -3315,7 +3396,10 @@ class UIController {
         case "svg":
           if (hasAnimation) {
             await this.editor.exportAsAnimatedSVG(fps);
-            this.showNotification(`Exported animated SVG with ${sprite.frames.length} frames`, "success");
+            this.showNotification(
+              `Exported animated SVG with ${sprite.frames.length} frames`,
+              "success"
+            );
           } else {
             this.editor.exportAsSVG(scale);
             this.showNotification(`Exported SVG at ${scale}x scale`, "success");
@@ -3325,7 +3409,10 @@ class UIController {
         case "png":
           if (hasAnimation) {
             await this.editor.exportFramesAsZip();
-            this.showNotification(`Exported ${sprite.frames.length} frames as ZIP`, "success");
+            this.showNotification(
+              `Exported ${sprite.frames.length} frames as ZIP`,
+              "success"
+            );
           } else {
             this.editor.exportAsPNG(scale);
             this.showNotification(`Exported PNG at ${scale}x scale`, "success");
@@ -3370,7 +3457,10 @@ class UIController {
         case "svg":
           if (hasAnimation) {
             await this.editor.exportAsAnimatedSVG(12); // Quick export at 12 FPS
-            this.showNotification("Quick exported animated SVG at 12 FPS", "success");
+            this.showNotification(
+              "Quick exported animated SVG at 12 FPS",
+              "success"
+            );
           } else {
             this.editor.exportAsSVG(20); // Quick export at 20x scale
             this.showNotification("Quick exported SVG at 20x scale", "success");
@@ -3390,7 +3480,10 @@ class UIController {
         case "gif":
           if (hasAnimation) {
             await this.editor.exportAsGIF(12); // Quick export at 12 FPS
-            this.showNotification("Quick exported animated GIF at 12 FPS", "success");
+            this.showNotification(
+              "Quick exported animated GIF at 12 FPS",
+              "success"
+            );
           } else {
             this.editor.exportAsPNG(20); // For single frame, export as PNG
             this.showNotification("Quick exported single frame as PNG", "info");
@@ -3407,11 +3500,71 @@ class UIController {
   }
 
   // Update frame display when frame changes
-updateFrameDisplay() {
-  if (this.editor && this.editor.canvasManager) {
-    this.editor.canvasManager.updateFrameDisplay();
+  updateFrameDisplay() {
+    if (this.editor && this.editor.canvasManager) {
+      this.editor.canvasManager.updateFrameDisplay();
+    }
   }
-}
+  // Add this method to the UIController class
+
+  showCustomConfirm(message, onConfirm, onCancel = null) {
+    const modal = document.getElementById("confirm-modal");
+    const messageEl = document.getElementById("confirm-modal-message");
+    const cancelBtn = document.getElementById("confirm-cancel");
+    const confirmBtn = document.getElementById("confirm-confirm");
+
+    // Set message
+    messageEl.textContent = message;
+
+    // Show modal
+    modal.style.display = "flex";
+
+    const cleanup = () => {
+      modal.style.display = "none";
+      // Remove event listeners to prevent memory leaks
+      confirmBtn.removeEventListener("click", handleConfirm);
+      cancelBtn.removeEventListener("click", handleCancel);
+      modal.removeEventListener("keydown", handleKeydown);
+      modal.removeEventListener("click", handleOutsideClick);
+    };
+
+    const handleConfirm = () => {
+      cleanup();
+      if (onConfirm) onConfirm();
+    };
+
+    const handleCancel = () => {
+      cleanup();
+      if (onCancel) onCancel();
+    };
+
+    const handleKeydown = (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        handleConfirm();
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        handleCancel();
+      }
+    };
+
+    const handleOutsideClick = (e) => {
+      if (e.target === modal) {
+        handleCancel();
+      }
+    };
+
+    // Event listeners
+    confirmBtn.addEventListener("click", handleConfirm);
+    cancelBtn.addEventListener("click", handleCancel);
+    modal.addEventListener("keydown", handleKeydown);
+    modal.addEventListener("click", handleOutsideClick);
+
+    // Focus the confirm button for keyboard accessibility
+    setTimeout(() => {
+      confirmBtn.focus();
+    }, 100);
+  }
 }
 
 // Make UIController globally available

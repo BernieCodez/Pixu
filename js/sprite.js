@@ -8,7 +8,7 @@ class Sprite {
     this.createdAt = new Date().toISOString();
     this.modifiedAt = new Date().toISOString();
 
-    //Frames
+    // Frames
     this.frames = []; // Array of frames for animation
     this.isAnimated = false; // Flag to indicate if sprite has multiple frames
 
@@ -19,9 +19,30 @@ class Sprite {
       this.layers = [this._createDefaultLayer()];
     }
 
-    // For backward compatibility, keep pixels as reference to first layer
-    this.pixels = this.layers[0].pixels;
-    this.useTypedArray = this.layers[0].useTypedArray;
+    // Ensure frames are initialized immediately from layers to avoid "empty frames" races
+    // (Important when sprites are created/imported and saved quickly)
+    if (!this.frames || this.frames.length === 0) {
+      this.initializeFrames();
+    }
+
+    // For backward compatibility, keep pixels as reference to first layer (now from frames)
+    // Prefer frame-based data if available
+if (this.frames && this.frames.length > 0 && this.frames[0].layers && this.frames[0].layers.length > 0) {
+  // Normal path: prefer frames
+  this.layers = this.frames[0].layers;
+  this.pixels = this.layers[0].pixels;
+  this.useTypedArray = !!this.layers[0].useTypedArray;
+} else if (this.layers && this.layers.length > 0) {
+  // Fallback for legacy sprites that only had .layers
+  this.pixels = this.layers[0].pixels;
+  this.useTypedArray = this.layers[0].useTypedArray;
+} else {
+  // Absolute fallback
+  this.layers = [this._createDefaultLayer()];
+  this.pixels = this.layers[0].pixels;
+  this.useTypedArray = this.layers[0].useTypedArray;
+}
+
 
     // Optimized history for large sprites
     this.history = [];
@@ -29,7 +50,17 @@ class Sprite {
     this.maxHistorySize = width * height > 100000 ? 10 : 50;
 
     this.onChange = null;
-    this.saveToHistory();
+
+    // Defer initial history push slightly to avoid saving incomplete external state
+    // but still record initial state for undo.
+    setTimeout(() => {
+      try {
+        this.saveToHistory();
+      } catch (e) {
+        // swallow to avoid breaking initialization
+        console.warn("saveToHistory failed during Sprite init:", e);
+      }
+    }, 0);
   }
 
   // Helper to initialize a layer from raw data or object
@@ -88,60 +119,85 @@ class Sprite {
 
   // Add this method to initialize frames for backward compatibility
   initializeFrames() {
-    if (!this.frames || this.frames.length === 0) {
-      // Get current layers data directly from this.layers, not getLayersData()
-      let layersData;
+  if (!this.frames || this.frames.length === 0) {
+    // Build layersData from this.layers if available and valid
+    let layersData = [];
 
-      if (this.layers && Array.isArray(this.layers)) {
-        // Use existing layers directly
-        layersData = this.layers.map((layer) => ({
-          id: layer.id || Date.now() + Math.random(),
-          name: layer.name || "Layer",
-          visible: layer.visible !== false,
-          opacity: typeof layer.opacity === "number" ? layer.opacity : 1,
-          pixels: layer.useTypedArray
-            ? this.convertTypedArrayTo2D(layer.pixels)
-            : layer.pixels.map((row) => row.map((pixel) => [...pixel])),
-          locked: layer.locked || false,
-          blendMode: layer.blendMode || "normal",
-        }));
-      } else {
-        // Create default layer from sprite pixels if layers don't exist
+    if (this.layers && Array.isArray(this.layers) && this.layers.length > 0) {
+      layersData = this.layers.map((layer, idx) => {
+        // CRITICAL FIX: Validate layer pixel data before processing
         let pixels;
-        if (this.useTypedArray) {
-          pixels = this.convertTypedArrayTo2D(this.pixels);
+        if (!layer.pixels || !Array.isArray(layer.pixels)) {
+          console.warn(`Layer ${idx} has invalid pixel data, creating empty array`);
+          pixels = this.createEmptyPixelArray();
+        } else if (layer.useTypedArray && layer.pixels instanceof Uint8Array) {
+          pixels = this.convertTypedArrayTo2D(layer.pixels);
+        } else if (Array.isArray(layer.pixels)) {
+          // CRITICAL FIX: Deep validation of 2D pixel array
+          try {
+            pixels = layer.pixels.map((row, y) => {
+              if (!Array.isArray(row)) {
+                console.warn(`Layer ${idx} row ${y} is not an array, creating empty row`);
+                return new Array(this.width).fill().map(() => [0, 0, 0, 0]);
+              }
+              return row.map((px, x) => {
+                if (!Array.isArray(px) || px.length !== 4) {
+                  console.warn(`Layer ${idx} pixel at ${x},${y} is invalid, using transparent`);
+                  return [0, 0, 0, 0];
+                }
+                return [...px];
+              });
+            });
+          } catch (error) {
+            console.error(`Failed to process layer ${idx} pixels:`, error);
+            pixels = this.createEmptyPixelArray();
+          }
         } else {
-          pixels = this.pixels.map((row) => row.map((pixel) => [...pixel]));
+          pixels = this.createEmptyPixelArray();
         }
 
-        layersData = [
-          {
-            id: Date.now() + Math.random(),
-            name: "Background",
-            visible: true,
-            opacity: 1,
-            pixels: pixels,
-            locked: false,
-            blendMode: "normal",
-          },
-        ];
-      }
-
-      // Create initial frame
-      this.frames = [
+        return {
+          id: layer.id || Date.now() + Math.random() + idx,
+          name: layer.name || `Layer ${idx + 1}`,
+          visible: layer.visible !== false,
+          opacity: typeof layer.opacity === "number" ? layer.opacity : 1,
+          pixels: pixels,
+          locked: layer.locked || false,
+          blendMode: layer.blendMode || "normal",
+          useTypedArray: !!layer.useTypedArray,
+        };
+      });
+    } else {
+      // fallback to a clean single layer
+      layersData = [
         {
           id: Date.now() + Math.random(),
-          name: "Frame 1",
-          width: this.width,
-          height: this.height,
-          activeLayerIndex: 0,
-          layers: layersData,
+          name: "Layer 1",
+          visible: true,
+          opacity: 1,
+          pixels: this.createEmptyPixelArray(),
+          locked: false,
+          blendMode: "normal",
+          useTypedArray: false,
         },
       ];
     }
 
-    return this.frames;
+    // Create initial frame with validated data
+    this.frames = [
+      {
+        id: Date.now() + Math.random(),
+        name: "Frame 1",
+        width: this.width,
+        height: this.height,
+        activeLayerIndex: 0,
+        layers: layersData,
+      },
+    ];
   }
+
+  return this.frames;
+}
 
   // Add method to get current frame (for backward compatibility)
   getCurrentFrame() {

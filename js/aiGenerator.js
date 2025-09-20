@@ -18,161 +18,6 @@ class AIGenerator {
   }
 
   createModal() {
-    // Create AI Generator Modal with proper mode switching
-    const modalHTML = `
-            <div class="modal" id="ai-generator-modal">
-                <div class="modal-content" style="max-width: 900px;">
-                    <div class="modal-header">
-                        <h3><i class="fas fa-magic"></i> AI Assistant</h3>
-                        <button class="modal-close" id="ai-modal-close">&times;</button>
-                    </div>
-                    
-                    <!-- Mode Switch Tabs -->
-                    <div class="mode-tabs" style="display: flex; border-bottom: 1px solid #444; margin-bottom: 20px;">
-                        <button 
-                            id="generate-tab" 
-                            class="mode-tab active" 
-                            style="flex: 1; padding: 12px; background: #4CAF50; color: white; border: none; cursor: pointer; font-weight: bold;">
-                            <i class="fas fa-image"></i> Generate Pixel Art
-                        </button>
-                        <button 
-                            id="chat-tab" 
-                            class="mode-tab" 
-                            style="flex: 1; padding: 12px; background: #444; color: white; border: none; cursor: pointer; font-weight: bold;">
-                            <i class="fas fa-comments"></i> Chat Assistant
-                        </button>
-                    </div>
-
-                    <div class="modal-body">
-                        <!-- Generate Mode -->
-                        <div id="generate-mode" style="display: block;">
-                            <div class="ai-info-box" style="background: #2a2a2a; border: 1px solid #444; border-radius: 6px; padding: 15px; margin-bottom: 20px;">
-                                <h4 style="margin-top: 0; color: #4CAF50;"><i class="fas fa-info-circle"></i> AI Image Generation</h4>
-                                <p style="margin-bottom: 8px;">Using Pollinations.AI for real-time image generation with advanced pixel art processing.</p>
-                                <p style="margin: 0; font-size: 13px; color: #ccc;">Generated images are processed with improved color quantization algorithms.</p>
-                            </div>
-                            
-                            <div class="input-group">
-                                <label for="ai-prompt">Prompt:</label>
-                                <textarea 
-                                    id="ai-prompt" 
-                                    placeholder="Describe your pixel art (e.g., 'medieval castle, 16-bit style', 'retro spaceship', 'fantasy sword')"
-                                    rows="3"
-                                    style="width: 100%; background: #1a1a1a; border: 1px solid #444; color: #fff; padding: 10px; border-radius: 6px; resize: vertical; font-family: inherit;">pixel art medieval castle, 16-bit retro game style</textarea>
-                            </div>
-                            
-                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 20px 0;">
-                                <div class="input-group">
-                                    <label for="ai-canvas-size">Target Canvas Size:</label>
-                                    <select id="ai-canvas-size" style="background: #1a1a1a; border: 1px solid #444; color: #fff; padding: 8px; border-radius: 4px;">
-                                        <option value="16">16x16</option>
-                                        <option value="32" selected>32x32</option>
-                                        <option value="48">48x48</option>
-                                        <option value="64">64x64</option>
-                                    </select>
-                                </div>
-                                
-                                <div class="input-group">
-                                    <label for="ai-model">AI Model:</label>
-                                    <select id="ai-model" style="background: #1a1a1a; border: 1px solid #444; color: #fff; padding: 8px; border-radius: 4px;">
-                                        <option value="flux" selected>Flux</option>
-                                        <option value="turbo">Turbo</option>
-                                        <option value="flux-realism">Flux Realism</option>
-                                        <option value="flux-cablyai">Flux CablyAI</option>
-                                        <option value="flux-anime">Flux Anime</option>
-                                        <option value="any-dark">Any Dark</option>
-                                    </select>
-                                </div>
-                            </div>
-                            
-                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 20px 0;">
-                                <div class="input-group">
-                                    <label for="ai-color-palette">Color Palette:</label>
-                                    <select id="ai-color-palette" style="background: #1a1a1a; border: 1px solid #444; color: #fff; padding: 8px; border-radius: 4px;">
-                                        <option value="full" selected>Full Color</option>
-                                        <option value="retro">Retro 16-Color</option>
-                                        <option value="gameboy">Game Boy Green</option>
-                                        <option value="nes">NES Palette</option>
-                                        <option value="c64">Commodore 64</option>
-                                        <option value="pico8">PICO-8</option>
-                                    </select>
-                                </div>
-                            </div>
-                            
-                            <div class="ai-status" id="ai-status" style="text-align: center; margin: 20px 0; min-height: 24px; font-size: 14px;"></div>
-                            
-                            <div class="ai-preview-container" id="ai-preview-container" style="display: none; margin-top: 20px;">
-                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
-                                    <div style="text-align: center;">
-                                        <h4 style="margin-bottom: 10px; color: #ccc;">AI Generated</h4>
-                                        <canvas id="ai-original-canvas" style="border: 1px solid #444; max-width: 100%; background: #000;"></canvas>
-                                    </div>
-                                    <div style="text-align: center;">
-                                        <h4 style="margin-bottom: 10px; color: #ccc;">Pixel Art Result</h4>
-                                        <canvas id="ai-pixel-canvas" style="border: 1px solid #444; max-width: 100%; background: #000; image-rendering: pixelated;"></canvas>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Chat Mode -->
-                        <div id="chat-mode" style="display: none;">
-                            <div class="ai-info-box" style="background: #2a2a2a; border: 1px solid #444; border-radius: 6px; padding: 15px; margin-bottom: 20px;">
-                                <h4 style="margin-top: 0; color: #6C9BD2;"><i class="fas fa-info-circle"></i> AI Chat Assistant</h4>
-                                <p style="margin-bottom: 8px;">Get help with pixel art techniques, color theory, design ideas, and creative inspiration.</p>
-                                <p style="margin: 0; font-size: 13px; color: #ccc;">Ask about palettes, art styles, or any creative questions!</p>
-                            </div>
-                            
-                            <div class="chat-container" style="height: 400px; border: 1px solid #444; border-radius: 6px; background: #1a1a1a; display: flex; flex-direction: column;">
-                                <div id="chat-messages" style="flex: 1; overflow-y: auto; padding: 15px;">
-                                    <div class="chat-message assistant" style="margin-bottom: 15px; padding: 10px; background: #2a2a2a; border-radius: 6px; border-left: 3px solid #6C9BD2;">
-                                        <div style="font-weight: bold; color: #6C9BD2; margin-bottom: 5px;">AI Assistant</div>
-                                        <div style="color: #ccc;">Hello! I'm here to help with your pixel art projects. Ask me about color palettes, art techniques, creative themes, or any design questions you have!</div>
-                                    </div>
-                                </div>
-                                
-                                <div style="padding: 15px; border-top: 1px solid #444; display: flex; gap: 10px;">
-                                    <input 
-                                        type="text" 
-                                        id="chat-input" 
-                                        placeholder="Ask me about pixel art, color theory, design ideas..." 
-                                        style="flex: 1; background: #2a2a2a; border: 1px solid #444; color: #fff; padding: 10px; border-radius: 4px;"
-                                        onkeypress="if(event.key==='Enter') window.aiGenerator.sendChatMessage()">
-                                    <button 
-                                        id="chat-send" 
-                                        style="background: #6C9BD2; color: white; border: none; padding: 10px 15px; border-radius: 4px; cursor: pointer;">
-                                        <i class="fas fa-paper-plane"></i>
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div class="modal-footer">
-                        <!-- Generate Mode Buttons -->
-                        <div id="generate-buttons" style="display: flex; gap: 10px;">
-                            <button class="btn btn-secondary" id="ai-cancel">Cancel</button>
-                            <button class="btn btn-primary" id="ai-generate" style="background: linear-gradient(45deg, #4CAF50, #45a049);">
-                                <i class="fas fa-magic"></i> Generate
-                            </button>
-                            <button class="btn btn-success" id="ai-apply" style="display: none;">
-                                <i class="fas fa-plus"></i> Add to Canvas
-                            </button>
-                        </div>
-                        
-                        <!-- Chat Mode Buttons -->
-                        <div id="chat-buttons" style="display: none; gap: 10px;">
-                            <button class="btn btn-secondary" id="chat-close">Close</button>
-                            <button class="btn btn-warning" id="chat-clear">
-                                <i class="fas fa-trash"></i> Clear Chat
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
-
-    document.body.insertAdjacentHTML("beforeend", modalHTML);
     this.modal = document.getElementById("ai-generator-modal");
   }
 
@@ -361,21 +206,12 @@ class AIGenerator {
       messageDiv.classList.add("temporary");
     }
 
-    const bgColor = role === "user" ? "#4CAF50" : "#6C9BD2";
     const senderName = role === "user" ? "You" : "AI Assistant";
 
-    messageDiv.style.cssText = `
-            margin-bottom: 15px; 
-            padding: 10px; 
-            background: #2a2a2a; 
-            border-radius: 6px; 
-            border-left: 3px solid ${bgColor};
-        `;
-
     messageDiv.innerHTML = `
-            <div style="font-weight: bold; color: ${bgColor}; margin-bottom: 5px;">${senderName}</div>
-            <div style="color: #ccc;">${content}</div>
-        `;
+        <div class="chat-message-sender">${senderName}</div>
+        <div class="chat-message-content">${content}</div>
+    `;
 
     messagesContainer.appendChild(messageDiv);
     messagesContainer.scrollTop = messagesContainer.scrollHeight;

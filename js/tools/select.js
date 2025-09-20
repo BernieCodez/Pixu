@@ -891,13 +891,12 @@ class SelectTool {
 
     if (cropBtn) {
       cropBtn.addEventListener("click", () => {
-        if (
-          confirm(
-            "Crop the sprite to the current selection? This cannot be undone."
-          )
-        ) {
-          this.crop();
-        }
+        this.editor.uiManager.showCustomConfirm(
+          "Crop the sprite to the current selection? This cannot be undone.",
+          () => {
+            this.crop();
+          }
+        );
       });
     }
 

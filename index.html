@@ -8,19 +8,16 @@
   <link rel="stylesheet" href="styles/base.css" />
   <link rel="stylesheet" href="styles/canvas-components.css" />
   <link rel="stylesheet" href="styles/ui-components.css" />
-
+  
   <!-- base.css - Core styling, reset, layout, buttons, and basic UI elements -->
   <!-- canvas-components.css - Canvas-specific components, sidebars, toolbars, and drawing area -->
   <!-- ui-components.css - Properties panel, modals, forms, and interactive UI components -->
 
-
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet" />
   <script src="https://cdn.jsdelivr.net/npm/@jaames/iro@5"></script>
   <script src="https://unpkg.com/konva@9/konva.min.js"></script>
-  <!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.min.js"></script> -->
   <script src="https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jsgif@1.0.1/GIFEncoder.js"></script>
-  <!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.js"></script> -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="js/settingsMenu.js"></script>
 </head>
@@ -49,14 +46,12 @@
       <div class="header-center">
         <div class="canvas-size-inputs">
           <label for="canvas-width-header">W:</label>
-          <input type="number" id="canvas-width-header" min="1" max="128" value="16"
-            style="width: 50px; margin-right: 8px" />
+          <input type="number" id="canvas-width-header" min="1" max="128" value="16" class="size-input" />
           <label for="canvas-height-header">H:</label>
-          <input type="number" id="canvas-height-header" min="1" max="128" value="16"
-            style="width: 50px; margin-right: 12px" />
+          <input type="number" id="canvas-height-header" min="1" max="128" value="16" class="size-input" />
         </div>
         <span id="sprite-name-display" class="sprite-name-display">Untitled</span>
-        <button class="btn btn-sm" id="edit-sprite-name" title="Edit Sprite Name" style="margin-left: 6px">
+        <button class="btn btn-sm" id="edit-sprite-name" title="Edit Sprite Name" class="edit-name-btn">
           <i class="fas fa-edit"></i>
         </button>
       </div>
@@ -89,7 +84,6 @@
     </header>
 
     <!-- Export Modal -->
-    <!-- Updated Export Modal -->
     <div class="modal" id="export-modal">
       <div class="modal-content">
         <div class="modal-header">
@@ -99,14 +93,7 @@
         <div class="modal-body">
           <div class="input-group">
             <label for="export-format">Format:</label>
-            <select id="export-format" style="
-              background: #1a1a1a;
-              border: 1px solid #444;
-              border-radius: 6px;
-              padding: 10px;
-              color: #fff;
-              font-size: 14px;
-            ">
+            <select id="export-format" class="export-format-select">
               <option value="svg">SVG (Vector)</option>
               <option value="png">PNG (Raster)</option>
               <option value="gif">GIF (Animated)</option>
@@ -116,37 +103,20 @@
           <div class="input-group" id="scale-group">
             <label for="export-scale">Scale: <span id="scale-value">1x</span></label>
             <div class="slider-container">
-              <input type="range" id="export-scale" min="1" max="32" value="1" style="
-                flex: 1;
-                height: 6px;
-                border-radius: 3px;
-                background: #444;
-                outline: none;
-              " />
+              <input type="range" id="export-scale" min="1" max="32" value="1" class="export-slider" />
             </div>
           </div>
 
           <div class="input-group" id="fps-group" style="display: none;">
             <label for="export-fps">Frame Rate (FPS): <span id="fps-value">12</span></label>
             <div class="slider-container">
-              <input type="range" id="export-fps" min="1" max="60" value="12" style="
-                flex: 1;
-                height: 6px;
-                border-radius: 3px;
-                background: #444;
-                outline: none;
-              " />
+              <input type="range" id="export-fps" min="1" max="60" value="12" class="export-slider" />
             </div>
           </div>
 
-          <div class="export-preview" style="
-            margin: 15px 0;
-            text-align: center;
-            color: #ccc;
-            font-size: 14px;
-          ">
+          <div class="export-preview">
             <div id="export-dimensions">16x16 → 16x16</div>
-            <div id="export-animation-info" style="display: none; color: #00d4ff; margin-top: 5px;">
+            <div id="export-animation-info" style="display: none;">
               Animation: <span id="frame-count">1</span> frames
             </div>
           </div>
@@ -231,7 +201,6 @@
       <!-- Canvas Area -->
       <main class="canvas-area">
         <div class="canvas-toolbar">
-          <!-- Sprite name input removed, now in header -->
           <div class="canvas-scroll">
             <div class="toolbar-group">
               <!-- Tool Settings (moved from properties panel) -->
@@ -273,21 +242,15 @@
           <button class="btn generate-ai-button" id="generate-ai-button" title="Generate AI Pixel Art">
             <i class="fa fa-wand-magic-sparkles"></i>
           </button>
-          <div class = "canvas-data" id = "canvas-data">
-            <div id = "current-zoom">Zoom: 20x</div>
-            <div id = "current-frame">Frame: 1/1</div>
+          <div class="canvas-data" id="canvas-data">
+            <div id="current-zoom">Zoom: 20x</div>
+            <div id="current-frame">Frame: 1/1</div>
             <div id="canvas-dimensions">Canvas: 16 x 16</div>
-            <div id = "mouse-coordinates">Cursor X & Y: (0, 0)</div>
+            <div id="mouse-coordinates">Cursor X & Y: (0, 0)</div>
           </div>
           <canvas id="main-canvas" width="512" height="512"></canvas>
           <canvas id="overlay-canvas" width="512" height="512"></canvas>
-          <div id="konva-container" style="
-                position: absolute;
-                top: 0;
-                left: 0;
-                pointer-events: none;
-                opacity: 0;
-              "></div>
+          <div id="konva-container"></div>
         </div>
         <!-- Frames Row -->
         <div class="frames-row" id="frames-row">
@@ -296,10 +259,10 @@
           </button>
           <div class="frames-content" id="frames-content">
             <div class="frames-toolbar">
-              <button class="btn btn-sm" id="add-frame-btn" >
+              <button class="btn btn-sm" id="add-frame-btn">
                 <i class="fas fa-plus"></i>
               </button>
-              <button class="btn btn-sm" id="duplicate-frame-btn" >
+              <button class="btn btn-sm" id="duplicate-frame-btn">
                 <i class="fas fa-copy"></i>
               </button>
               <button class="btn btn-sm" id="delete-frame-btn">
@@ -330,15 +293,14 @@
               <div id="color-wheel"></div>
             </div>
 
-            <div id="color-value-container" style="margin-top: 10px">
-              <button id="toggle-color-mode" class="btn btn-secondary"
-                style="font-size: 12px; padding: 4px 10px; margin-right: 8px">
+            <div id="color-value-container" class="color-value-container">
+              <button id="toggle-color-mode" class="btn btn-secondary color-mode-toggle">
                 Show RGB
               </button>
               <label for="color-hex" id="label-hex">HEX:</label>
               <input type="text" id="color-hex" maxlength="7" size="7" value="#000000" />
-              <label for="color-rgb" id="label-rgb" style="margin-left: 10px; display: none">RGB:</label>
-              <input type="text" id="color-rgb" maxlength="16" size="16" value="rgb(0,0,0)" style="display: none" />
+              <label for="color-rgb" id="label-rgb" class="rgb-label">RGB:</label>
+              <input type="text" id="color-rgb" maxlength="16" size="16" value="rgb(0,0,0)" class="rgb-input" />
             </div>
 
             <div class="color-palette" id="color-palette">
@@ -349,44 +311,26 @@
 
         <div class="panel-section">
           <h3>Layers</h3>
-          <div class="layers-controls" style="display: flex; gap: 6px; margin-bottom: 12px">
-            <button class="btn btn-sm" id="add-layer-btn" title="Add Layer"
-              style="flex: 1; font-size: 12px; padding: 6px 8px">
+          <div class="layers-controls">
+            <button class="btn btn-sm" id="add-layer-btn" title="Add Layer" class="layer-control-btn">
               <i class="fas fa-plus"></i>
             </button>
-            <button class="btn btn-sm" id="duplicate-layer-btn" title="Duplicate Layer"
-              style="flex: 1; font-size: 12px; padding: 6px 8px">
+            <button class="btn btn-sm" id="duplicate-layer-btn" title="Duplicate Layer" class="layer-control-btn">
               <i class="fas fa-copy"></i>
             </button>
-            <button class="btn btn-sm" id="delete-layer-btn" title="Delete Layer"
-              style="flex: 1; font-size: 12px; padding: 6px 8px">
+            <button class="btn btn-sm" id="delete-layer-btn" title="Delete Layer" class="layer-control-btn">
               <i class="fas fa-trash"></i>
             </button>
           </div>
           <div class="layers-list" id="layers-list">
             <!-- Layers will be populated here by JavaScript -->
-            <!-- Example layer item structure for JS to use:
-              <div class="layer-item" draggable="true" data-index="0">
-                <span class="drag-handle" title="Drag to reorder">
-                  <i class="fas fa-grip-vertical"></i>
-                </span>
-                <span class="layer-name">Layer 1</span>
-                <input type="range" class="layer-opacity" min="0" max="100" value="100" title="Opacity" />
-                <button class="btn btn-sm layer-visibility" title="Toggle Visibility">
-                  <i class="fas fa-eye"></i>
-                </button>
-              </div>
-              -->
           </div>
         </div>
-
-        <!-- Tool Settings moved to canvas toolbar -->
       </aside>
     </div>
   </div>
 
   <!-- Modals -->
-  <!-- Add this modal to your HTML file after the existing resize-modal -->
   <div class="modal" id="downscale-modal">
     <div class="modal-content">
       <div class="modal-header">
@@ -473,6 +417,166 @@
       </div>
     </div>
   </div>
+
+  <!-- Confirm Modal -->
+<div class="confirm-modal-overlay" id="confirm-modal" style="display: none;">
+  <div class="confirm-modal-content">
+    <div class="confirm-modal-header">
+      <i class="fas fa-exclamation-triangle"></i>
+      <h3>Confirm Action</h3>
+    </div>
+    
+    <div class="confirm-modal-message" id="confirm-modal-message">
+      <!-- Message will be inserted here -->
+    </div>
+    
+    <div class="confirm-modal-actions">
+      <button id="confirm-cancel" class="confirm-modal-btn confirm-modal-btn-secondary">
+        Cancel
+      </button>
+      <button id="confirm-confirm" class="confirm-modal-btn confirm-modal-btn-danger">
+        Confirm
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- AI Generator Modal -->
+<div class="modal" id="ai-generator-modal" style="display: none;">
+    <div class="modal-content ai-modal-content">
+        <div class="modal-header">
+            <h3><i class="fas fa-magic"></i> AI Assistant</h3>
+            <button class="modal-close" id="ai-modal-close">&times;</button>
+        </div>
+        
+        <!-- Mode Switch Tabs -->
+        <div class="mode-tabs">
+            <button id="generate-tab" class="mode-tab generate active">
+                <i class="fas fa-image"></i> Generate Pixel Art
+            </button>
+            <button id="chat-tab" class="mode-tab chat">
+                <i class="fas fa-comments"></i> Chat Assistant
+            </button>
+        </div>
+
+        <div class="modal-body">
+            <!-- Generate Mode -->
+            <div id="generate-mode">
+                <div class="ai-info-box generate">
+                    <h4><i class="fas fa-info-circle"></i> AI Image Generation</h4>
+                    <p>Using Pollinations.AI for real-time image generation with advanced pixel art processing.</p>
+                    <p class="help-text">Generated images are processed with improved color quantization algorithms.</p>
+                </div>
+                
+                <div class="input-group">
+                    <label for="ai-prompt">Prompt:</label>
+                    <textarea id="ai-prompt" class="ai-prompt-textarea" 
+                        placeholder="Describe your pixel art (e.g., 'medieval castle, 16-bit style', 'retro spaceship', 'fantasy sword')"
+                        rows="3">pixel art medieval castle, 16-bit retro game style</textarea>
+                </div>
+                
+                <div class="ai-settings-grid">
+                    <div class="input-group">
+                        <label for="ai-canvas-size">Target Canvas Size:</label>
+                        <select id="ai-canvas-size" class="ai-select">
+                            <option value="16">16x16</option>
+                            <option value="32" selected>32x32</option>
+                            <option value="48">48x48</option>
+                            <option value="64">64x64</option>
+                        </select>
+                    </div>
+                    
+                    <div class="input-group">
+                        <label for="ai-model">AI Model:</label>
+                        <select id="ai-model" class="ai-select">
+                            <option value="flux" selected>Flux</option>
+                            <option value="turbo">Turbo</option>
+                            <option value="flux-realism">Flux Realism</option>
+                            <option value="flux-cablyai">Flux CablyAI</option>
+                            <option value="flux-anime">Flux Anime</option>
+                            <option value="any-dark">Any Dark</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="ai-settings-grid">
+                    <div class="input-group">
+                        <label for="ai-color-palette">Color Palette:</label>
+                        <select id="ai-color-palette" class="ai-select">
+                            <option value="full" selected>Full Color</option>
+                            <option value="retro">Retro 16-Color</option>
+                            <option value="gameboy">Game Boy Green</option>
+                            <option value="nes">NES Palette</option>
+                            <option value="c64">Commodore 64</option>
+                            <option value="pico8">PICO-8</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="ai-status" id="ai-status"></div>
+                
+                <div class="ai-preview-container" id="ai-preview-container" style="display: none;">
+                    <div class="ai-preview-grid">
+                        <div class="ai-preview-section">
+                            <h4>AI Generated</h4>
+                            <canvas id="ai-original-canvas" class="ai-preview-canvas"></canvas>
+                        </div>
+                        <div class="ai-preview-section">
+                            <h4>Pixel Art Result</h4>
+                            <canvas id="ai-pixel-canvas" class="ai-preview-canvas pixelated"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chat Mode -->
+            <div id="chat-mode" style="display: none;">
+                <div class="ai-info-box chat">
+                    <h4><i class="fas fa-info-circle"></i> AI Chat Assistant</h4>
+                    <p>Get help with pixel art techniques, color theory, design ideas, and creative inspiration.</p>
+                    <p class="help-text">Ask about palettes, art styles, or any creative questions!</p>
+                </div>
+                
+                <div class="chat-container">
+                    <div id="chat-messages" class="chat-messages">
+                        <div class="chat-message assistant">
+                            <div class="chat-message-sender">AI Assistant</div>
+                            <div class="chat-message-content">Hello! I'm here to help with your pixel art projects. Ask me about color palettes, art techniques, creative themes, or any design questions you have!</div>
+                        </div>
+                    </div>
+                    
+                    <div class="chat-input-container">
+                        <input type="text" id="chat-input" class="chat-input" 
+                            placeholder="Ask me about pixel art, color theory, design ideas..." 
+                            onkeypress="if(event.key==='Enter') window.aiGenerator.sendChatMessage()">
+                        <button id="chat-send" class="chat-send-btn">
+                            <i class="fas fa-paper-plane"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="modal-footer">
+            <div id="generate-buttons" class="modal-footer-buttons">
+                <button class="btn btn-secondary" id="ai-cancel">Cancel</button>
+                <button class="btn btn-primary" id="ai-generate">
+                    <i class="fas fa-magic"></i> Generate
+                </button>
+                <button class="btn btn-success" id="ai-apply" style="display: none;">
+                    <i class="fas fa-plus"></i> Add to Canvas
+                </button>
+            </div>
+            
+            <div id="chat-buttons" class="modal-footer-buttons" style="display: none;">
+                <button class="btn btn-secondary" id="chat-close">Close</button>
+                <button class="btn btn-warning" id="chat-clear">
+                    <i class="fas fa-trash"></i> Clear Chat
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 
   <input type="file" id="file-input" accept=".png,.jpg,.jpeg,.svg" style="display: none" />
 

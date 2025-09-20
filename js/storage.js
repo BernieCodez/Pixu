@@ -204,47 +204,63 @@ class StorageManager {
   async saveRegularSprite(sprite) {
     await this.ensureDB();
 
-    // Ensure frames are initialized
     if (!sprite.frames || sprite.frames.length === 0) {
       sprite.initializeFrames();
     }
 
+    // ✅ Validate first frame has pixels
+    if (
+      !sprite.frames[0].layers[0].pixels ||
+      sprite.frames[0].layers[0].pixels.length === 0
+    ) {
+      sprite.frames[0].layers[0].pixels = this.createEmptyPixelArray(
+        sprite.width,
+        sprite.height
+      );
+    }
+
     // Get frames data directly from sprite
-    let framesData = sprite.frames.map(frame => ({
+    let framesData = sprite.frames.map((frame) => ({
       id: frame.id || Date.now() + Math.random(),
-      name: frame.name || 'Frame',
+      name: frame.name || "Frame",
       width: frame.width || sprite.width,
       height: frame.height || sprite.height,
       activeLayerIndex: frame.activeLayerIndex || 0,
-      layers: frame.layers.map(layer => ({
+      layers: frame.layers.map((layer) => ({
         id: layer.id || Date.now() + Math.random(),
         name: layer.name,
         visible: layer.visible !== false,
-        opacity: typeof layer.opacity === 'number' ? layer.opacity : 1,
-        pixels: Array.isArray(layer.pixels) ?
-          layer.pixels.map(row => row.map(pixel => [...pixel])) :
-          this.createEmptyPixelArray(frame.width || sprite.width, frame.height || sprite.height),
+        opacity: typeof layer.opacity === "number" ? layer.opacity : 1,
+        pixels: Array.isArray(layer.pixels)
+          ? layer.pixels.map((row) => row.map((pixel) => [...pixel]))
+          : this.createEmptyPixelArray(
+              frame.width || sprite.width,
+              frame.height || sprite.height
+            ),
         locked: layer.locked || false,
-        blendMode: layer.blendMode || 'normal'
-      }))
+        blendMode: layer.blendMode || "normal",
+      })),
     }));
 
     let compressed = false;
 
     // Optionally compress frame layers if large enough
     if (sprite.width * sprite.height > this.compressionThreshold) {
-      framesData = framesData.map(frame => ({
+      framesData = framesData.map((frame) => ({
         ...frame,
-        layers: frame.layers.map(layer => {
-          if (Array.isArray(layer.pixels) && layer.pixels.length === sprite.height) {
+        layers: frame.layers.map((layer) => {
+          if (
+            Array.isArray(layer.pixels) &&
+            layer.pixels.length === sprite.height
+          ) {
             return {
               ...layer,
               pixels: this.compressPixelData(layer.pixels),
-              compressed: true
+              compressed: true,
             };
           }
           return layer;
-        })
+        }),
       }));
       compressed = true;
     }
@@ -261,7 +277,7 @@ class StorageManager {
       size: sprite.width * sprite.height,
       compressed: compressed,
       chunked: false,
-      isAnimated: framesData.length > 1
+      isAnimated: framesData.length > 1,
     };
 
     const transaction = this.db.transaction([this.spritesStore], "readwrite");
@@ -344,36 +360,58 @@ class StorageManager {
     try {
       await this.ensureDB();
 
-      // Process in batches based on sprite sizes
-      const smallSprites = sprites.filter((s) => s.width * s.height <= 10000);
-      const mediumSprites = sprites.filter(
+      const allSprites = sprites || [];
+      if (allSprites.length === 0) return true;
+
+      // CRITICAL FIX: During import, only save the new sprite, don't clear existing ones
+      if (window.editor && window.editor._importingSprite) {
+        console.log(
+          "Import mode: saving only new sprites without clearing existing ones"
+        );
+
+        // Get the newest sprite (the imported one)
+        const newestSprite = allSprites[allSprites.length - 1];
+
+        // Save only the imported sprite
+        const success = await this.saveRegularSprite(newestSprite);
+
+        if (success) {
+          console.log("Successfully saved imported sprite:", newestSprite.name);
+        }
+
+        return success;
+      }
+
+      // Normal save operation - clear and save all sprites
+      console.log("Normal save mode: clearing and saving all sprites");
+      await this.clearSprites();
+
+      // Process sprites in batches (keep existing logic)
+      const smallSprites = allSprites.filter(
+        (s) => s.width * s.height <= 10000
+      );
+      const mediumSprites = allSprites.filter(
         (s) =>
           s.width * s.height > 10000 && s.width * s.height <= this.chunkSize
       );
-      const largeSprites = sprites.filter(
+      const largeSprites = allSprites.filter(
         (s) => s.width * s.height > this.chunkSize
       );
 
-      // Clear existing sprites first
-      await this.clearSprites();
-
-      // Save small sprites in larger batches
-      if (smallSprites.length > 0) {
-        await this.saveBatch(smallSprites, 10);
+      // Save in batches
+      for (const batch of [smallSprites, mediumSprites]) {
+        if (batch.length > 0) {
+          await this.saveBatch(batch, batch === smallSprites ? 10 : 3);
+        }
       }
 
-      // Save medium sprites in smaller batches
-      if (mediumSprites.length > 0) {
-        await this.saveBatch(mediumSprites, 3);
-      }
-
-      // Save large sprites individually with progress
+      // Save large sprites individually
       for (const sprite of largeSprites) {
         await this.saveLargeSprite(sprite);
-        // Allow other operations to process
         await new Promise((resolve) => setTimeout(resolve, 10));
       }
 
+      console.log(`Successfully saved ${allSprites.length} sprites`);
       return true;
     } catch (error) {
       console.error("Failed to save sprites:", error);
@@ -448,7 +486,10 @@ class StorageManager {
                 );
                 sprites.push(fallbackSprite);
               } catch (fallbackError) {
-                console.error("Failed to create fallback sprite:", fallbackError);
+                console.error(
+                  "Failed to create fallback sprite:",
+                  fallbackError
+                );
               }
             }
           }
@@ -466,93 +507,252 @@ class StorageManager {
       return [];
     }
   }
+  // In StorageManager class - replace the loadSpriteWithFrames method
   async loadSpriteWithFrames(spriteData) {
     let layersData = spriteData.layers;
     let frames = spriteData.frames;
 
-    // Handle backward compatibility and frame initialization
+    // CRITICAL FIX: Validate pixels/layers before creating Sprite
+    const ensureValidPixels = (pixels, w, h) => {
+      if (!Array.isArray(pixels) || pixels.length !== h) {
+        return this.createEmptyPixelArray(w, h);
+      }
+      return pixels.map((row, y) => {
+        if (!Array.isArray(row) || row.length !== w) {
+          return new Array(w).fill().map(() => [0, 0, 0, 0]);
+        }
+        return row.map((px) =>
+          Array.isArray(px) && px.length === 4 ? [...px] : [0, 0, 0, 0]
+        );
+      });
+    };
+
+    // If frames are missing or corrupted, rebuild from layers or pixels
     if (!Array.isArray(frames) || frames.length === 0) {
-      // No frames data - create from layers or pixels
       if (Array.isArray(layersData) && layersData.length > 0) {
-        // Create single frame from layers data
-        frames = [{
-          id: Date.now() + Math.random(),
-          name: 'Frame 1',
-          width: spriteData.width,
-          height: spriteData.height,
-          activeLayerIndex: 0,
-          layers: layersData
-        }];
-      } else if (spriteData.pixels) {
-        // Old format: single pixel array - create frame with single layer
-        frames = [{
-          id: Date.now() + Math.random(),
-          name: 'Frame 1',
-          width: spriteData.width,
-          height: spriteData.height,
-          activeLayerIndex: 0,
-          layers: [{
+        frames = [
+          {
             id: Date.now() + Math.random(),
-            name: "Layer 1",
-            visible: true,
-            opacity: 1,
-            pixels: spriteData.pixels,
-            locked: false,
-            blendMode: 'normal'
-          }]
-        }];
+            name: "Frame 1",
+            width: spriteData.width,
+            height: spriteData.height,
+            activeLayerIndex: 0,
+            layers: layersData.map((layer, i) => ({
+              id: layer.id || Date.now() + i,
+              name: layer.name || `Layer ${i + 1}`,
+              visible: layer.visible !== false,
+              opacity: typeof layer.opacity === "number" ? layer.opacity : 1,
+              pixels: ensureValidPixels(
+                layer.pixels,
+                spriteData.width,
+                spriteData.height
+              ),
+              locked: layer.locked || false,
+              blendMode: layer.blendMode || "normal",
+            })),
+          },
+        ];
+      } else if (Array.isArray(spriteData.pixels)) {
+        const validPixels = ensureValidPixels(
+          spriteData.pixels,
+          spriteData.width,
+          spriteData.height
+        );
+        frames = [
+          {
+            id: Date.now() + Math.random(),
+            name: "Frame 1",
+            width: spriteData.width,
+            height: spriteData.height,
+            activeLayerIndex: 0,
+            layers: [
+              {
+                id: Date.now() + 1,
+                name: "Layer 1",
+                visible: true,
+                opacity: 1,
+                pixels: validPixels,
+                locked: false,
+                blendMode: "normal",
+              },
+            ],
+          },
+        ];
       } else {
-        // No pixel data - create empty frame
-        frames = [{
-          id: Date.now() + Math.random(),
-          name: 'Frame 1',
-          width: spriteData.width,
-          height: spriteData.height,
-          activeLayerIndex: 0,
-          layers: [{
+        // fallback to empty frame
+        frames = [
+          {
             id: Date.now() + Math.random(),
-            name: "Layer 1",
-            visible: true,
-            opacity: 1,
-            pixels: this.createEmptyPixelArray(spriteData.width, spriteData.height),
-            locked: false,
-            blendMode: 'normal'
-          }]
-        }];
+            name: "Frame 1",
+            width: spriteData.width,
+            height: spriteData.height,
+            activeLayerIndex: 0,
+            layers: [
+              {
+                id: Date.now() + 1,
+                name: "Layer 1",
+                visible: true,
+                opacity: 1,
+                pixels: this.createEmptyPixelArray(
+                  spriteData.width,
+                  spriteData.height
+                ),
+                locked: false,
+                blendMode: "normal",
+              },
+            ],
+          },
+        ];
       }
     }
 
-    // Process frames - decompress if needed
+    // continue with sprite creation...
+
+    // CRITICAL FIX: Process frames - validate all pixel data and decompress if needed
     if (Array.isArray(frames)) {
-      frames = frames.map(frame => ({
-        ...frame,
-        layers: frame.layers.map(layer => {
-          let pixels = layer.pixels;
-          if (layer.compressed && Array.isArray(pixels)) {
-            pixels = this.decompressPixelData(pixels, frame.width, frame.height);
-          }
+      frames = frames.map((frame) => {
+        // Validate frame structure
+        if (!frame || !frame.layers || !Array.isArray(frame.layers)) {
+          console.warn("Invalid frame structure, creating default");
           return {
-            ...layer,
-            pixels
+            id: Date.now() + Math.random(),
+            name: "Frame 1",
+            width: spriteData.width,
+            height: spriteData.height,
+            activeLayerIndex: 0,
+            layers: [
+              {
+                id: Date.now() + Math.random(),
+                name: "Layer 1",
+                visible: true,
+                opacity: 1,
+                pixels: this.createEmptyPixelArray(
+                  spriteData.width,
+                  spriteData.height
+                ),
+                locked: false,
+                blendMode: "normal",
+              },
+            ],
           };
-        })
-      }));
+        }
+
+        return {
+          ...frame,
+          width: frame.width || spriteData.width,
+          height: frame.height || spriteData.height,
+          layers: frame.layers.map((layer) => {
+            let pixels = layer.pixels;
+
+            // Decompress if needed
+            if (layer.compressed && Array.isArray(pixels)) {
+              try {
+                pixels = this.decompressPixelData(
+                  pixels,
+                  frame.width || spriteData.width,
+                  frame.height || spriteData.height
+                );
+              } catch (error) {
+                console.error("Failed to decompress layer pixels:", error);
+                pixels = this.createEmptyPixelArray(
+                  spriteData.width,
+                  spriteData.height
+                );
+              }
+            }
+
+            // CRITICAL FIX: Always validate pixel data
+            pixels = this.validateAndFixPixelData(
+              pixels,
+              spriteData.width,
+              spriteData.height
+            );
+
+            return {
+              id: layer.id || Date.now() + Math.random(),
+              name: layer.name || "Layer",
+              visible: layer.visible !== false,
+              opacity: typeof layer.opacity === "number" ? layer.opacity : 1,
+              pixels: pixels,
+              locked: layer.locked || false,
+              blendMode: layer.blendMode || "normal",
+            };
+          }),
+        };
+      });
     }
 
-    // Create sprite with frames
+    // Create sprite with validated frames
     const sprite = new Sprite(
       spriteData.width,
       spriteData.height,
-      spriteData.name,
+      spriteData.name || "Unnamed Sprite",
       spriteData.id
     );
 
     // Set frames data
     sprite.frames = frames;
-    sprite.createdAt = spriteData.createdAt;
-    sprite.modifiedAt = spriteData.modifiedAt;
+    sprite.createdAt = spriteData.createdAt || new Date().toISOString();
+    sprite.modifiedAt = spriteData.modifiedAt || new Date().toISOString();
+
+    // CRITICAL FIX: Set backward compatibility pixel data from first frame
+    if (frames[0] && frames[0].layers && frames[0].layers[0]) {
+      sprite.pixels = frames[0].layers[0].pixels.map((row) =>
+        row.map((pixel) => [...pixel])
+      );
+    }
 
     return sprite;
+  }
+
+  // Add this new helper method to StorageManager
+  validateAndFixPixelData(pixels, expectedWidth, expectedHeight) {
+    // Check if pixels is valid array
+    if (!Array.isArray(pixels)) {
+      console.warn("Invalid pixel data: not an array, creating empty");
+      return this.createEmptyPixelArray(expectedWidth, expectedHeight);
+    }
+
+    // Check if pixels has correct height
+    if (pixels.length !== expectedHeight) {
+      console.warn(
+        `Invalid pixel height: expected ${expectedHeight}, got ${pixels.length}`
+      );
+      return this.createEmptyPixelArray(expectedWidth, expectedHeight);
+    }
+
+    // Validate each row
+    const validatedPixels = [];
+    for (let y = 0; y < expectedHeight; y++) {
+      if (!Array.isArray(pixels[y]) || pixels[y].length !== expectedWidth) {
+        console.warn(`Invalid pixel row ${y}: expected width ${expectedWidth}`);
+        // Create valid row
+        validatedPixels[y] = [];
+        for (let x = 0; x < expectedWidth; x++) {
+          validatedPixels[y][x] = [0, 0, 0, 0];
+        }
+      } else {
+        // Validate each pixel in the row
+        validatedPixels[y] = [];
+        for (let x = 0; x < expectedWidth; x++) {
+          const pixel = pixels[y][x];
+          if (Array.isArray(pixel) && pixel.length === 4) {
+            // Valid pixel - ensure values are in valid range
+            validatedPixels[y][x] = [
+              Math.max(0, Math.min(255, Math.round(pixel[0]) || 0)),
+              Math.max(0, Math.min(255, Math.round(pixel[1]) || 0)),
+              Math.max(0, Math.min(255, Math.round(pixel[2]) || 0)),
+              Math.max(0, Math.min(255, Math.round(pixel[3]) || 0)),
+            ];
+          } else {
+            // Invalid pixel
+            validatedPixels[y][x] = [0, 0, 0, 0];
+          }
+        }
+      }
+    }
+
+    return validatedPixels;
   }
   // Add this helper method to StorageManager
   createEmptyPixelArray(width, height) {

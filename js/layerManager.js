@@ -508,8 +508,8 @@ class LayerManager {
   // Optimized notifyChange:
   // Optimized notifyChange - prevent infinite loops and history during restore
   notifyChange() {
-    if (this.batchMode || this._restoring) {
-      if (!this._restoring) {
+    if (this.batchMode || this._restoring || this._preventSaveLoop) {
+      if (!this._restoring && !this._preventSaveLoop) {
         this.pendingUpdates = true;
       }
       return;
@@ -772,23 +772,38 @@ class LayerManager {
 
   // Notify change
   // Optimized notifyChange - prevent infinite loops
+  // Also need to modify the LayerManager notifyChange to handle import state
+  // In LayerManager class - update the notifyChange method
+  // In LayerManager class - replace the notifyChange method
   notifyChange() {
-    if (this.batchMode) {
-      this.pendingUpdates = true;
+    if (this.batchMode || this._restoring || this._preventSaveLoop) {
+      if (!this._restoring && !this._preventSaveLoop) {
+        this.pendingUpdates = true;
+      }
       return;
     }
 
     this.compositeDirty = true;
 
-    // CRITICAL FIX: Only save if we're not already in a save operation
+    // CRITICAL FIX: Don't save during sprite operations that could corrupt other sprites
+    const editor = window.editor;
     if (
       !this.saving &&
-      window.editor &&
-      typeof window.editor.saveLayersToSprite === "function"
+      editor &&
+      !editor._importingSprite &&
+      !editor._switchingSprites &&
+      !editor._savingLayers &&
+      !editor._loadingFrame &&
+      typeof editor.saveLayersToSprite === "function"
     ) {
       this.saving = true;
-      window.editor.saveLayersToSprite();
-      this.saving = false;
+      try {
+        editor.saveLayersToSprite();
+      } catch (error) {
+        console.error("Error in saveLayersToSprite:", error);
+      } finally {
+        this.saving = false;
+      }
     }
 
     if (this.onChange) {
@@ -857,40 +872,148 @@ class LayerManager {
 
   // Add to LayerManager class - load from sprite
   fromSprite(sprite) {
+    // CRITICAL FIX: Validate sprite before processing
+    if (!sprite || !sprite.width || !sprite.height) {
+      console.error("Invalid sprite data in fromSprite");
+      return;
+    }
+
     this.width = sprite.width;
     this.height = sprite.height;
 
-    // Get layers data from sprite
-    const layersData = sprite.getLayersData();
+    // CRITICAL FIX: Get layers data with proper validation
+    let layersData;
+    try {
+      layersData = sprite.getLayersData();
+    } catch (error) {
+      console.error("Failed to get layers data from sprite:", error);
+      // Create fallback layer
+      layersData = [
+        {
+          name: "Layer 1",
+          visible: true,
+          opacity: 1,
+          pixels: this.createEmptyPixelArray(),
+          useTypedArray: false,
+        },
+      ];
+    }
 
-    this.layers = layersData.map((layerData) => ({
-      id: Date.now() + Math.random(),
-      name: layerData.name,
-      visible: layerData.visible !== false,
-      opacity: typeof layerData.opacity === "number" ? layerData.opacity : 1,
-      pixels: layerData.useTypedArray
-        ? this.convertTypedArrayTo2D(layerData.pixels)
-        : layerData.pixels.map((row) => row.map((pixel) => [...pixel])),
-      locked: false,
-      blendMode: "normal",
-    }));
+    // CRITICAL FIX: Validate layers data
+    if (!Array.isArray(layersData) || layersData.length === 0) {
+      console.warn("No valid layers data, creating default layer");
+      layersData = [
+        {
+          name: "Layer 1",
+          visible: true,
+          opacity: 1,
+          pixels: this.createEmptyPixelArray(),
+          useTypedArray: false,
+        },
+      ];
+    }
 
+    // CRITICAL FIX: Process and validate each layer
+    this.layers = layersData.map((layerData, index) => {
+      let pixels;
+
+      // Handle different pixel data formats
+      if (layerData.useTypedArray && layerData.pixels) {
+        try {
+          pixels = this.convertTypedArrayTo2D(layerData.pixels);
+        } catch (error) {
+          console.error("Failed to convert TypedArray:", error);
+          pixels = this.createEmptyPixelArray();
+        }
+      } else if (Array.isArray(layerData.pixels)) {
+        // Validate 2D array structure
+        pixels = this.validatePixelArray(layerData.pixels);
+      } else {
+        console.warn(`Layer ${index} has invalid pixel data, creating empty`);
+        pixels = this.createEmptyPixelArray();
+      }
+
+      return {
+        id: Date.now() + Math.random() + index,
+        name: layerData.name || `Layer ${index + 1}`,
+        visible: layerData.visible !== false,
+        opacity: typeof layerData.opacity === "number" ? layerData.opacity : 1,
+        pixels: pixels,
+        locked: false,
+        blendMode: "normal",
+      };
+    });
+
+    // Ensure we have at least one layer
+    if (this.layers.length === 0) {
+      console.warn("No layers created, adding default layer");
+      this.layers.push({
+        id: Date.now() + Math.random(),
+        name: "Layer 1",
+        visible: true,
+        opacity: 1,
+        pixels: this.createEmptyPixelArray(),
+        locked: false,
+        blendMode: "normal",
+      });
+    }
+
+    // CRITICAL FIX: Validate active layer index
     this.activeLayerIndex = Math.min(
-      this.activeLayerIndex,
+      Math.max(0, this.activeLayerIndex || 0),
       this.layers.length - 1
     );
 
-    // CRITICAL FIX: Mark composite as dirty and trigger immediate render
+    // CRITICAL FIX: Mark composite as dirty and clear cache
     this.compositeDirty = true;
-    this.compositeCache = null; // Clear cache to force regeneration
+    this.compositeCache = null;
 
-    // Force immediate change notification without saving back to sprite (prevent loop)
+    // CRITICAL FIX: Force immediate change notification without saving back to sprite
+    this._preventSaveLoop = true;
     if (this.onChange) {
       this.onChange(this);
     }
+    this._preventSaveLoop = false;
 
-    // CRITICAL FIX: Don't save to history here - let the caller handle it
-    // This prevents saving empty state before sprite data is loaded
+    console.log(`LayerManager loaded ${this.layers.length} layers from sprite`);
+  }
+
+  // Add this helper method to LayerManager for pixel validation
+  validatePixelArray(pixels) {
+    if (!Array.isArray(pixels) || pixels.length !== this.height) {
+      console.warn("Invalid pixel array structure, creating empty");
+      return this.createEmptyPixelArray();
+    }
+
+    // Validate each row
+    const validatedPixels = [];
+    for (let y = 0; y < this.height; y++) {
+      if (!Array.isArray(pixels[y]) || pixels[y].length !== this.width) {
+        console.warn(`Invalid pixel row ${y}, filling with empty pixels`);
+        validatedPixels[y] = [];
+        for (let x = 0; x < this.width; x++) {
+          validatedPixels[y][x] = [0, 0, 0, 0];
+        }
+      } else {
+        validatedPixels[y] = [];
+        for (let x = 0; x < this.width; x++) {
+          const pixel = pixels[y][x];
+          if (Array.isArray(pixel) && pixel.length === 4) {
+            // Deep copy and validate pixel values
+            validatedPixels[y][x] = [
+              Math.max(0, Math.min(255, Math.round(pixel[0]) || 0)),
+              Math.max(0, Math.min(255, Math.round(pixel[1]) || 0)),
+              Math.max(0, Math.min(255, Math.round(pixel[2]) || 0)),
+              Math.max(0, Math.min(255, Math.round(pixel[3]) || 0)),
+            ];
+          } else {
+            validatedPixels[y][x] = [0, 0, 0, 0];
+          }
+        }
+      }
+    }
+
+    return validatedPixels;
   }
 
   // Helper method for TypedArray conversion
