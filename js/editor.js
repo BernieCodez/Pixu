@@ -1050,127 +1050,132 @@ class PixelEditor {
     reader.readAsText(file);
   }
   importImage(file) {
-  const img = new Image();
-  const canvas = document.createElement("canvas");
-  const ctx = canvas.getContext("2d");
-  const editor = this;
+    const img = new Image();
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    const editor = this;
 
-  this._importingSprite = true;
+    this._importingSprite = true;
 
-  img.onload = async () => {
-    canvas.width = img.width;
-    canvas.height = img.height;
-    ctx.drawImage(img, 0, 0);
+    img.onload = async () => {
+      canvas.width = img.width;
+      canvas.height = img.height;
+      ctx.drawImage(img, 0, 0);
 
-    // Check if image exceeds maximum size
-    if (img.width > 64 || img.height > 64) {
-      // Show downscale modal
+      // Check if image exceeds maximum size
+      if (img.width > 64 || img.height > 64) {
+        // Show downscale modal
+        const imageData = ctx.getImageData(0, 0, img.width, img.height);
+        editor.uiManager.showDownscaleModal(imageData, img.width, img.height);
+        editor._importingSprite = false;
+        return;
+      }
+
+      // Image is within limits, create sprite directly
       const imageData = ctx.getImageData(0, 0, img.width, img.height);
-      editor.uiManager.showDownscaleModal(imageData, img.width, img.height);
+
+      if (!imageData || imageData.width === 0 || imageData.height === 0) {
+        editor.uiManager.showNotification(
+          "Failed to process image data",
+          "error"
+        );
+        editor._importingSprite = false;
+        return;
+      }
+
+      try {
+        // CRITICAL FIX: Save current state before importing
+        await editor.saveSprites();
+
+        // Create sprite without triggering automatic save
+        const sprite = editor.createSpriteFromImageDataSafe(
+          imageData,
+          img.width,
+          img.height
+        );
+
+        // Save all sprites including the new one
+        await editor.saveSprites();
+
+        editor.uiManager.showNotification(
+          `Imported image: ${img.width}x${img.height}`,
+          "success"
+        );
+      } catch (error) {
+        console.error("Failed to import image:", error);
+        editor.uiManager.showNotification("Failed to import image", "error");
+      } finally {
+        editor._importingSprite = false;
+      }
+    };
+
+    img.onerror = () => {
       editor._importingSprite = false;
-      return;
-    }
+      editor.uiManager.showNotification("Failed to load image", "error");
+    };
 
-    // Image is within limits, create sprite directly
-    const imageData = ctx.getImageData(0, 0, img.width, img.height);
-
-    if (!imageData || imageData.width === 0 || imageData.height === 0) {
-      editor.uiManager.showNotification(
-        "Failed to process image data",
-        "error"
-      );
-      editor._importingSprite = false;
-      return;
-    }
-
-    try {
-      // CRITICAL FIX: Save current state before importing
-      await editor.saveSprites();
-      
-      // Create sprite without triggering automatic save
-      const sprite = editor.createSpriteFromImageDataSafe(
-        imageData,
-        img.width,
-        img.height
-      );
-
-      // Save all sprites including the new one
-      await editor.saveSprites();
-      
-      editor.uiManager.showNotification(
-        `Imported image: ${img.width}x${img.height}`,
-        "success"
-      );
-    } catch (error) {
-      console.error("Failed to import image:", error);
-      editor.uiManager.showNotification("Failed to import image", "error");
-    } finally {
-      editor._importingSprite = false;
-    }
-  };
-
-  img.onerror = () => {
-    editor._importingSprite = false;
-    editor.uiManager.showNotification("Failed to load image", "error");
-  };
-
-  img.src = URL.createObjectURL(file);
-}
-
-createSpriteFromImageDataSafe(imageData, width, height) {
-  // Create sprite directly without triggering save callbacks
-  const spriteName = `Imported Image ${this.sprites.length + 1}`;
-  const sprite = new Sprite(width, height, spriteName);
-
-  // Temporarily disable onChange to prevent auto-saves during setup
-  const originalOnChange = sprite.onChange;
-  sprite.onChange = null;
-
-  // Initialize pixel array from image data
-  const pixels = [];
-  for (let y = 0; y < height; y++) {
-    pixels[y] = [];
-    for (let x = 0; x < width; x++) {
-      const index = (y * width + x) * 4;
-      pixels[y][x] = [
-        imageData.data[index],
-        imageData.data[index + 1],
-        imageData.data[index + 2],
-        imageData.data[index + 3],
-      ];
-    }
+    img.src = URL.createObjectURL(file);
   }
 
-  // Initialize frames properly
-  sprite.initializeFrames();
-  sprite.frames[0].layers[0].pixels = pixels.map((row) =>
-    row.map((pixel) => [...pixel])
-  );
+  createSpriteFromImageDataSafe(imageData, width, height) {
+    // Create sprite directly without triggering save callbacks
+    const spriteName = `Imported Image ${this.sprites.length + 1}`;
+    const sprite = new Sprite(width, height, spriteName);
 
-  // Set backward compatibility data
-  sprite.layers = sprite.frames[0].layers.map((layer) => ({
-    ...layer,
-    pixels: layer.pixels.map((row) => row.map((pixel) => [...pixel])),
-  }));
-  sprite.pixels = sprite.layers[0].pixels;
-  sprite.useTypedArray = false;
+    // Temporarily disable onChange to prevent auto-saves during setup
+    const originalOnChange = sprite.onChange;
+    sprite.onChange = null;
 
-  // Add to sprites array
-  this.sprites.push(sprite);
-
-  // Set as current sprite
-  this.setCurrentSprite(sprite);
-
-  // Restore onChange callback
-  sprite.onChange = originalOnChange || ((s) => {
-    if (this.storageManager && typeof this.storageManager.saveSprite === "function") {
-      this.storageManager.saveSprite(s);
+    // Initialize pixel array from image data
+    const pixels = [];
+    for (let y = 0; y < height; y++) {
+      pixels[y] = [];
+      for (let x = 0; x < width; x++) {
+        const index = (y * width + x) * 4;
+        pixels[y][x] = [
+          imageData.data[index],
+          imageData.data[index + 1],
+          imageData.data[index + 2],
+          imageData.data[index + 3],
+        ];
+      }
     }
-  });
 
-  this.updateUI();
-  return sprite;
-}   
+    // Initialize frames properly
+    sprite.initializeFrames();
+    sprite.frames[0].layers[0].pixels = pixels.map((row) =>
+      row.map((pixel) => [...pixel])
+    );
+
+    // Set backward compatibility data
+    sprite.layers = sprite.frames[0].layers.map((layer) => ({
+      ...layer,
+      pixels: layer.pixels.map((row) => row.map((pixel) => [...pixel])),
+    }));
+    sprite.pixels = sprite.layers[0].pixels;
+    sprite.useTypedArray = false;
+
+    // Add to sprites array
+    this.sprites.push(sprite);
+
+    // Set as current sprite
+    this.setCurrentSprite(sprite);
+
+    // Restore onChange callback
+    sprite.onChange =
+      originalOnChange ||
+      ((s) => {
+        if (
+          this.storageManager &&
+          typeof this.storageManager.saveSprite === "function"
+        ) {
+          this.storageManager.saveSprite(s);
+        }
+      });
+
+    this.updateUI();
+    return sprite;
+  }
 
   // In PixelEditor class - replace the createSpriteFromImageData method
   // In PixelEditor class - completely replace createSpriteFromImageData method
@@ -1656,121 +1661,146 @@ createSpriteFromImageDataSafe(imageData, width, height) {
    * This function should be added to the PixelEditor class
    */
   async exportAsGIF(frameRate = 12, scale = 1, repeat = true) {
-    if (
-      !this.currentSprite ||
-      !this.currentSprite.frames ||
-      this.currentSprite.frames.length <= 1
+  if (
+    !this.currentSprite ||
+    !this.currentSprite.frames ||
+    this.currentSprite.frames.length <= 1
+  ) {
+    this.uiManager.showNotification("No animation to export", "warning");
+    return;
+  }
+
+  // Save current frame before export
+  if (this.animationManager) {
+    this.animationManager.saveLayerManagerToCurrentFrame();
+  }
+
+  const sprite = this.currentSprite;
+  const width = sprite.width * scale;
+  const height = sprite.height * scale;
+
+  console.log(
+    `Exporting GIF: ${sprite.frames.length} frames, ${width}x${height}`
+  );
+
+  try {
+    this.uiManager.showNotification("Generating GIF...", "info");
+
+    // Check if gif.js is available
+    if (typeof GIF === "undefined") {
+      throw new Error("GIF.js library not available");
+    }
+
+    // Initialize GIF encoder with transparency support
+    const gif = new GIF({
+      workers: 2,
+      quality: 10,
+      width: width,
+      height: height,
+      repeat: repeat ? 0 : -1,
+      delay: Math.round(1000 / frameRate),
+      workerScript: "js/lib/gif.worker.js",
+      transparent: 0x00FF00, // Use bright green as transparent color
+      background: null // No background color
+    });
+
+    // Process each frame
+    for (
+      let frameIndex = 0;
+      frameIndex < sprite.frames.length;
+      frameIndex++
     ) {
-      this.uiManager.showNotification("No animation to export", "warning");
-      return;
+      const frame = sprite.frames[frameIndex];
+      console.log(
+        `Processing frame ${frameIndex + 1}/${sprite.frames.length}`
+      );
+
+      // Create canvas for this frame
+      const frameCanvas = document.createElement("canvas");
+      frameCanvas.width = width;
+      frameCanvas.height = height;
+      const frameCtx = frameCanvas.getContext("2d");
+
+      // Disable image smoothing
+      frameCtx.imageSmoothingEnabled = false;
+      frameCtx.webkitImageSmoothingEnabled = false;
+      frameCtx.mozImageSmoothingEnabled = false;
+      frameCtx.msImageSmoothingEnabled = false;
+
+      // Fill with transparent color (bright green)
+      frameCtx.fillStyle = '#00FF00';
+      frameCtx.fillRect(0, 0, width, height);
+
+      // Render frame using proper layer compositing with transparency handling
+      this.renderFrameToCanvasWithTransparency(frame, frameCtx, scale);
+
+      // Add frame to GIF
+      gif.addFrame(frameCanvas);
     }
 
-    // Save current frame before export
-    if (this.animationManager) {
-      this.animationManager.saveLayerManagerToCurrentFrame();
-    }
+    // Render GIF
+    gif.on("finished", (blob) => {
+      console.log("GIF generation completed");
 
-    const sprite = this.currentSprite;
-    const width = sprite.width * scale;
-    const height = sprite.height * scale;
+      // Download the GIF
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${sprite.name || "animation"}.gif`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
 
-    console.log(
-      `Exporting GIF: ${sprite.frames.length} frames, ${width}x${height}`
+      this.uiManager.showNotification(
+        `Exported GIF with ${sprite.frames.length} frames`,
+        "success"
+      );
+    });
+
+    gif.on("progress", (progress) => {
+      console.log(`GIF progress: ${Math.round(progress * 100)}%`);
+    });
+
+    gif.render();
+  } catch (error) {
+    console.error("GIF export failed:", error);
+    this.uiManager.showNotification(
+      `GIF export failed: ${error.message}`,
+      "error"
     );
 
-    try {
-      this.uiManager.showNotification("Generating GIF...", "info");
-
-      // Check if gif.js is available
-      if (typeof GIF === "undefined") {
-        throw new Error("GIF.js library not available");
+    // Fallback to PNG frames
+    this.uiManager.showCustomConfirm(
+      "GIF export failed. Would you like to export individual PNG frames instead?",
+      () => {
+        this.exportFramesAsPNGs();
       }
+    );
+  }
+}
 
-      // Initialize GIF encoder without workers to avoid CORS issues
-      const gif = new GIF({
-        workers: 0, // Disable workers to avoid CORS
-        quality: 10,
-        width: width,
-        height: height,
-        repeat: repeat ? 0 : -1,
-        delay: Math.round(1000 / frameRate),
-      });
+/**
+ * Render a frame to canvas with transparency handling for GIF export
+ */
+renderFrameToCanvasWithTransparency(frame, ctx, scale = 1) {
+  const width = frame.width;
+  const height = frame.height;
 
-      // gif.setRepeat(repeat ? 0 : -1);
-      // gif.setDelay(Math.round(1000 / frameRate));
-
-      // Process each frame
-      for (
-        let frameIndex = 0;
-        frameIndex < sprite.frames.length;
-        frameIndex++
-      ) {
-        const frame = sprite.frames[frameIndex];
-        console.log(
-          `Processing frame ${frameIndex + 1}/${sprite.frames.length}`
-        );
-
-        // Create canvas for this frame
-        const frameCanvas = document.createElement("canvas");
-        frameCanvas.width = width;
-        frameCanvas.height = height;
-        const frameCtx = frameCanvas.getContext("2d");
-
-        // Disable image smoothing
-        frameCtx.imageSmoothingEnabled = false;
-        frameCtx.webkitImageSmoothingEnabled = false;
-        frameCtx.mozImageSmoothingEnabled = false;
-        frameCtx.msImageSmoothingEnabled = false;
-
-        // Render frame using proper layer compositing
-        this.renderFrameToCanvas(frame, frameCtx, scale);
-
-        // Add frame to GIF
-        gif.addFrame(frameCanvas);
+  // Render each pixel, preserving transparency
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const compositePixel = this.getCompositePixel(frame, x, y);
+      
+      // Only draw non-transparent pixels
+      if (compositePixel.a > 0) {
+        ctx.fillStyle = `rgba(${compositePixel.r}, ${compositePixel.g}, ${compositePixel.b}, 1)`;
+        ctx.fillRect(x * scale, y * scale, scale, scale);
       }
-
-      // Render GIF
-      gif.on("finished", (blob) => {
-        console.log("GIF generation completed");
-
-        // Download the GIF
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = `${sprite.name || "animation"}.gif`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-
-        this.uiManager.showNotification(
-          `Exported GIF with ${sprite.frames.length} frames`,
-          "success"
-        );
-      });
-
-      gif.on("progress", (progress) => {
-        console.log(`GIF progress: ${Math.round(progress * 100)}%`);
-      });
-
-      gif.render();
-    } catch (error) {
-      console.error("GIF export failed:", error);
-      this.uiManager.showNotification(
-        `GIF export failed: ${error.message}`,
-        "error"
-      );
-
-      // Fallback to PNG frames
-      // Fallback to PNG frames
-      this.uiManager.showCustomConfirm(
-        "GIF export failed. Would you like to export individual PNG frames instead?",
-        () => {
-          this.exportFramesAsPNGs();
-        }
-      );
+      // Transparent pixels will show the green background which becomes transparent in GIF
     }
   }
+}
 
   /**
    * Export using JSGif library if available
