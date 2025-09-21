@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Pixu</title>
+  <title>Pixalu</title>
 </head>
 
 <body>
@@ -14,7 +14,7 @@
       <div class="header-left">
         <h1 class="app-title">
           <i class="fas fa-palette"></i>
-          Pixu
+          Pixalu
         </h1>
       </div>
       <div class="toolbar-group">

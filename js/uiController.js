@@ -1460,6 +1460,14 @@ class UIController {
       });
     }
 
+    // Export spritesheet button
+    const exportSpritesheetBtn = document.getElementById("export-spritesheet");
+    if (exportSpritesheetBtn) {
+      exportSpritesheetBtn.addEventListener("click", () => {
+        this.performSpritesheetExport();
+      });
+    }
+
     const cancelExportBtn = document.getElementById("cancel-export");
     if (cancelExportBtn) {
       cancelExportBtn.addEventListener("click", () => {
@@ -3332,11 +3340,17 @@ class UIController {
     const dimensions = document.getElementById("export-dimensions");
     const animationInfo = document.getElementById("export-animation-info");
     const frameCount = document.getElementById("frame-count");
+    const spritesheetBtn = document.getElementById("export-spritesheet");
 
     if (!this.editor.currentSprite) return;
 
     const sprite = this.editor.currentSprite;
     const hasAnimation = sprite.frames && sprite.frames.length > 1;
+
+    // Show/hide spritesheet button based on animation
+    if (spritesheetBtn) {
+      spritesheetBtn.style.display = hasAnimation ? "inline-block" : "none";
+    }
 
     // Update scale/fps values
     if (scaleSlider && scaleValue) {
@@ -3438,7 +3452,60 @@ class UIController {
       this.showNotification(`Export failed: ${error.message}`, "error");
     }
   }
+  async performSpritesheetExport() {
+    const format = document.getElementById("export-format").value;
+    const scale = parseInt(
+      document.getElementById("export-scale").value || "1"
+    );
 
+    const sprite = this.editor.currentSprite;
+    if (!sprite || !sprite.frames || sprite.frames.length <= 1) {
+      this.showNotification(
+        "No animation frames to export as spritesheet",
+        "error"
+      );
+      return;
+    }
+
+    this.hideExportModal();
+
+    try {
+      switch (format) {
+        case "svg":
+          await this.editor.exportFramesAsSVGSpritesheet(scale);
+          this.showNotification(
+            `Exported SVG spritesheet with ${sprite.frames.length} frames`,
+            "success"
+          );
+          break;
+        case "png":
+          await this.editor.exportFramesAsPNGSpritesheet(scale);
+          this.showNotification(
+            `Exported PNG spritesheet with ${sprite.frames.length} frames`,
+            "success"
+          );
+          break;
+        case "gif":
+          await this.editor.exportFramesAsPNGSpritesheet(scale);
+          this.showNotification(
+            `Exported PNG spritesheet with ${sprite.frames.length} frames (GIF format uses PNG for spritesheets)`,
+            "info"
+          );
+          break;
+        default:
+          this.showNotification(
+            "Unknown export format for spritesheet",
+            "error"
+          );
+      }
+    } catch (error) {
+      console.error("Spritesheet export failed:", error);
+      this.showNotification(
+        `Spritesheet export failed: ${error.message}`,
+        "error"
+      );
+    }
+  }
   async performQuickExport() {
     const format = document.getElementById("export-format").value;
     const sprite = this.editor.currentSprite;

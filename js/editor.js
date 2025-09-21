@@ -1661,146 +1661,146 @@ class PixelEditor {
    * This function should be added to the PixelEditor class
    */
   async exportAsGIF(frameRate = 12, scale = 1, repeat = true) {
-  if (
-    !this.currentSprite ||
-    !this.currentSprite.frames ||
-    this.currentSprite.frames.length <= 1
-  ) {
-    this.uiManager.showNotification("No animation to export", "warning");
-    return;
-  }
-
-  // Save current frame before export
-  if (this.animationManager) {
-    this.animationManager.saveLayerManagerToCurrentFrame();
-  }
-
-  const sprite = this.currentSprite;
-  const width = sprite.width * scale;
-  const height = sprite.height * scale;
-
-  console.log(
-    `Exporting GIF: ${sprite.frames.length} frames, ${width}x${height}`
-  );
-
-  try {
-    this.uiManager.showNotification("Generating GIF...", "info");
-
-    // Check if gif.js is available
-    if (typeof GIF === "undefined") {
-      throw new Error("GIF.js library not available");
-    }
-
-    // Initialize GIF encoder with transparency support
-    const gif = new GIF({
-      workers: 2,
-      quality: 10,
-      width: width,
-      height: height,
-      repeat: repeat ? 0 : -1,
-      delay: Math.round(1000 / frameRate),
-      workerScript: "js/lib/gif.worker.js",
-      transparent: 0x00FF00, // Use bright green as transparent color
-      background: null // No background color
-    });
-
-    // Process each frame
-    for (
-      let frameIndex = 0;
-      frameIndex < sprite.frames.length;
-      frameIndex++
+    if (
+      !this.currentSprite ||
+      !this.currentSprite.frames ||
+      this.currentSprite.frames.length <= 1
     ) {
-      const frame = sprite.frames[frameIndex];
-      console.log(
-        `Processing frame ${frameIndex + 1}/${sprite.frames.length}`
-      );
-
-      // Create canvas for this frame
-      const frameCanvas = document.createElement("canvas");
-      frameCanvas.width = width;
-      frameCanvas.height = height;
-      const frameCtx = frameCanvas.getContext("2d");
-
-      // Disable image smoothing
-      frameCtx.imageSmoothingEnabled = false;
-      frameCtx.webkitImageSmoothingEnabled = false;
-      frameCtx.mozImageSmoothingEnabled = false;
-      frameCtx.msImageSmoothingEnabled = false;
-
-      // Fill with transparent color (bright green)
-      frameCtx.fillStyle = '#00FF00';
-      frameCtx.fillRect(0, 0, width, height);
-
-      // Render frame using proper layer compositing with transparency handling
-      this.renderFrameToCanvasWithTransparency(frame, frameCtx, scale);
-
-      // Add frame to GIF
-      gif.addFrame(frameCanvas);
+      this.uiManager.showNotification("No animation to export", "warning");
+      return;
     }
 
-    // Render GIF
-    gif.on("finished", (blob) => {
-      console.log("GIF generation completed");
+    // Save current frame before export
+    if (this.animationManager) {
+      this.animationManager.saveLayerManagerToCurrentFrame();
+    }
 
-      // Download the GIF
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `${sprite.name || "animation"}.gif`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+    const sprite = this.currentSprite;
+    const width = sprite.width * scale;
+    const height = sprite.height * scale;
 
+    console.log(
+      `Exporting GIF: ${sprite.frames.length} frames, ${width}x${height}`
+    );
+
+    try {
+      this.uiManager.showNotification("Generating GIF...", "info");
+
+      // Check if gif.js is available
+      if (typeof GIF === "undefined") {
+        throw new Error("GIF.js library not available");
+      }
+
+      // Initialize GIF encoder with transparency support
+      const gif = new GIF({
+        workers: 2,
+        quality: 10,
+        width: width,
+        height: height,
+        repeat: repeat ? 0 : -1,
+        delay: Math.round(1000 / frameRate),
+        workerScript: "js/lib/gif.worker.js",
+        transparent: 0xff00ff, // Use magenta as transparent color (unlikely to be used in pixel art)
+        background: null,
+      });
+
+      // Process each frame
+      for (
+        let frameIndex = 0;
+        frameIndex < sprite.frames.length;
+        frameIndex++
+      ) {
+        const frame = sprite.frames[frameIndex];
+        console.log(
+          `Processing frame ${frameIndex + 1}/${sprite.frames.length}`
+        );
+
+        // Create canvas for this frame
+        const frameCanvas = document.createElement("canvas");
+        frameCanvas.width = width;
+        frameCanvas.height = height;
+        const frameCtx = frameCanvas.getContext("2d");
+
+        // Disable image smoothing
+        frameCtx.imageSmoothingEnabled = false;
+        frameCtx.webkitImageSmoothingEnabled = false;
+        frameCtx.mozImageSmoothingEnabled = false;
+        frameCtx.msImageSmoothingEnabled = false;
+
+        // Fill with magenta as transparent background
+        frameCtx.fillStyle = "#FF00FF"; // Magenta - will become transparent in GIF
+        frameCtx.fillRect(0, 0, width, height);
+
+        // Render frame using proper layer compositing
+        this.renderFrameToCanvas(frame, frameCtx, scale);
+
+        // Add frame to GIF
+        gif.addFrame(frameCanvas);
+      }
+
+      // Render GIF
+      gif.on("finished", (blob) => {
+        console.log("GIF generation completed");
+
+        // Download the GIF
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `${sprite.name || "animation"}.gif`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+
+        this.uiManager.showNotification(
+          `Exported GIF with ${sprite.frames.length} frames`,
+          "success"
+        );
+      });
+
+      gif.on("progress", (progress) => {
+        console.log(`GIF progress: ${Math.round(progress * 100)}%`);
+      });
+
+      gif.render();
+    } catch (error) {
+      console.error("GIF export failed:", error);
       this.uiManager.showNotification(
-        `Exported GIF with ${sprite.frames.length} frames`,
-        "success"
+        `GIF export failed: ${error.message}`,
+        "error"
       );
-    });
 
-    gif.on("progress", (progress) => {
-      console.log(`GIF progress: ${Math.round(progress * 100)}%`);
-    });
-
-    gif.render();
-  } catch (error) {
-    console.error("GIF export failed:", error);
-    this.uiManager.showNotification(
-      `GIF export failed: ${error.message}`,
-      "error"
-    );
-
-    // Fallback to PNG frames
-    this.uiManager.showCustomConfirm(
-      "GIF export failed. Would you like to export individual PNG frames instead?",
-      () => {
-        this.exportFramesAsPNGs();
-      }
-    );
-  }
-}
-
-/**
- * Render a frame to canvas with transparency handling for GIF export
- */
-renderFrameToCanvasWithTransparency(frame, ctx, scale = 1) {
-  const width = frame.width;
-  const height = frame.height;
-
-  // Render each pixel, preserving transparency
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const compositePixel = this.getCompositePixel(frame, x, y);
-      
-      // Only draw non-transparent pixels
-      if (compositePixel.a > 0) {
-        ctx.fillStyle = `rgba(${compositePixel.r}, ${compositePixel.g}, ${compositePixel.b}, 1)`;
-        ctx.fillRect(x * scale, y * scale, scale, scale);
-      }
-      // Transparent pixels will show the green background which becomes transparent in GIF
+      // Fallback to PNG frames
+      this.uiManager.showCustomConfirm(
+        "GIF export failed. Would you like to export individual PNG frames instead?",
+        () => {
+          this.exportFramesAsPNGs();
+        }
+      );
     }
   }
-}
+
+  /**
+   * Render a frame to canvas with transparency handling for GIF export
+   */
+  renderFrameToCanvasWithTransparency(frame, ctx, scale = 1) {
+    const width = frame.width;
+    const height = frame.height;
+
+    // Render each pixel, preserving transparency
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const compositePixel = this.getCompositePixel(frame, x, y);
+
+        // Only draw non-transparent pixels
+        if (compositePixel.a > 0) {
+          ctx.fillStyle = `rgba(${compositePixel.r}, ${compositePixel.g}, ${compositePixel.b}, 1)`;
+          ctx.fillRect(x * scale, y * scale, scale, scale);
+        }
+        // Transparent pixels will show the green background which becomes transparent in GIF
+      }
+    }
+  }
 
   /**
    * Export using JSGif library if available
@@ -1997,31 +1997,31 @@ renderFrameToCanvasWithTransparency(frame, ctx, scale = 1) {
   /**
    * Helper method to render a frame to a canvas context (kept for compatibility)
    */
-  renderFrameToCanvas(frame, ctx) {
+
+  /**
+   * Render a frame to canvas with proper transparency handling
+   */
+  renderFrameToCanvas(frame, ctx, scale = 1) {
     const width = frame.width;
     const height = frame.height;
 
-    // Clear canvas
-    ctx.clearRect(0, 0, width, height);
+    // Canvas starts transparent by default - no need to clear or fill
 
-    // Render each visible layer
-    frame.layers.forEach((layer) => {
-      if (!layer.visible || !layer.pixels) return;
+    // Render each pixel, only drawing non-transparent ones
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const compositePixel = this.getCompositePixel(frame, x, y);
 
-      for (let y = 0; y < height; y++) {
-        for (let x = 0; x < width; x++) {
-          if (!layer.pixels[y] || !layer.pixels[y][x]) continue;
-
-          const [r, g, b, a] = layer.pixels[y][x];
-          if (a > 0) {
-            const opacity =
-              (a / 255) * (layer.opacity !== undefined ? layer.opacity : 1);
-            ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${opacity})`;
-            ctx.fillRect(x, y, 1, 1);
-          }
+        // Only draw pixels that have opacity
+        if (compositePixel.a > 0) {
+          ctx.fillStyle = `rgba(${compositePixel.r}, ${compositePixel.g}, ${
+            compositePixel.b
+          }, ${compositePixel.a / 255})`;
+          ctx.fillRect(x * scale, y * scale, scale, scale);
         }
+        // Transparent pixels (a === 0) are left as canvas default (transparent)
       }
-    });
+    }
   }
 
   /**
@@ -2134,7 +2134,165 @@ renderFrameToCanvasWithTransparency(frame, ctx, scale = 1) {
       URL.revokeObjectURL(url);
     }, "image/png");
   }
+  /**
+   * Export animation frames as PNG spritesheet
+   */
+  async exportFramesAsPNGSpritesheet(scale = 1) {
+    if (
+      !this.currentSprite ||
+      !this.currentSprite.frames ||
+      this.currentSprite.frames.length <= 1
+    ) {
+      this.uiManager.showNotification("No animation frames to export", "error");
+      return;
+    }
 
+    // Save current frame state before export
+    if (this.animationManager) {
+      this.animationManager.saveLayerManagerToCurrentFrame();
+    }
+
+    const sprite = this.currentSprite;
+    const frameCount = sprite.frames.length;
+    const columns = Math.ceil(Math.sqrt(frameCount)); // Square-ish layout
+    const rows = Math.ceil(frameCount / columns);
+
+    const scaledFrameWidth = sprite.width * scale;
+    const scaledFrameHeight = sprite.height * scale;
+    const totalWidth = scaledFrameWidth * columns;
+    const totalHeight = scaledFrameHeight * rows;
+
+    // Create spritesheet canvas
+    const canvas = document.createElement("canvas");
+    canvas.width = totalWidth;
+    canvas.height = totalHeight;
+    const ctx = canvas.getContext("2d");
+
+    // Disable image smoothing for pixel art
+    ctx.imageSmoothingEnabled = false;
+    ctx.webkitImageSmoothingEnabled = false;
+    ctx.mozImageSmoothingEnabled = false;
+    ctx.msImageSmoothingEnabled = false;
+
+    // Render each frame
+    for (let i = 0; i < frameCount; i++) {
+      const frame = sprite.frames[i];
+      const col = i % columns;
+      const row = Math.floor(i / columns);
+
+      const x = col * scaledFrameWidth;
+      const y = row * scaledFrameHeight;
+
+      // Render frame to spritesheet
+      this.renderFrameToSpritesheet(frame, ctx, x, y, scale);
+    }
+
+    // Convert to PNG and download
+    canvas.toBlob((blob) => {
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${sprite.name || "animation"}_spritesheet_${scale}x.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    }, "image/png");
+  }
+
+  /**
+   * Export animation frames as SVG spritesheet
+   */
+  async exportFramesAsSVGSpritesheet(scale = 1) {
+    if (
+      !this.currentSprite ||
+      !this.currentSprite.frames ||
+      this.currentSprite.frames.length <= 1
+    ) {
+      this.uiManager.showNotification("No animation frames to export", "error");
+      return;
+    }
+
+    // Save current frame state before export
+    if (this.animationManager) {
+      this.animationManager.saveLayerManagerToCurrentFrame();
+    }
+
+    const sprite = this.currentSprite;
+    const frameCount = sprite.frames.length;
+    const columns = Math.ceil(Math.sqrt(frameCount));
+    const rows = Math.ceil(frameCount / columns);
+
+    const scaledFrameWidth = sprite.width * scale;
+    const scaledFrameHeight = sprite.height * scale;
+    const totalWidth = scaledFrameWidth * columns;
+    const totalHeight = scaledFrameHeight * rows;
+
+    // Create SVG content
+    let svgContent = `<svg width="${totalWidth}" height="${totalHeight}" xmlns="http://www.w3.org/2000/svg" style="image-rendering: pixelated;">`;
+
+    // Render each frame
+    for (let i = 0; i < frameCount; i++) {
+      const frame = sprite.frames[i];
+      const col = i % columns;
+      const row = Math.floor(i / columns);
+
+      const offsetX = col * scaledFrameWidth;
+      const offsetY = row * scaledFrameHeight;
+
+      // Create group for this frame
+      svgContent += `<g transform="translate(${offsetX},${offsetY})">`;
+
+      // Render frame pixels
+      for (let y = 0; y < sprite.height; y++) {
+        for (let x = 0; x < sprite.width; x++) {
+          const compositePixel = this.getCompositePixel(frame, x, y);
+
+          if (compositePixel.a > 0) {
+            const opacity = compositePixel.a / 255;
+            svgContent += `<rect x="${x * scale}" y="${
+              y * scale
+            }" width="${scale}" height="${scale}" fill="rgb(${
+              compositePixel.r
+            },${compositePixel.g},${compositePixel.b})" opacity="${opacity}"/>`;
+          }
+        }
+      }
+
+      svgContent += "</g>";
+    }
+
+    svgContent += "</svg>";
+
+    // Create and download file
+    const blob = new Blob([svgContent], { type: "image/svg+xml" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${sprite.name || "animation"}_spritesheet_${scale}x.svg`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
+
+  /**
+   * Helper method to render a frame to spritesheet canvas
+   */
+  renderFrameToSpritesheet(frame, ctx, x, y, scale) {
+    for (let sy = 0; sy < frame.height; sy++) {
+      for (let sx = 0; sx < frame.width; sx++) {
+        const compositePixel = this.getCompositePixel(frame, sx, sy);
+
+        if (compositePixel.a > 0) {
+          ctx.fillStyle = `rgba(${compositePixel.r}, ${compositePixel.g}, ${
+            compositePixel.b
+          }, ${compositePixel.a / 255})`;
+          ctx.fillRect(x + sx * scale, y + sy * scale, scale, scale);
+        }
+      }
+    }
+  }
   /**
    * Export all sprites as JSON
    */
