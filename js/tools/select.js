@@ -710,6 +710,161 @@ class SelectTool {
     return false;
   }
 
+  // Strip selection to animation frames
+  stripToAnimation() {
+    if (
+      !this.selection ||
+      !this.editor.currentSprite ||
+      !this.editor.layerManager
+    ) {
+      this.editor.uiManager?.showNotification(
+        "No selection available",
+        "warning"
+      );
+      return false;
+    }
+
+    // Use selection dimensions as frame size
+    const frameWidth = this.selection.right - this.selection.left + 1;
+    const frameHeight = this.selection.bottom - this.selection.top + 1;
+
+    // Use entire sprite dimensions for calculation
+    const spriteWidth = this.editor.currentSprite.width;
+    const spriteHeight = this.editor.currentSprite.height;
+
+    // Calculate how many frames we can extract from the entire sprite
+    const framesX = Math.floor(spriteWidth / frameWidth);
+    const framesY = Math.floor(spriteHeight / frameHeight);
+    const totalFrames = framesX * framesY;
+
+    if (totalFrames <= 1) {
+      this.editor.uiManager?.showNotification(
+        "Cannot create multiple frames with this frame size",
+        "error"
+      );
+      return false;
+    }
+
+    // Use UI manager's custom confirm
+    this.editor.uiManager.showCustomConfirm(
+      `This will create ${totalFrames} frames (${framesX}×${framesY}) using ${frameWidth}×${frameHeight} frame size. Continue?`,
+      () => {
+        this.performStripToAnimation(
+          frameWidth,
+          frameHeight,
+          framesX,
+          framesY,
+          totalFrames
+        );
+      }
+    );
+
+    return true;
+  }
+
+  // Separated logic for the actual stripping process
+  performStripToAnimation(
+    frameWidth,
+    frameHeight,
+    framesX,
+    framesY,
+    totalFrames
+  ) {
+    // Save current frame before starting
+    if (this.editor.animationManager) {
+      this.editor.animationManager.saveLayerManagerToCurrentFrame();
+    }
+
+    // CRITICAL: Get the sprite data BEFORE any resizing
+    const originalSpriteData = [];
+    for (let y = 0; y < this.editor.currentSprite.height; y++) {
+      originalSpriteData[y] = [];
+      for (let x = 0; x < this.editor.currentSprite.width; x++) {
+        originalSpriteData[y][x] = this.editor.layerManager.getCompositePixel(
+          x,
+          y
+        );
+      }
+    }
+
+    // Now resize sprite to frame size
+    this.editor.resizeCanvas(frameWidth, frameHeight);
+
+    // Clear existing frames (keep first one but clear its content)
+    const sprite = this.editor.currentSprite;
+    sprite.frames = [sprite.frames[0]];
+    this.editor.animationManager.currentFrameIndex = 0;
+
+    // Extract frames from the original sprite data
+    let frameIndex = 0;
+    for (let row = 0; row < framesY; row++) {
+      for (let col = 0; col < framesX; col++) {
+        // Create new frame if not the first one
+        if (frameIndex > 0) {
+          this.editor.animationManager.addFrame();
+          this.editor.animationManager.setCurrentFrame(frameIndex);
+        }
+
+        // Clear current frame
+        this.editor.layerManager.clearLayer();
+
+        // Copy pixels for this frame from original data
+        const startX = col * frameWidth;
+        const startY = row * frameHeight;
+
+        this.editor.layerManager.setBatchMode(true);
+
+        for (let y = 0; y < frameHeight; y++) {
+          for (let x = 0; x < frameWidth; x++) {
+            const sourceX = startX + x;
+            const sourceY = startY + y;
+
+            // Make sure we're within bounds of original sprite
+            if (
+              sourceY < originalSpriteData.length &&
+              sourceX < originalSpriteData[sourceY].length
+            ) {
+              const pixel = originalSpriteData[sourceY][sourceX];
+              if (pixel[3] > 0) {
+                // Only copy non-transparent pixels
+                this.editor.layerManager.setPixel(x, y, pixel);
+              }
+            }
+          }
+        }
+
+        this.editor.layerManager.setBatchMode(false);
+
+        // Save frame to storage
+        if (this.editor.animationManager) {
+          this.editor.animationManager.saveLayerManagerToCurrentFrame();
+        }
+
+        frameIndex++;
+      }
+    }
+
+    // Mark sprite as animated
+    sprite.isAnimated = true;
+
+    // Go back to first frame
+    this.editor.animationManager.setCurrentFrame(0);
+
+    // Clear selection
+    this.clearSelection();
+
+    // Update UI
+    this.editor.updateUI();
+
+    // Save sprite
+    this.editor.saveSprites();
+
+    this.editor.uiManager?.showNotification(
+      `Created ${totalFrames} animation frames (${frameWidth}×${frameHeight} each)`,
+      "success"
+    );
+  }
+
   // Clear current selection
   clearSelection() {
     this.selection = null;
@@ -750,6 +905,7 @@ class SelectTool {
 
   // Get tool settings UI elements
   // Modified getSettingsHTML to include counter-clockwise rotation
+  // Modified getSettingsHTML to include strip to animation
   getSettingsHTML() {
     const hasSelection = this.hasSelection();
     const hasClipboard = this.hasClipboard();
@@ -772,7 +928,7 @@ class SelectTool {
                 <input type="checkbox" id="rigid-scaling-cb" ${
                   this.rigidScaling ? "checked" : ""
                 }>
-                Rigid Scaling
+                Rigid
             </label>
         </div>
         
@@ -832,6 +988,11 @@ class SelectTool {
               !hasSelection ? "disabled" : ""
             }>
                 <i class="fas fa-crop-simple"></i>
+            </button>
+            <button class="btn btn-secondary btn-sm" id="strip-to-animation-btn" ${
+              !hasSelection ? "disabled" : ""
+            }>
+                <i class="fas fa-film"></i>
             </button>
         </div>
     `;
@@ -928,6 +1089,17 @@ class SelectTool {
     if (flipVBtn) {
       flipVBtn.addEventListener("click", () => {
         this.flipVertical();
+      });
+    }
+
+    // Add this after the other button event listeners (around line 670):
+
+    const stripToAnimationBtn = document.getElementById(
+      "strip-to-animation-btn"
+    );
+    if (stripToAnimationBtn) {
+      stripToAnimationBtn.addEventListener("click", () => {
+        this.stripToAnimation();
       });
     }
 
