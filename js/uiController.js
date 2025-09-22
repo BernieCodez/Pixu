@@ -169,6 +169,14 @@ class UIController {
         this.duplicateCurrentLayer();
       });
     }
+    
+        // In the setupLayerEventListeners method, add after the duplicate layer button setup:
+        const mergeLayerBtn = document.getElementById("merge-layer-btn");
+        if (mergeLayerBtn) {
+          mergeLayerBtn.addEventListener("click", () => {
+            this.mergeLayerDown();
+          });
+        }
   }
 
   addNewLayer() {
@@ -359,6 +367,80 @@ class UIController {
     `;
     }
   }
+// Add this method to UIController:
+mergeAllVisible() {
+  if (!this.editor.layerManager) {
+    this.showNotification("Layer system not available", "error");
+    return;
+  }
+
+  const visibleLayers = this.editor.layerManager.layers.filter(layer => layer.visible);
+  
+  if (visibleLayers.length < 2) {
+    this.showNotification("Need at least 2 visible layers to merge", "warning");
+    return;
+  }
+
+  this.showCustomConfirm(
+    `Merge all ${visibleLayers.length} visible layers? This cannot be undone.`,
+    () => {
+      try {
+        this.editor.layerManager.mergeAllVisible();
+        this.updateLayersList();
+        this.showNotification("Merged all visible layers", "success");
+        if (this.editor.canvasManager) {
+          this.editor.canvasManager.render();
+        }
+      } catch (error) {
+        console.error("Failed to merge all visible layers:", error);
+        this.showNotification("Failed to merge layers", "error");
+      }
+    }
+  );
+}
+  // Add this new method to UIController class:
+  mergeLayerDown() {
+    if (this.editor.layerManager) {
+      const activeIndex = this.editor.layerManager.activeLayerIndex;
+
+      if (activeIndex <= 0) {
+        this.showNotification("Cannot merge bottom layer", "warning");
+        return;
+      }
+
+      const activeLayer = this.editor.layerManager.getActiveLayer();
+      const targetLayer = this.editor.layerManager.getLayer(activeIndex - 1);
+
+      if (targetLayer.locked) {
+        this.showNotification("Cannot merge into locked layer", "error");
+        return;
+      }
+
+      try {
+        this.showCustomConfirm(
+          `Merge "${activeLayer.name}" into "${targetLayer.name}"? This cannot be undone.`,
+          () => {
+            const success = this.editor.layerManager.mergeDown(activeIndex);
+            if (success) {
+              this.updateLayersList();
+              this.showNotification(`Merged layers successfully`, "success");
+              // Force canvas render
+              if (this.editor.canvasManager) {
+                this.editor.canvasManager.render();
+              }
+            } else {
+              this.showNotification("Failed to merge layers", "error");
+            }
+          }
+        );
+      } catch (error) {
+        console.error("Failed to merge layer:", error);
+        this.showNotification("Failed to merge layer", "error");
+      }
+    } else {
+      this.showNotification("Layer system not available", "error");
+    }
+  }
 
   // Add this method to UIController class to force layer UI update
   forceLayerUIUpdate() {
@@ -451,6 +533,34 @@ class UIController {
         },
         danger: true,
         disabled: this.editor.layerManager.layers.length <= 1,
+      },
+      // Update the layer context menu in showLayerContextMenu method by adding this item after "Duplicate Layer":
+      {
+        label: "Merge Down",
+        icon: "fas fa-compress-arrows-alt",
+        action: () => {
+          if (index <= 0) {
+            this.showNotification("Cannot merge bottom layer", "warning");
+          } else {
+            const targetLayer = this.editor.layerManager.getLayer(index - 1);
+            this.showCustomConfirm(
+              `Merge "${layer.name}" into "${targetLayer.name}"?`,
+              () => {
+                const success = this.editor.layerManager.mergeDown(index);
+                if (success) {
+                  this.updateLayersList();
+                  this.showNotification(
+                    "Merged layers successfully",
+                    "success"
+                  );
+                }
+              }
+            );
+          }
+          this.hideContextMenu();
+        },
+        disabled:
+          index <= 0 || this.editor.layerManager.getLayer(index - 1)?.locked,
       },
     ];
 

@@ -771,6 +771,7 @@
   overflow-x: auto;
   flex: 1;
   padding: 8px 4px;
+  padding-right: 75px !important;
   min-height: 80px;
   scroll-behavior: smooth;
   position: relative;

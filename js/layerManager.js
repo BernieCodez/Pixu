@@ -638,6 +638,7 @@ class LayerManager {
   }
 
   // Merge layer down
+  // Replace the existing mergeDown method with this improved version:
   mergeDown(index) {
     if (index <= 0 || index >= this.layers.length) {
       return false; // Can't merge bottom layer or invalid index
@@ -650,34 +651,54 @@ class LayerManager {
       return false;
     }
 
-    // Merge pixels
-    for (let y = 0; y < this.height; y++) {
-      for (let x = 0; x < this.width; x++) {
-        const upperPixel = upperLayer.pixels[y][x];
-        const lowerPixel = lowerLayer.pixels[y][x];
+    // Store the name for notification
+    const upperLayerName = upperLayer.name;
+    const lowerLayerName = lowerLayer.name;
 
-        if (upperPixel[3] > 0) {
-          // Upper pixel has alpha
+    // Start batch operation to prevent multiple history saves
+    this.startBatchOperation();
+
+    try {
+      // Merge pixels with proper alpha blending
+      for (let y = 0; y < this.height; y++) {
+        for (let x = 0; x < this.width; x++) {
+          const upperPixel = upperLayer.pixels[y][x];
+          const lowerPixel = lowerLayer.pixels[y][x];
+
+          // Skip transparent upper pixels
+          if (upperPixel[3] === 0) {
+            continue;
+          }
+
+          // If upper pixel is fully opaque, just copy it
+          if (upperPixel[3] === 255 && upperLayer.opacity === 1) {
+            lowerLayer.pixels[y][x] = [...upperPixel];
+            continue;
+          }
+
+          // Alpha blend the pixels
           const upperAlpha = (upperPixel[3] / 255) * upperLayer.opacity;
           const lowerAlpha = lowerPixel[3] / 255;
 
           const combinedAlpha = upperAlpha + lowerAlpha * (1 - upperAlpha);
 
           if (combinedAlpha > 0) {
+            const invUpperAlpha = 1 - upperAlpha;
+
             lowerLayer.pixels[y][x] = [
               Math.round(
                 (upperPixel[0] * upperAlpha +
-                  lowerPixel[0] * lowerAlpha * (1 - upperAlpha)) /
+                  lowerPixel[0] * lowerAlpha * invUpperAlpha) /
                   combinedAlpha
               ),
               Math.round(
                 (upperPixel[1] * upperAlpha +
-                  lowerPixel[1] * lowerAlpha * (1 - upperAlpha)) /
+                  lowerPixel[1] * lowerAlpha * invUpperAlpha) /
                   combinedAlpha
               ),
               Math.round(
                 (upperPixel[2] * upperAlpha +
-                  lowerPixel[2] * lowerAlpha * (1 - upperAlpha)) /
+                  lowerPixel[2] * lowerAlpha * invUpperAlpha) /
                   combinedAlpha
               ),
               Math.round(combinedAlpha * 255),
@@ -685,13 +706,25 @@ class LayerManager {
           }
         }
       }
-    }
 
-    // Remove upper layer
-    this.deleteLayer(index);
-    this.saveToHistory(); // Add this
-    this.notifyChange();
-    return true;
+      // Update the merged layer name
+      lowerLayer.name = `${lowerLayerName} + ${upperLayerName}`;
+
+      // Remove upper layer
+      this.layers.splice(index, 1);
+
+      // Adjust active layer index
+      if (this.activeLayerIndex >= index) {
+        this.activeLayerIndex = Math.max(0, this.activeLayerIndex - 1);
+      }
+
+      this.endBatchOperation(); // This will save to history
+      return true;
+    } catch (error) {
+      console.error("Error during layer merge:", error);
+      this.endBatchOperation();
+      return false;
+    }
   }
 
   // Export layer as sprite
