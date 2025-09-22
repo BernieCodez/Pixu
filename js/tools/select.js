@@ -185,68 +185,83 @@ class SelectTool {
   // Modified onMouseDown - now works with layers
   // Modified onMouseDown - clear any existing selection display first
   onMouseDown(x, y, event) {
-    if (!this.editor.currentSprite || !this.editor.layerManager) return;
+  if (!this.editor.currentSprite || !this.editor.layerManager) return;
 
-    // Check if clicking on rotation handle
-    if (
-      this.selection &&
-      this.editor.canvasManager.isOverRotationHandle(x, y, this.selection)
-    ) {
-      this.isRotating = true;
-      this.rotationCenter = {
-        x: (this.selection.left + this.selection.right + 1) / 2,
-        y: (this.selection.top + this.selection.bottom + 1) / 2,
-      };
+  // Check if we have a selection and the click is outside it
+  if (this.selection && this._isClickOutsideSelection(x, y)) {
+    // Merge selection layer back to the layer below and clear selection
+    if (this.selectionLayerIndex !== undefined) {
+      this._mergeSelectionToLayerBelow();
+    }
+    this.clearSelection();
+    this.updateSettingsUI();
+    return;
+  }
+
+  // Check if clicking on rotation handle
+  if (
+    this.selection &&
+    this.editor.canvasManager.isOverRotationHandle &&
+    this.editor.canvasManager.isOverRotationHandle(x, y, this.selection)
+  ) {
+    this.isRotating = true;
+    this.rotationCenter = {
+      x: (this.selection.left + this.selection.right + 1) / 2,
+      y: (this.selection.top + this.selection.bottom + 1) / 2,
+    };
+    return;
+  }
+
+  // Check if clicking on a scale handle
+  if (this.selection) {
+    const handle = this._getScaleHandle(x, y);
+    if (handle) {
+      this.isScaling = true;
+      this.scaleHandle = handle;
+      this.originalSelection = { ...this.selection };
+      this.originalClipboard = this._copyFromBounds(this.selection);
+
+      // Clear the original content immediately when scaling starts
+      this._deleteBounds(this.selection);
+      this.editor.canvasManager.render();
+
       return;
     }
 
-    // Check if clicking on a scale handle
-    if (this.selection) {
-      const handle = this._getScaleHandle(x, y);
-      if (handle) {
-        this.isScaling = true;
-        this.scaleHandle = handle;
-        this.originalSelection = { ...this.selection };
-        this.originalClipboard = this._copyFromBounds(this.selection);
-
-        // Clear the original content immediately when scaling starts
-        this._deleteBounds(this.selection);
-        this.editor.canvasManager.render();
-
-        return;
-      }
-
-      // Check if clicking inside selection for dragging
-      if (
-        x >= this.selection.left &&
-        x <= this.selection.right &&
-        y >= this.selection.top &&
-        y <= this.selection.bottom
-      ) {
-        this.isDragging = true;
-        this.dragOffset = { x, y };
-        this.lastDragPosition = { x, y };
-        this.originalSelection = { ...this.selection };
+    // Check if clicking inside selection for dragging
+    if (
+      x >= this.selection.left &&
+      x <= this.selection.right &&
+      y >= this.selection.top &&
+      y <= this.selection.bottom
+    ) {
+      this.isDragging = true;
+      this.dragOffset = { x, y };
+      this.lastDragPosition = { x, y };
+      this.originalSelection = { ...this.selection };
+      
+      // If we have a selection layer, use its pixels for dragging
+      if (this.selectionLayerIndex !== undefined) {
+        this.dragClipboard = this._copyFromBounds(this.selection, this.selectionLayerIndex);
+        this._deleteBounds(this.selection, this.selectionLayerIndex);
+      } else {
         this.dragClipboard = this._copyFromBounds(this.selection);
         this._deleteBounds(this.originalSelection);
-        this.editor.canvasManager.render();
-        this.editor.canvasManager.showDraggedSelectionPreview(
-          this.selection,
-          this.dragClipboard
-        );
-        return;
       }
+      
+      this.editor.canvasManager.render();
+      this.editor.canvasManager.showDraggedSelectionPreview(
+        this.selection,
+        this.dragClipboard
+      );
+      return;
     }
-
-    // Only clear selection and overlay when starting a completely new selection
-    if (this.selection) {
-      this.clearSelection();
-    }
-
-    // Start new selection
-    this.isSelecting = true;
-    this.editor.canvasManager.startSelection(x, y);
   }
+
+  // Start new selection
+  this.isSelecting = true;
+  this.editor.canvasManager.startSelection(x, y);
+}
 
   // Modified onMouseUp - works with layers
   onMouseUp(x, y, event) {
@@ -258,6 +273,7 @@ class SelectTool {
       this.rotationCenter = null;
       return;
     }
+
     if (this.isScaling && this.selection && this.originalClipboard) {
       // Start batch operation for scaling
       this.editor.layerManager.startBatchOperation();
@@ -327,7 +343,7 @@ class SelectTool {
         this.editor.canvasManager.selection.startX = this.selection.left;
         this.editor.canvasManager.selection.startY = this.selection.top;
         this.editor.canvasManager.selection.endX = this.selection.right;
-        this.editor.canvasManager.selection.endY = this.selection.bottom;
+        this.editor.canvasManager.selection.bottom = this.selection.bottom;
         this.editor.canvasManager.selection.active = true;
       }
 
@@ -346,10 +362,13 @@ class SelectTool {
           this.selection.bottom = this.selection.top;
         }
 
+        // NEW: Create a new layer for the selection and copy pixels to it
+        this._createSelectionLayer();
+
         // Show handles for new selection
         this.editor.canvasManager.renderSelectionBox(this.selection);
 
-        // CRITICAL FIX: Update settings UI immediately after selection is created
+        // Update settings UI immediately after selection is created
         this.updateSettingsUI();
       }
     }
@@ -390,13 +409,177 @@ class SelectTool {
     }
   }
 
+  // Create a new layer for the selection
+  _createSelectionLayer() {
+    if (!this.selection || !this.editor.layerManager) return;
+
+    const currentLayer = this.editor.layerManager.getActiveLayer();
+    if (!currentLayer) return;
+
+    // Copy the selected pixels from the current layer
+    const selectionClipboard = this._copyFromBounds(this.selection);
+
+    // Check if selection contains any non-transparent pixels
+    let hasVisiblePixels = false;
+    for (let y = 0; y < selectionClipboard.height && !hasVisiblePixels; y++) {
+      for (let x = 0; x < selectionClipboard.width && !hasVisiblePixels; x++) {
+        if (selectionClipboard.pixels[y][x][3] > 0) {
+          hasVisiblePixels = true;
+        }
+      }
+    }
+
+    // Only create a new layer if there are visible pixels to move
+    if (hasVisiblePixels) {
+      // Create a new layer above the current one
+      const currentIndex = this.editor.layerManager.activeLayerIndex;
+      const newLayer = this.editor.layerManager.addLayer(
+        `Selection from ${currentLayer.name}`,
+        currentIndex + 1
+      );
+
+      if (newLayer) {
+        // Set the new layer as active
+        this.editor.layerManager.setActiveLayer(currentIndex + 1);
+
+        // Clear the new layer first
+        this.editor.layerManager.clearLayer();
+
+        // Paste the selection to the new layer
+        this.editor.layerManager.setBatchMode(true);
+        this._pasteClipboardAt(
+          selectionClipboard,
+          this.selection.left,
+          this.selection.top
+        );
+        this.editor.layerManager.setBatchMode(false);
+
+        // Clear the selection area from the original layer
+        const originalLayerIndex = currentIndex;
+        this._deleteBounds(this.selection, originalLayerIndex);
+
+        // Store reference to the selection layer for future operations
+        this.selectionLayerIndex = currentIndex + 1;
+
+        // Update UI to reflect the new layer
+        this.editor.updateUI();
+      }
+    }
+  }
+
+  // Check if a layer contains only transparent pixels
+  _isLayerEmpty(layer) {
+    if (!layer || !layer.pixels) return true;
+
+    for (let y = 0; y < layer.pixels.length; y++) {
+      for (let x = 0; x < layer.pixels[y].length; x++) {
+        if (layer.pixels[y][x][3] > 0) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+
+  // Check if a click is outside the current selection
+_isClickOutsideSelection(x, y) {
+  if (!this.selection) return true;
+  
+  return (
+    x < this.selection.left ||
+    x > this.selection.right ||
+    y < this.selection.top ||
+    y > this.selection.bottom
+  );
+}
+
+// Merge selection layer back to the layer below
+_mergeSelectionToLayerBelow() {
+  if (this.selectionLayerIndex === undefined) return false;
+
+  const layerManager = this.editor.layerManager;
+  const selectionLayer = layerManager.getLayer(this.selectionLayerIndex);
+  
+  if (!selectionLayer || this.selectionLayerIndex === 0) {
+    // Can't merge if no selection layer or it's the bottom layer
+    return false;
+  }
+
+  const targetLayerIndex = this.selectionLayerIndex - 1;
+  const targetLayer = layerManager.getLayer(targetLayerIndex);
+
+  if (!targetLayer || targetLayer.locked) {
+    this.editor.uiManager?.showNotification("Cannot merge: target layer is locked", "warning");
+    return false;
+  }
+
+  // Start batch operation for merging
+  layerManager.startBatchOperation();
+
+  try {
+    // Merge pixels from selection layer to target layer
+    for (let y = 0; y < layerManager.height; y++) {
+      for (let x = 0; x < layerManager.width; x++) {
+        const selectionPixel = selectionLayer.pixels[y][x];
+        
+        // Only merge non-transparent pixels
+        if (selectionPixel[3] > 0) {
+          const targetPixel = targetLayer.pixels[y][x];
+          
+          // If selection pixel is fully opaque, just copy it
+          if (selectionPixel[3] === 255) {
+            targetLayer.pixels[y][x] = [...selectionPixel];
+          } else {
+            // Alpha blend the pixels
+            const srcAlpha = selectionPixel[3] / 255;
+            const dstAlpha = targetPixel[3] / 255;
+            const outAlpha = srcAlpha + dstAlpha * (1 - srcAlpha);
+
+            if (outAlpha > 0) {
+              targetLayer.pixels[y][x] = [
+                Math.round((selectionPixel[0] * srcAlpha + targetPixel[0] * dstAlpha * (1 - srcAlpha)) / outAlpha),
+                Math.round((selectionPixel[1] * srcAlpha + targetPixel[1] * dstAlpha * (1 - srcAlpha)) / outAlpha),
+                Math.round((selectionPixel[2] * srcAlpha + targetPixel[2] * dstAlpha * (1 - srcAlpha)) / outAlpha),
+                Math.round(outAlpha * 255)
+              ];
+            }
+          }
+        }
+      }
+    }
+
+    // Remove the selection layer
+    layerManager.deleteLayer(this.selectionLayerIndex);
+    
+    // Set the target layer as active
+    layerManager.setActiveLayer(targetLayerIndex);
+    
+    // Clear selection state
+    this.selectionLayerIndex = undefined;
+    
+    // End batch operation - this will save to history
+    layerManager.endBatchOperation();
+
+    // Update UI
+    this.editor.updateUI();
+    
+    return true;
+  } catch (error) {
+    console.error("Error merging selection layer:", error);
+    layerManager.endBatchOperation();
+    return false;
+  }
+}
   // LAYER-COMPATIBLE: Copy pixels from given bounds using LayerManager
   // LAYER-COMPATIBLE: Copy pixels from given bounds using LayerManager - ACTIVE LAYER ONLY
-  _copyFromBounds(bounds) {
+  // LAYER-COMPATIBLE: Copy pixels from given bounds using LayerManager - specified layer or active layer
+  _copyFromBounds(bounds, layerIndex = null) {
     const layerManager = this.editor.layerManager;
-    const activeLayer = layerManager.getActiveLayer();
+    const targetIndex =
+      layerIndex !== null ? layerIndex : layerManager.activeLayerIndex;
+    const targetLayer = layerManager.getLayer(targetIndex);
 
-    if (!activeLayer) {
+    if (!targetLayer) {
       return { width: 0, height: 0, pixels: [] };
     }
 
@@ -409,19 +592,26 @@ class SelectTool {
       for (let x = 0; x < width; x++) {
         const srcX = bounds.left + x;
         const srcY = bounds.top + y;
-        // Use pixel from active layer only, not composite
-        clipboard.pixels[y][x] = layerManager.getPixel(srcX, srcY);
+        // Use pixel from specified layer
+        if (targetLayer.pixels[srcY] && targetLayer.pixels[srcY][srcX]) {
+          clipboard.pixels[y][x] = [...targetLayer.pixels[srcY][srcX]];
+        } else {
+          clipboard.pixels[y][x] = [0, 0, 0, 0];
+        }
       }
     }
     return clipboard;
   }
 
   // LAYER-COMPATIBLE: Delete pixels in given bounds on active layer only
-  _deleteBounds(bounds) {
+  // LAYER-COMPATIBLE: Delete pixels in given bounds on specified layer
+  _deleteBounds(bounds, layerIndex = null) {
     const layerManager = this.editor.layerManager;
-    const activeLayer = layerManager.getActiveLayer();
+    const targetIndex =
+      layerIndex !== null ? layerIndex : layerManager.activeLayerIndex;
+    const targetLayer = layerManager.getLayer(targetIndex);
 
-    if (!activeLayer || activeLayer.locked) {
+    if (!targetLayer || targetLayer.locked) {
       return; // Can't modify locked layer
     }
 
@@ -438,13 +628,17 @@ class SelectTool {
           y >= 0 &&
           y < layerManager.height
         ) {
-          layerManager.setPixel(x, y, transparentColor);
+          // Set pixel on the specified layer
+          if (targetLayer.pixels[y] && targetLayer.pixels[y][x]) {
+            targetLayer.pixels[y][x] = [...transparentColor];
+          }
         }
       }
     }
 
     // Disable batch mode and trigger update
     layerManager.setBatchMode(false);
+    layerManager.notifyChange();
   }
 
   // LAYER-COMPATIBLE: Paste clipboard at position on active layer
@@ -866,12 +1060,29 @@ class SelectTool {
   }
 
   // Clear current selection
-  clearSelection() {
-    this.selection = null;
-    this.lastDragPosition = null;
-    this.editor.canvasManager.endSelection();
-    this.editor.canvasManager.clearOverlay(); // Ensure overlay is cleared
+  // Clear current selection
+  // Clear current selection
+clearSelection() {
+  // If we have a selection layer, merge it back to the layer below
+  if (this.selectionLayerIndex !== undefined) {
+    const selectionLayer = this.editor.layerManager.getLayer(this.selectionLayerIndex);
+    if (selectionLayer) {
+      if (this._isLayerEmpty(selectionLayer)) {
+        // If layer is empty, just delete it
+        this.editor.layerManager.deleteLayer(this.selectionLayerIndex);
+      } else {
+        // If layer has content, merge it down
+        this._mergeSelectionToLayerBelow();
+      }
+    }
+    this.selectionLayerIndex = undefined;
   }
+
+  this.selection = null;
+  this.lastDragPosition = null;
+  this.editor.canvasManager.endSelection();
+  this.editor.canvasManager.clearOverlay();
+}
 
   // Called when tool is deactivated
   onDeactivate() {
