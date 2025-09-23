@@ -936,3 +936,88 @@
   display: flex;
   gap: 10px;
 }
+
+
+
+/* CSS for the canvas colors palette */
+.canvas-colors-palette {
+  margin-top: 10px;
+  padding: 8px;
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 6px;
+  min-height: 60px;
+}
+
+.canvas-colors-palette .palette-title {
+  color: #00d4ff;
+  font-size: 12px;
+  font-weight: 500;
+  margin-bottom: 6px;
+  text-align: center;
+}
+
+.canvas-colors-container {
+  max-height: 80px;
+  overflow-y: auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  align-content: flex-start;
+}
+
+.canvas-colors-container::-webkit-scrollbar {
+  width: 4px;
+}
+
+.canvas-colors-container::-webkit-scrollbar-track {
+  background: #222;
+  border-radius: 2px;
+}
+
+.canvas-colors-container::-webkit-scrollbar-thumb {
+  background: #444;
+  border-radius: 2px;
+}
+
+.canvas-colors-container::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+.canvas-color-swatch {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.canvas-color-swatch.selected {
+  border-color: #00d4ff !important;
+  box-shadow: 0 0 0 2px #00d4ff;
+}
+
+.canvas-color-swatch:hover {
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+.canvas-colors-count {
+  border-top: 1px solid #333;
+  padding-top: 4px !important;
+  margin-top: 8px !important;
+}
+
+.empty-palette-message {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .canvas-colors-container {
+    max-height: 60px;
+  }
+  
+  .canvas-color-swatch {
+    width: 18px !important;
+    height: 18px !important;
+  }
+}

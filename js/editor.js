@@ -314,6 +314,7 @@ class PixelEditor {
     }, 100);
 
     this.updateUI();
+    this.uiManager.updateCanvasColorsPalette();
   }
 
   // Update saveLayersToSprite to check for sprite switching

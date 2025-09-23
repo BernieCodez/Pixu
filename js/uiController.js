@@ -4,6 +4,10 @@ class UIController {
     this.editor = editor;
     this.colorPicker = null;
     this.recentSpritesManager = null;
+
+    this.canvasColors = new Set();
+    this.canvasColorsPalette = null;
+
     this.colorMode = "hex";
     this.colorPalette = [
       "#000000",
@@ -50,6 +54,205 @@ class UIController {
     this.setupColorModeToggle();
     this.setupSpriteNameInputListener();
     this.setupSecondaryColorSwitch();
+    this.initializeCanvasColorsPalette();
+  }
+
+  initializeCanvasColorsPalette() {
+    const canvasColorsContainer = document.getElementById(
+      "canvas-colors-palette"
+    );
+    if (!canvasColorsContainer) {
+      console.warn("Canvas colors palette container not found");
+      return;
+    }
+
+    // Clear existing content
+    canvasColorsContainer.innerHTML =
+      '<div class="palette-title">Canvas Colors</div>';
+
+    // Create colors container
+    const colorsContainer = document.createElement("div");
+    colorsContainer.className = "canvas-colors-container";
+    canvasColorsContainer.appendChild(colorsContainer);
+
+    this.canvasColorsPalette = colorsContainer;
+
+    // Initial scan for colors
+    this.updateCanvasColorsPalette();
+  }
+
+  // Add this new method to UIController:
+  updateCanvasColorsPalette() {
+    if (!this.canvasColorsPalette || !this.editor.layerManager) {
+      return;
+    }
+
+    // Collect all unique colors from all visible layers
+    const newCanvasColors = new Set();
+
+    this.editor.layerManager.layers.forEach((layer) => {
+      if (!layer.visible || !layer.pixels) return;
+
+      for (let y = 0; y < layer.pixels.length; y++) {
+        for (let x = 0; x < layer.pixels[y].length; x++) {
+          const pixel = layer.pixels[y][x];
+          const [r, g, b, a] = pixel;
+
+          // Only include non-transparent pixels
+          if (a > 0) {
+            // Create color key including alpha for semi-transparent colors
+            const colorKey = `${r},${g},${b},${a}`;
+            newCanvasColors.add(colorKey);
+          }
+        }
+      }
+    });
+
+    // Check if colors have changed
+    const currentColors = Array.from(this.canvasColors);
+    const newColors = Array.from(newCanvasColors);
+
+    if (
+      currentColors.length !== newColors.length ||
+      !currentColors.every((color) => newCanvasColors.has(color))
+    ) {
+      this.canvasColors = newCanvasColors;
+      this.renderCanvasColorsPalette();
+    }
+  }
+
+  // Add this new method to UIController:
+  renderCanvasColorsPalette() {
+    if (!this.canvasColorsPalette) return;
+
+    this.canvasColorsPalette.innerHTML = "";
+
+    if (this.canvasColors.size === 0) {
+      const emptyMessage = document.createElement("div");
+      emptyMessage.className = "empty-palette-message";
+      emptyMessage.textContent = "No colors on canvas";
+      emptyMessage.style.cssText = `
+      color: #888;
+      font-size: 12px;
+      padding: 8px;
+      text-align: center;
+      font-style: italic;
+    `;
+      this.canvasColorsPalette.appendChild(emptyMessage);
+      return;
+    }
+
+    // Convert colors to array and sort by brightness for better organization
+    const colorsArray = Array.from(this.canvasColors)
+      .map((colorKey) => {
+        const [r, g, b, a] = colorKey.split(",").map(Number);
+        const brightness = (r * 0.299 + g * 0.587 + b * 0.114) / 255;
+        return { colorKey, r, g, b, a, brightness };
+      })
+      .sort((a, b) => b.brightness - a.brightness);
+
+    // Create color swatches
+    colorsArray.forEach(({ colorKey, r, g, b, a }) => {
+      const swatch = document.createElement("div");
+      swatch.className = "canvas-color-swatch";
+
+      // Create hex representation for display (ignore alpha for hex)
+      const hex = this.rgbaToHex([r, g, b, 255]);
+      const rgba = `rgba(${r}, ${g}, ${b}, ${a / 255})`;
+
+      swatch.style.cssText = `
+      width: 20px;
+      height: 20px;
+      background-color: ${rgba};
+      border: 1px solid #333;
+      border-radius: 3px;
+      cursor: pointer;
+      margin: 2px;
+      display: inline-block;
+      position: relative;
+      transition: transform 0.1s ease;
+    `;
+
+      // Add checkerboard background for semi-transparent colors
+      if (a < 255) {
+        swatch.style.backgroundImage = `
+        linear-gradient(45deg, #666 25%, transparent 25%),
+        linear-gradient(-45deg, #666 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #666 75%),
+        linear-gradient(-45deg, transparent 75%, #666 75%)
+      `;
+        swatch.style.backgroundSize = "6px 6px";
+        swatch.style.backgroundPosition = "0 0, 0 3px, 3px -3px, -3px 0px";
+
+        // Add the actual color as an overlay
+        const colorOverlay = document.createElement("div");
+        colorOverlay.style.cssText = `
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: ${rgba};
+        border-radius: 2px;
+      `;
+        swatch.appendChild(colorOverlay);
+      }
+
+      // Tooltip showing color values
+      swatch.title =
+        a < 255
+          ? `RGBA: (${r}, ${g}, ${b}, ${Math.round(
+              (a / 255) * 100
+            )}%)\nHEX: ${hex}`
+          : `RGB: (${r}, ${g}, ${b})\nHEX: ${hex}`;
+
+      // Click handler to select color
+      swatch.addEventListener("click", () => {
+        // Remove selection from main palette
+        this.deselectColorPalette();
+
+        // Add selection to this swatch
+        document
+          .querySelectorAll(".canvas-color-swatch")
+          .forEach((s) => s.classList.remove("selected"));
+        swatch.classList.add("selected");
+
+        // Set as primary color
+        this.editor.setPrimaryColor([r, g, b, a]);
+        this.updateColorDisplay();
+        this.updateColorInputs(hex, [r, g, b, a]);
+
+        // Update color wheel if available
+        if (this.colorPicker && this.colorPicker.color) {
+          this.colorPicker.color.hexString = hex;
+        }
+      });
+
+      // Hover effects
+      swatch.addEventListener("mouseenter", () => {
+        swatch.style.transform = "scale(1.1)";
+        swatch.style.zIndex = "10";
+      });
+
+      swatch.addEventListener("mouseleave", () => {
+        swatch.style.transform = "scale(1)";
+        swatch.style.zIndex = "1";
+      });
+
+      this.canvasColorsPalette.appendChild(swatch);
+    });
+
+    // Add color count info
+    const colorCount = document.createElement("div");
+    colorCount.className = "canvas-colors-count";
+    colorCount.textContent = `${this.canvasColors.size} colors`;
+    colorCount.style.cssText = `
+    color: #aaa;
+    font-size: 11px;
+    margin-top: 4px;
+    text-align: center;
+  `;
+    this.canvasColorsPalette.appendChild(colorCount);
   }
   // Setup event listener for secondary color switching
   setupSecondaryColorSwitch() {
@@ -169,14 +372,14 @@ class UIController {
         this.duplicateCurrentLayer();
       });
     }
-    
-        // In the setupLayerEventListeners method, add after the duplicate layer button setup:
-        const mergeLayerBtn = document.getElementById("merge-layer-btn");
-        if (mergeLayerBtn) {
-          mergeLayerBtn.addEventListener("click", () => {
-            this.mergeLayerDown();
-          });
-        }
+
+    // In the setupLayerEventListeners method, add after the duplicate layer button setup:
+    const mergeLayerBtn = document.getElementById("merge-layer-btn");
+    if (mergeLayerBtn) {
+      mergeLayerBtn.addEventListener("click", () => {
+        this.mergeLayerDown();
+      });
+    }
   }
 
   addNewLayer() {
@@ -366,38 +569,44 @@ class UIController {
       </div>
     `;
     }
+    this.updateCanvasColorsPalette();
   }
-// Add this method to UIController:
-mergeAllVisible() {
-  if (!this.editor.layerManager) {
-    this.showNotification("Layer system not available", "error");
-    return;
-  }
-
-  const visibleLayers = this.editor.layerManager.layers.filter(layer => layer.visible);
-  
-  if (visibleLayers.length < 2) {
-    this.showNotification("Need at least 2 visible layers to merge", "warning");
-    return;
-  }
-
-  this.showCustomConfirm(
-    `Merge all ${visibleLayers.length} visible layers? This cannot be undone.`,
-    () => {
-      try {
-        this.editor.layerManager.mergeAllVisible();
-        this.updateLayersList();
-        this.showNotification("Merged all visible layers", "success");
-        if (this.editor.canvasManager) {
-          this.editor.canvasManager.render();
-        }
-      } catch (error) {
-        console.error("Failed to merge all visible layers:", error);
-        this.showNotification("Failed to merge layers", "error");
-      }
+  // Add this method to UIController:
+  mergeAllVisible() {
+    if (!this.editor.layerManager) {
+      this.showNotification("Layer system not available", "error");
+      return;
     }
-  );
-}
+
+    const visibleLayers = this.editor.layerManager.layers.filter(
+      (layer) => layer.visible
+    );
+
+    if (visibleLayers.length < 2) {
+      this.showNotification(
+        "Need at least 2 visible layers to merge",
+        "warning"
+      );
+      return;
+    }
+
+    this.showCustomConfirm(
+      `Merge all ${visibleLayers.length} visible layers? This cannot be undone.`,
+      () => {
+        try {
+          this.editor.layerManager.mergeAllVisible();
+          this.updateLayersList();
+          this.showNotification("Merged all visible layers", "success");
+          if (this.editor.canvasManager) {
+            this.editor.canvasManager.render();
+          }
+        } catch (error) {
+          console.error("Failed to merge all visible layers:", error);
+          this.showNotification("Failed to merge layers", "error");
+        }
+      }
+    );
+  }
   // Add this new method to UIController class:
   mergeLayerDown() {
     if (this.editor.layerManager) {
@@ -420,17 +629,17 @@ mergeAllVisible() {
         // this.showCustomConfirm(
         //   `Merge "${activeLayer.name}" into "${targetLayer.name}"? This cannot be undone.`,
         //   () => {
-            const success = this.editor.layerManager.mergeDown(activeIndex);
-            if (success) {
-              this.updateLayersList();
-              this.showNotification(`Merged layers successfully`, "success");
-              // Force canvas render
-              if (this.editor.canvasManager) {
-                this.editor.canvasManager.render();
-              }
-            } else {
-              this.showNotification("Failed to merge layers", "error");
-            }
+        const success = this.editor.layerManager.mergeDown(activeIndex);
+        if (success) {
+          this.updateLayersList();
+          this.showNotification(`Merged layers successfully`, "success");
+          // Force canvas render
+          if (this.editor.canvasManager) {
+            this.editor.canvasManager.render();
+          }
+        } else {
+          this.showNotification("Failed to merge layers", "error");
+        }
         //   }
         // );
       } catch (error) {
@@ -1100,6 +1309,7 @@ mergeAllVisible() {
       framesList.appendChild(frameItem);
     });
     this.updateFrameDisplay();
+    this.updateCanvasColorsPalette();
   }
 
   showFrameContextMenu(event, frame, frameIndex) {
@@ -2311,8 +2521,10 @@ mergeAllVisible() {
       this.updateToolButtons();
       this.updateColorDisplay();
       this.updateFramesList();
-      // this.layerManager.updateLayersList();
       this.updateLayersList();
+
+      // Add canvas colors palette update
+      this.updateCanvasColorsPalette();
 
       // Only update sprites list if sprites are available
       if (this.editor.sprites && Array.isArray(this.editor.sprites)) {
@@ -2903,6 +3115,10 @@ mergeAllVisible() {
         this.editor._importingSprite = false;
       }, 1000);
     }
+
+    setTimeout(() => {
+      this.updateCanvasColorsPalette();
+    }, 100);
   }
 
   createSpriteFromImageDataRobust(imageData, width, height, spriteName = null) {

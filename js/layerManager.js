@@ -123,6 +123,9 @@ class LayerManager {
   endBatchOperation() {
     this.setBatchMode(false);
     this.saveToHistory();
+    if (window.editor && window.editor.uiController) {
+      window.editor.uiController.updateCanvasColorsPalette();
+    }
   }
 
   createDefaultLayer() {
@@ -804,10 +807,8 @@ class LayerManager {
   }
 
   // Notify change
-  // Optimized notifyChange - prevent infinite loops
-  // Also need to modify the LayerManager notifyChange to handle import state
-  // In LayerManager class - update the notifyChange method
-  // In LayerManager class - replace the notifyChange method
+  // Modify the LayerManager's notifyChange method to trigger canvas color palette updates:
+
   notifyChange() {
     if (this.batchMode || this._restoring || this._preventSaveLoop) {
       if (!this._restoring && !this._preventSaveLoop) {
@@ -839,6 +840,21 @@ class LayerManager {
       }
     }
 
+    // Trigger canvas color palette update
+    if (
+      editor &&
+      editor.uiController &&
+      typeof editor.uiController.updateCanvasColorsPalette === "function"
+    ) {
+      // Debounce the canvas color update to avoid excessive recalculation
+      if (this._canvasColorUpdateTimeout) {
+        clearTimeout(this._canvasColorUpdateTimeout);
+      }
+      this._canvasColorUpdateTimeout = setTimeout(() => {
+        editor.uiController.updateCanvasColorsPalette();
+      }, 100); // 100ms debounce
+    }
+
     if (this.onChange) {
       // Use requestAnimationFrame to batch updates
       if (!this.updateScheduled) {
@@ -848,6 +864,18 @@ class LayerManager {
           this.updateScheduled = false;
         });
       }
+    }
+  }
+
+  // Also add a method to force immediate canvas color update when needed:
+  forceCanvasColorUpdate() {
+    const editor = window.editor;
+    if (
+      editor &&
+      editor.uiController &&
+      typeof editor.uiController.updateCanvasColorsPalette === "function"
+    ) {
+      editor.uiController.updateCanvasColorsPalette();
     }
   }
 
