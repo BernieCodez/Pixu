@@ -218,17 +218,17 @@ class BrushTool {
   getSettingsHTML() {
     return `
             <div class="setting-group">
-                <label for="brush-size">Brush Size:</label>
+                <label for="brush-size">Size:</label>
                 <div class="slider-container">
                     <input type="range" id="brush-size" min="1" max="10" value="${this.size}">
-                    <span class="slider-value">${this.size}</span>
+                    <input type="number" class="slider-value-input" data-slider="brush-size" min="1" max="10" value="${this.size}">
                 </div>
             </div>
             <div class="setting-group">
                 <label for="brush-opacity">Opacity:</label>
                 <div class="slider-container">
                     <input type="range" id="brush-opacity" min="0" max="100" value="${this.opacity}">
-                    <span class="slider-value">${this.opacity}%</span>
+                    <input type="number" class="slider-value-input" data-slider="brush-opacity" min="0" max="100" value="${this.opacity}">%
                 </div>
             </div>
             <div class="setting-group">
@@ -238,32 +238,76 @@ class BrushTool {
                 </label>
             </div>
         `;
-  }
+}
 
   // Initialize tool settings event listeners
   initializeSettings() {
     const sizeSlider = document.getElementById("brush-size");
     const opacitySlider = document.getElementById("brush-opacity");
     const applyOnceCheckbox = document.getElementById("brush-apply-once");
-    const sizeValue = sizeSlider.nextElementSibling;
-    const opacityValue = opacitySlider.nextElementSibling;
+    
+    // Get the number inputs
+    const sizeInput = document.querySelector('[data-slider="brush-size"]');
+    const opacityInput = document.querySelector('[data-slider="brush-opacity"]');
 
-    sizeSlider.addEventListener("input", (e) => {
-      this.setSize(parseInt(e.target.value));
-      sizeValue.textContent = this.size;
-    });
+    if (sizeSlider && sizeInput) {
+        // Slider to input sync
+        sizeSlider.addEventListener("input", (e) => {
+            const value = parseInt(e.target.value);
+            this.setSize(value);
+            sizeInput.value = this.size;
+        });
+        
+        // Input to slider sync
+        sizeInput.addEventListener("input", (e) => {
+            const value = parseInt(e.target.value);
+            if (value >= 1 && value <= 10) {
+                this.setSize(value);
+                sizeSlider.value = this.size;
+            }
+        });
+        
+        // Validate on blur
+        sizeInput.addEventListener("blur", (e) => {
+            const value = parseInt(e.target.value);
+            if (isNaN(value) || value < 1 || value > 10) {
+                e.target.value = this.size;
+            }
+        });
+    }
 
-    opacitySlider.addEventListener("input", (e) => {
-      this.setOpacity(parseInt(e.target.value));
-      opacityValue.textContent = `${this.opacity}%`;
-    });
+    if (opacitySlider && opacityInput) {
+        // Slider to input sync
+        opacitySlider.addEventListener("input", (e) => {
+            const value = parseInt(e.target.value);
+            this.setOpacity(value);
+            opacityInput.value = this.opacity;
+        });
+        
+        // Input to slider sync
+        opacityInput.addEventListener("input", (e) => {
+            const value = parseInt(e.target.value);
+            if (value >= 0 && value <= 100) {
+                this.setOpacity(value);
+                opacitySlider.value = this.opacity;
+            }
+        });
+        
+        // Validate on blur
+        opacityInput.addEventListener("blur", (e) => {
+            const value = parseInt(e.target.value);
+            if (isNaN(value) || value < 0 || value > 100) {
+                e.target.value = this.opacity;
+            }
+        });
+    }
 
     if (applyOnceCheckbox) {
-      applyOnceCheckbox.addEventListener("change", (e) => {
-        this.setApplyOnce(e.target.checked);
-      });
+        applyOnceCheckbox.addEventListener("change", (e) => {
+            this.setApplyOnce(e.target.checked);
+        });
     }
-  }
+}
 
   // Get tool cursor
   getCursor() {

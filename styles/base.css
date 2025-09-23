@@ -60,6 +60,51 @@ body {
     font-size: 14px;
 }
 
+input[type="number"] {
+        background: #1a1a1a;
+    border: 1px solid #555;
+    border-radius: 4px;
+    padding: 4px 4px;
+    color: #fff;
+    font-size: 14px;
+    font-weight: 500;
+    text-align: center;
+    transition: all 0.2s ease;
+    margin: 0 !important;
+}
+input[type="number"]:focus {
+    outline: none;
+    border-color: #00d4ff;
+    box-shadow: 0 0 0 2px rgba(0, 212, 255, 0.3);
+    background: #2a2a2a;
+}
+input[type="number"]:hover {
+    border-color: #666;
+    background: #2a2a2a;
+}
+
+.slider-value-input {
+  width: 35px;
+  margin-left: 8px;
+  padding: 2px 4px;
+  border: 1px solid #444;
+  background: transparent;
+  color: #fff;
+  border-radius: 4px;
+  font-size: 14px;
+  text-align: center;
+}
+/* Hide spinner arrows in number inputs */
+.slider-value-input::-webkit-outer-spin-button,
+.slider-value-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.slider-value-input[type=number] {
+  -moz-appearance: textfield;
+}
+
 /* Canvas Size Inputs Styling */
 .canvas-size-inputs {
     display: flex;

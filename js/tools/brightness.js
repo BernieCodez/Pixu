@@ -288,41 +288,31 @@ class BrightnessTool {
           <div class="setting-group">
               <label for="brightness-intensity">Intensity:</label>
               <div class="slider-container">
-                  <input type="range" id="brightness-intensity" min="-50" max="50" value="${
-                    this.intensity
-                  }">
-                  <span class="slider-value">${this.intensity > 0 ? "+" : ""}${
-      this.intensity
-    }%</span>
+                  <input type="range" id="brightness-intensity" min="-50" max="50" value="${this.intensity}">
+                  <input type="number" class="slider-value-input" data-slider="brightness-intensity" min="-50" max="50" value="${this.intensity}">%
               </div>
           </div>
           <div class="setting-group">
               <label for="brightness-size">Size:</label>
               <div class="slider-container">
-                  <input type="range" id="brightness-size" min="1" max="10" value="${
-                    this.size
-                  }">
-                  <span class="slider-value">${this.size}</span>
+                  <input type="range" id="brightness-size" min="1" max="10" value="${this.size}">
+                  <input type="number" class="slider-value-input" data-slider="brightness-size" min="1" max="10" value="${this.size}">
               </div>
           </div>
           <div class="setting-group">
               <label>
-                  <input type="checkbox" id="brightness-apply-once" ${
-                    this.applyOnce ? "checked" : ""
-                  }>
+                  <input type="checkbox" id="brightness-apply-once" ${this.applyOnce ? "checked" : ""}>
                   Apply Once
               </label>
           </div>
           <div class="setting-group">
               <label>
-                  <input type="checkbox" id="brightness-random" ${
-                    this.randomMode ? "checked" : ""
-                  }>
+                  <input type="checkbox" id="brightness-random" ${this.randomMode ? "checked" : ""}>
                   Random
               </label>
           </div>
       `;
-  }
+}
 
   // Initialize tool settings event listeners
   initializeSettings() {
@@ -330,37 +320,75 @@ class BrightnessTool {
     const sizeSlider = document.getElementById("brightness-size");
     const applyOnceCheckbox = document.getElementById("brightness-apply-once");
     const randomCheckbox = document.getElementById("brightness-random");
+    
+    // Get the number inputs
+    const intensityInput = document.querySelector('[data-slider="brightness-intensity"]');
+    const sizeInput = document.querySelector('[data-slider="brightness-size"]');
 
-    if (intensitySlider) {
-      const intensityValue = intensitySlider.nextElementSibling;
-      intensitySlider.addEventListener("input", (e) => {
-        this.setIntensity(parseInt(e.target.value));
-        intensityValue.textContent = `${this.intensity > 0 ? "+" : ""}${
-          this.intensity
-        }%`;
-      });
+    if (intensitySlider && intensityInput) {
+        // Slider to input sync
+        intensitySlider.addEventListener("input", (e) => {
+            const value = parseInt(e.target.value);
+            this.setIntensity(value);
+            intensityInput.value = this.intensity;
+        });
+        
+        // Input to slider sync
+        intensityInput.addEventListener("input", (e) => {
+            const value = parseInt(e.target.value);
+            if (value >= -50 && value <= 50) {
+                this.setIntensity(value);
+                intensitySlider.value = this.intensity;
+            }
+        });
+        
+        // Validate on blur
+        intensityInput.addEventListener("blur", (e) => {
+            const value = parseInt(e.target.value);
+            if (isNaN(value) || value < -50 || value > 50) {
+                e.target.value = this.intensity;
+            }
+        });
     }
 
-    if (sizeSlider) {
-      const sizeValue = sizeSlider.nextElementSibling;
-      sizeSlider.addEventListener("input", (e) => {
-        this.setSize(parseInt(e.target.value));
-        sizeValue.textContent = this.size;
-      });
+    if (sizeSlider && sizeInput) {
+        // Slider to input sync
+        sizeSlider.addEventListener("input", (e) => {
+            const value = parseInt(e.target.value);
+            this.setSize(value);
+            sizeInput.value = this.size;
+        });
+        
+        // Input to slider sync
+        sizeInput.addEventListener("input", (e) => {
+            const value = parseInt(e.target.value);
+            if (value >= 1 && value <= 10) {
+                this.setSize(value);
+                sizeSlider.value = this.size;
+            }
+        });
+        
+        // Validate on blur
+        sizeInput.addEventListener("blur", (e) => {
+            const value = parseInt(e.target.value);
+            if (isNaN(value) || value < 1 || value > 10) {
+                e.target.value = this.size;
+            }
+        });
     }
 
     if (applyOnceCheckbox) {
-      applyOnceCheckbox.addEventListener("change", (e) => {
-        this.setApplyOnce(e.target.checked);
-      });
+        applyOnceCheckbox.addEventListener("change", (e) => {
+            this.setApplyOnce(e.target.checked);
+        });
     }
 
     if (randomCheckbox) {
-      randomCheckbox.addEventListener("change", (e) => {
-        this.setRandomMode(e.target.checked);
-      });
+        randomCheckbox.addEventListener("change", (e) => {
+            this.setRandomMode(e.target.checked);
+        });
     }
-  }
+}
 
   // Get tool cursor
   getCursor() {

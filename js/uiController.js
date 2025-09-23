@@ -417,9 +417,9 @@ mergeAllVisible() {
       }
 
       try {
-        this.showCustomConfirm(
-          `Merge "${activeLayer.name}" into "${targetLayer.name}"? This cannot be undone.`,
-          () => {
+        // this.showCustomConfirm(
+        //   `Merge "${activeLayer.name}" into "${targetLayer.name}"? This cannot be undone.`,
+        //   () => {
             const success = this.editor.layerManager.mergeDown(activeIndex);
             if (success) {
               this.updateLayersList();
@@ -431,8 +431,8 @@ mergeAllVisible() {
             } else {
               this.showNotification("Failed to merge layers", "error");
             }
-          }
-        );
+        //   }
+        // );
       } catch (error) {
         console.error("Failed to merge layer:", error);
         this.showNotification("Failed to merge layer", "error");

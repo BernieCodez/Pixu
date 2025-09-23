@@ -157,58 +157,98 @@ class EraserTool {
 
   // Get tool settings UI elements
   getSettingsHTML() {
-    return `
-            <div class="setting-group">
-                <label for="eraser-size">Eraser Size:</label>
-                <div class="slider-container">
-                    <input type="range" id="eraser-size" min="1" max="10" value="${this.size}">
-                    <span class="slider-value">${this.size}</span>
-                </div>
-            </div>
-            <div class="setting-group">
-                <label for="eraser-opacity">Opacity:</label>
-                <div class="slider-container">
-                    <input type="range" id="eraser-opacity" min="0" max="100" value="${this.opacity}">
-                    <span class="slider-value">${this.opacity}%</span>
-                </div>
-            </div>
-            <div class="setting-group">
-                <label>
-                    <input type="checkbox" id="eraser-apply-once" ${this.applyOnce ? "checked" : ""}>
-                    Apply Once
-                </label>
-            </div>
-        `;
-  }
+  return `
+          <div class="setting-group">
+              <label for="eraser-size">Size:</label>
+              <div class="slider-container">
+                  <input type="range" id="eraser-size" min="1" max="10" value="${this.size}">
+                  <input type="number" class="slider-value-input" data-slider="eraser-size" min="1" max="10" value="${this.size}">
+              </div>
+          </div>
+          <div class="setting-group">
+              <label for="eraser-opacity">Opacity:</label>
+              <div class="slider-container">
+                  <input type="range" id="eraser-opacity" min="0" max="100" value="${this.opacity}">
+                  <input type="number" class="slider-value-input" data-slider="eraser-opacity" min="0" max="100" value="${this.opacity}">%
+              </div>
+          </div>
+          <div class="setting-group">
+              <label>
+                  <input type="checkbox" id="eraser-apply-once" ${this.applyOnce ? "checked" : ""}>
+                  Apply Once
+              </label>
+          </div>
+      `;
+}
 
   // Initialize tool settings event listeners
   initializeSettings() {
-    const sizeSlider = document.getElementById("eraser-size");
-    const opacitySlider = document.getElementById("eraser-opacity");
-    const applyOnceCheckbox = document.getElementById("eraser-apply-once");
+  const sizeSlider = document.getElementById("eraser-size");
+  const opacitySlider = document.getElementById("eraser-opacity");
+  const applyOnceCheckbox = document.getElementById("eraser-apply-once");
+  
+  // Get the number inputs
+  const sizeInput = document.querySelector('[data-slider="eraser-size"]');
+  const opacityInput = document.querySelector('[data-slider="eraser-opacity"]');
+  
+  if (sizeSlider && sizeInput) {
+    // Slider to input sync
+    sizeSlider.addEventListener("input", (e) => {
+      const value = parseInt(e.target.value);
+      this.setSize(value);
+      sizeInput.value = this.size;
+    });
     
-    if (sizeSlider) {
-      const sizeValue = sizeSlider.nextElementSibling;
-      sizeSlider.addEventListener("input", (e) => {
-        this.setSize(parseInt(e.target.value));
-        sizeValue.textContent = this.size;
-      });
-    }
-
-    if (opacitySlider) {
-      const opacityValue = opacitySlider.nextElementSibling;
-      opacitySlider.addEventListener("input", (e) => {
-        this.setOpacity(parseInt(e.target.value));
-        opacityValue.textContent = `${this.opacity}%`;
-      });
-    }
-
-    if (applyOnceCheckbox) {
-      applyOnceCheckbox.addEventListener("change", (e) => {
-        this.setApplyOnce(e.target.checked);
-      });
-    }
+    // Input to slider sync
+    sizeInput.addEventListener("input", (e) => {
+      const value = parseInt(e.target.value);
+      if (value >= 1 && value <= 10) {
+        this.setSize(value);
+        sizeSlider.value = this.size;
+      }
+    });
+    
+    // Validate on blur
+    sizeInput.addEventListener("blur", (e) => {
+      const value = parseInt(e.target.value);
+      if (isNaN(value) || value < 1 || value > 10) {
+        e.target.value = this.size;
+      }
+    });
   }
+
+  if (opacitySlider && opacityInput) {
+    // Slider to input sync
+    opacitySlider.addEventListener("input", (e) => {
+      const value = parseInt(e.target.value);
+      this.setOpacity(value);
+      opacityInput.value = this.opacity;
+    });
+    
+    // Input to slider sync
+    opacityInput.addEventListener("input", (e) => {
+      const value = parseInt(e.target.value);
+      if (value >= 0 && value <= 100) {
+        this.setOpacity(value);
+        opacitySlider.value = this.opacity;
+      }
+    });
+    
+    // Validate on blur
+    opacityInput.addEventListener("blur", (e) => {
+      const value = parseInt(e.target.value);
+      if (isNaN(value) || value < 0 || value > 100) {
+        e.target.value = this.opacity;
+      }
+    });
+  }
+
+  if (applyOnceCheckbox) {
+    applyOnceCheckbox.addEventListener("change", (e) => {
+      this.setApplyOnce(e.target.checked);
+    });
+  }
+}
 
   // Get tool cursor
   getCursor() {

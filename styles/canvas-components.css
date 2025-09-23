@@ -420,7 +420,7 @@
 .layer-item {
   display: flex;
   align-items: center;
-  padding: 8px 12px;
+  padding: 8px 10px;
   margin-bottom: 4px;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid #444;
@@ -516,9 +516,19 @@
 
 .layer-visibility {
   margin-left: 8px;
-  padding: 8px 4px;
+  padding: 2px 2px;
+  width: 27px;
+  height: 27px;
   background-color: transparent;
   color: white;
+  /* center content */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.layer-visibility:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
 }
 
 /* Fallback layer item styles */

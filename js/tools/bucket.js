@@ -249,7 +249,9 @@ class BucketTool {
                   <input type="range" id="fill-opacity" min="0" max="100" value="${
                     this.opacity
                   }">
-                  <span class="slider-value">${this.opacity}%</span>
+                  <input type="number" class="slider-value-input" data-slider="fill-opacity" min="0" max="100" value="${
+                    this.opacity
+                  }">%
               </div>
           </div>
           <div class="setting-group">
@@ -258,7 +260,9 @@ class BucketTool {
                   <input type="range" id="fill-tolerance" min="0" max="100" value="${
                     this.tolerance
                   }">
-                  <span class="slider-value">${this.tolerance}%</span>
+                  <input type="number" class="slider-value-input" data-slider="fill-tolerance" min="0" max="100" value="${
+                    this.tolerance
+                  }">%
               </div>
           </div>
           <div class="setting-group">
@@ -278,19 +282,61 @@ class BucketTool {
     const toleranceSlider = document.getElementById("fill-tolerance");
     const fillAllCheckbox = document.getElementById("fill-all-checkbox");
 
-    if (opacitySlider) {
-      const opacityValue = opacitySlider.nextElementSibling;
+    // Get the number inputs
+    const opacityInput = document.querySelector('[data-slider="fill-opacity"]');
+    const toleranceInput = document.querySelector(
+      '[data-slider="fill-tolerance"]'
+    );
+
+    if (opacitySlider && opacityInput) {
+      // Slider to input sync
       opacitySlider.addEventListener("input", (e) => {
-        this.setOpacity(parseInt(e.target.value));
-        opacityValue.textContent = `${this.opacity}%`;
+        const value = parseInt(e.target.value);
+        this.setOpacity(value);
+        opacityInput.value = this.opacity;
+      });
+
+      // Input to slider sync
+      opacityInput.addEventListener("input", (e) => {
+        const value = parseInt(e.target.value);
+        if (value >= 0 && value <= 100) {
+          this.setOpacity(value);
+          opacitySlider.value = this.opacity;
+        }
+      });
+
+      // Validate on blur
+      opacityInput.addEventListener("blur", (e) => {
+        const value = parseInt(e.target.value);
+        if (isNaN(value) || value < 0 || value > 100) {
+          e.target.value = this.opacity;
+        }
       });
     }
 
-    if (toleranceSlider) {
-      const toleranceValue = toleranceSlider.nextElementSibling;
+    if (toleranceSlider && toleranceInput) {
+      // Slider to input sync
       toleranceSlider.addEventListener("input", (e) => {
-        this.setTolerance(parseInt(e.target.value));
-        toleranceValue.textContent = `${this.tolerance}%`;
+        const value = parseInt(e.target.value);
+        this.setTolerance(value);
+        toleranceInput.value = this.tolerance;
+      });
+
+      // Input to slider sync
+      toleranceInput.addEventListener("input", (e) => {
+        const value = parseInt(e.target.value);
+        if (value >= 0 && value <= 100) {
+          this.setTolerance(value);
+          toleranceSlider.value = this.tolerance;
+        }
+      });
+
+      // Validate on blur
+      toleranceInput.addEventListener("blur", (e) => {
+        const value = parseInt(e.target.value);
+        if (isNaN(value) || value < 0 || value > 100) {
+          e.target.value = this.tolerance;
+        }
       });
     }
 

@@ -292,14 +292,14 @@ class SmoothSharpenTool {
         <label for="smoothsharpen-intensity">Intensity:</label>
         <div class="slider-container">
           <input type="range" id="smoothsharpen-intensity" min="0" max="100" value="${this.intensity}">
-          <span class="slider-value">${this.intensity}%</span>
+          <input type="number" class="slider-value-input" data-slider="smoothsharpen-intensity" min="0" max="100" value="${this.intensity}">%
         </div>
       </div>
       <div class="setting-group">
         <label for="smoothsharpen-size">Size:</label>
         <div class="slider-container">
           <input type="range" id="smoothsharpen-size" min="1" max="10" value="${this.size}">
-          <span class="slider-value">${this.size}</span>
+          <input type="number" class="slider-value-input" data-slider="smoothsharpen-size" min="1" max="10" value="${this.size}">
         </div>
       </div>
       <div class="setting-group">
@@ -315,7 +315,7 @@ class SmoothSharpenTool {
         </label>
       </div>
     `;
-  }
+}
 
   // Initialize tool settings event listeners
   initializeSettings() {
@@ -323,35 +323,75 @@ class SmoothSharpenTool {
     const sizeSlider = document.getElementById("smoothsharpen-size");
     const applyOnceCheckbox = document.getElementById("smoothsharpen-apply-once");
     const sharpenCheckbox = document.getElementById("smoothsharpen-sharpen-mode");
+    
+    // Get the number inputs
+    const intensityInput = document.querySelector('[data-slider="smoothsharpen-intensity"]');
+    const sizeInput = document.querySelector('[data-slider="smoothsharpen-size"]');
 
-    if (intensitySlider) {
-      const intensityValue = intensitySlider.nextElementSibling;
-      intensitySlider.addEventListener("input", (e) => {
-        this.setIntensity(parseInt(e.target.value));
-        intensityValue.textContent = `${this.intensity}%`;
-      });
+    if (intensitySlider && intensityInput) {
+        // Slider to input sync
+        intensitySlider.addEventListener("input", (e) => {
+            const value = parseInt(e.target.value);
+            this.setIntensity(value);
+            intensityInput.value = this.intensity;
+        });
+        
+        // Input to slider sync
+        intensityInput.addEventListener("input", (e) => {
+            const value = parseInt(e.target.value);
+            if (value >= 0 && value <= 100) {
+                this.setIntensity(value);
+                intensitySlider.value = this.intensity;
+            }
+        });
+        
+        // Validate on blur
+        intensityInput.addEventListener("blur", (e) => {
+            const value = parseInt(e.target.value);
+            if (isNaN(value) || value < 0 || value > 100) {
+                e.target.value = this.intensity;
+            }
+        });
     }
 
-    if (sizeSlider) {
-      const sizeValue = sizeSlider.nextElementSibling;
-      sizeSlider.addEventListener("input", (e) => {
-        this.setSize(parseInt(e.target.value));
-        sizeValue.textContent = this.size;
-      });
+    if (sizeSlider && sizeInput) {
+        // Slider to input sync
+        sizeSlider.addEventListener("input", (e) => {
+            const value = parseInt(e.target.value);
+            this.setSize(value);
+            sizeInput.value = this.size;
+        });
+        
+        // Input to slider sync
+        sizeInput.addEventListener("input", (e) => {
+            const value = parseInt(e.target.value);
+            if (value >= 1 && value <= 10) {
+                this.setSize(value);
+                sizeSlider.value = this.size;
+            }
+        });
+        
+        // Validate on blur
+        sizeInput.addEventListener("blur", (e) => {
+            const value = parseInt(e.target.value);
+            if (isNaN(value) || value < 1 || value > 10) {
+                e.target.value = this.size;
+            }
+        });
     }
 
     if (applyOnceCheckbox) {
-      applyOnceCheckbox.addEventListener("change", (e) => {
-        this.setApplyOnce(e.target.checked);
-      });
+        applyOnceCheckbox.addEventListener("change", (e) => {
+            this.setApplyOnce(e.target.checked);
+        });
     }
 
     if (sharpenCheckbox) {
-      sharpenCheckbox.addEventListener("change", (e) => {
-        this.setMode(e.target.checked ? "sharpen" : "smooth");
-      });
+        sharpenCheckbox.addEventListener("change", (e) => {
+            this.setMode(e.target.checked ? "sharpen" : "smooth");
+        });
     }
-  }
+}
 
   // Get tool cursor
   getCursor() {
