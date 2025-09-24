@@ -115,6 +115,7 @@ class PixelEditor {
       eyedropper: new EyedropperTool(this),
       brightness: new BrightnessTool(this),
       smoothsharpen: new SmoothSharpenTool(this), // Add this line
+      shape : new ShapeTool(this), // Add this line
     };
 
     // Set tool colors and settings from saved preferences

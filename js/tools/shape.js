@@ -5,13 +5,12 @@ class ShapeTool {
     this.name = "shape";
     this.size = 1;
     this.opacity = 100;
-    this.color = [0, 0, 0, 255]; // Black
-    this.shapeType = "line"; // line, rectangle, circle
+    this.color = [0, 0, 0, 255];
+    this.shapeType = "line";
     this.filled = false;
     this.isDrawing = false;
     this.startX = 0;
     this.startY = 0;
-    this.previewPixels = []; // Store preview pixels
   }
 
   // Handle mouse down event
@@ -20,10 +19,9 @@ class ShapeTool {
     this.isDrawing = true;
     this.startX = x;
     this.startY = y;
-    this.previewPixels = [];
     this.editor.layerManager.startBatchOperation();
-    
-    // Show preview
+
+    // Show preview using canvas manager
     this.updatePreview(x, y);
   }
 
@@ -37,11 +35,11 @@ class ShapeTool {
   onMouseUp(x, y, event) {
     if (!this.editor.layerManager || !this.isDrawing) return;
     this.isDrawing = false;
-    
+
     // Clear preview and draw final shape
-    this.clearPreview();
+    this.editor.canvasManager.clearShapePreview();
     this.drawShape(this.startX, this.startY, x, y);
-    
+
     this.editor.layerManager.endBatchOperation();
     this.editor.updateUI();
   }
@@ -55,38 +53,56 @@ class ShapeTool {
   onMouseLeave(event) {
     if (this.isDrawing) {
       this.isDrawing = false;
-      this.clearPreview();
+      this.editor.canvasManager.clearShapePreview();
       this.editor.layerManager.endBatchOperation();
       this.editor.updateUI();
     }
   }
 
-  // Update preview while dragging
+  // Update preview using canvas manager
   updatePreview(endX, endY) {
-    this.clearPreview();
-    this.previewPixels = this.getShapePixels(this.startX, this.startY, endX, endY);
-    
-    // Draw preview on overlay canvas
-    if (this.editor.canvasManager && this.editor.canvasManager.overlayCtx) {
-      const ctx = this.editor.canvasManager.overlayCtx;
-      const pixelSize = this.editor.canvasManager.pixelSize;
-      
-      ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-      ctx.fillStyle = `rgba(${this.color[0]}, ${this.color[1]}, ${this.color[2]}, ${this.opacity / 100})`;
-      
-      this.previewPixels.forEach(([x, y]) => {
-        ctx.fillRect(x * pixelSize, y * pixelSize, pixelSize, pixelSize);
-      });
-    }
+    if (!this.editor.canvasManager) return;
+
+    const previewPixels = this.getShapePixels(
+      this.startX,
+      this.startY,
+      endX,
+      endY
+    );
+
+    // Create shape info for preview
+    const shapeInfo = this.getShapeInfo(this.startX, this.startY, endX, endY);
+
+    this.editor.canvasManager.showShapePreviewWithInfo(
+      previewPixels, 
+      this.color, 
+      this.opacity,
+      shapeInfo
+    );
   }
 
-  // Clear preview
-  clearPreview() {
-    if (this.editor.canvasManager && this.editor.canvasManager.overlayCtx) {
-      this.editor.canvasManager.overlayCtx.clearRect(0, 0, 
-        this.editor.canvasManager.overlayCtx.canvas.width, 
-        this.editor.canvasManager.overlayCtx.canvas.height);
+  // Get shape information for preview display
+  getShapeInfo(startX, startY, endX, endY) {
+    const info = { type: this.shapeType };
+    
+    switch (this.shapeType) {
+      case "line":
+        const dx = endX - startX;
+        const dy = endY - startY;
+        info.length = Math.round(Math.sqrt(dx * dx + dy * dy));
+        break;
+      case "rectangle":
+        info.width = Math.abs(endX - startX) + 1;
+        info.height = Math.abs(endY - startY) + 1;
+        break;
+      case "circle":
+        info.radius = Math.round(
+          Math.sqrt(Math.pow(endX - startX, 2) + Math.pow(endY - startY, 2))
+        );
+        break;
     }
+    
+    return info;
   }
 
   // Draw final shape
@@ -94,11 +110,11 @@ class ShapeTool {
     const pixels = this.getShapePixels(startX, startY, endX, endY);
     const color = [...this.color];
     color[3] = Math.round((color[3] * this.opacity) / 100);
-    
+
     pixels.forEach(([x, y]) => {
       this.drawPixel(x, y, color);
     });
-    
+
     this.editor.canvasManager.render();
   }
 
@@ -119,7 +135,7 @@ class ShapeTool {
   // Get pixels for a line
   getLinePixels(x1, y1, x2, y2) {
     const pixels = [];
-    
+
     // Bresenham's line algorithm
     const dx = Math.abs(x2 - x1);
     const dy = Math.abs(y2 - y1);
@@ -189,7 +205,9 @@ class ShapeTool {
   // Get pixels for a circle
   getCirclePixels(centerX, centerY, endX, endY) {
     const pixels = [];
-    const radius = Math.round(Math.sqrt(Math.pow(endX - centerX, 2) + Math.pow(endY - centerY, 2)));
+    const radius = Math.round(
+      Math.sqrt(Math.pow(endX - centerX, 2) + Math.pow(endY - centerY, 2))
+    );
 
     if (radius === 0) {
       const brushPixels = this.getBrushPixels(centerX, centerY);
@@ -200,7 +218,9 @@ class ShapeTool {
       // Fill the circle
       for (let y = centerY - radius; y <= centerY + radius; y++) {
         for (let x = centerX - radius; x <= centerX + radius; x++) {
-          const distance = Math.sqrt(Math.pow(x - centerX, 2) + Math.pow(y - centerY, 2));
+          const distance = Math.sqrt(
+            Math.pow(x - centerX, 2) + Math.pow(y - centerY, 2)
+          );
           if (distance <= radius) {
             const brushPixels = this.getBrushPixels(x, y);
             pixels.push(...brushPixels);
@@ -215,12 +235,16 @@ class ShapeTool {
 
       const addCirclePoints = (cx, cy, x, y) => {
         const points = [
-          [cx + x, cy + y], [cx - x, cy + y],
-          [cx + x, cy - y], [cx - x, cy - y],
-          [cx + y, cy + x], [cx - y, cy + x],
-          [cx + y, cy - x], [cx - y, cy - x]
+          [cx + x, cy + y],
+          [cx - x, cy + y],
+          [cx + x, cy - y],
+          [cx - x, cy - y],
+          [cx + y, cy + x],
+          [cx - y, cy + x],
+          [cx + y, cy - x],
+          [cx - y, cy - x],
         ];
-        
+
         points.forEach(([px, py]) => {
           const brushPixels = this.getBrushPixels(px, py);
           pixels.push(...brushPixels);
@@ -270,9 +294,9 @@ class ShapeTool {
   // Draw a single pixel
   drawPixel(x, y, color) {
     if (!this.editor.layerManager) return;
-    
+
     const layerManager = this.editor.layerManager;
-    
+
     // Check bounds
     if (x >= 0 && x < layerManager.width && y >= 0 && y < layerManager.height) {
       if (this.opacity < 100) {
@@ -299,9 +323,15 @@ class ShapeTool {
       return [0, 0, 0, 0];
     }
 
-    const blendedR = Math.round((fr * fgAlpha + br * bgAlpha * (1 - fgAlpha)) / blendedAlpha);
-    const blendedG = Math.round((fg * fgAlpha + bg * bgAlpha * (1 - fgAlpha)) / blendedAlpha);
-    const blendedB = Math.round((fb * fgAlpha + bb * bgAlpha * (1 - fgAlpha)) / blendedAlpha);
+    const blendedR = Math.round(
+      (fr * fgAlpha + br * bgAlpha * (1 - fgAlpha)) / blendedAlpha
+    );
+    const blendedG = Math.round(
+      (fg * fgAlpha + bg * bgAlpha * (1 - fgAlpha)) / blendedAlpha
+    );
+    const blendedB = Math.round(
+      (fb * fgAlpha + bb * bgAlpha * (1 - fgAlpha)) / blendedAlpha
+    );
 
     return [blendedR, blendedG, blendedB, Math.round(blendedAlpha * 255)];
   }
@@ -364,35 +394,53 @@ class ShapeTool {
   // Get settings HTML
   getSettingsHTML() {
     return `
-      <div class="setting-group">
-        <label for="shape-type">Shape:</label>
-        <select id="shape-type" class="shape-select">
-          <option value="line" ${this.shapeType === "line" ? "selected" : ""}>Line</option>
-          <option value="rectangle" ${this.shapeType === "rectangle" ? "selected" : ""}>Rectangle</option>
-          <option value="circle" ${this.shapeType === "circle" ? "selected" : ""}>Circle</option>
-        </select>
+    <div class="setting-group">
+      <label for="shape-type">Shape:</label>
+      <select id="shape-type" class="shape-select">
+        <option value="line" ${
+          this.shapeType === "line" ? "selected" : ""
+        }>Line</option>
+        <option value="rectangle" ${
+          this.shapeType === "rectangle" ? "selected" : ""
+        }>Rectangle</option>
+        <option value="circle" ${
+          this.shapeType === "circle" ? "selected" : ""
+        }>Circle</option>
+      </select>
+    </div>
+    <div class="setting-group">
+      <label for="shape-size">Size:</label>
+      <div class="slider-container">
+        <input type="range" id="shape-size" min="1" max="10" value="${
+          this.size
+        }">
+        <input type="number" class="slider-value-input" data-slider="shape-size" min="1" max="10" value="${
+          this.size
+        }">
       </div>
-      <div class="setting-group">
-        <label for="shape-size">Size:</label>
-        <div class="slider-container">
-          <input type="range" id="shape-size" min="1" max="10" value="${this.size}">
-          <input type="number" class="slider-value-input" data-slider="shape-size" min="1" max="10" value="${this.size}">
-        </div>
+    </div>
+    <div class="setting-group">
+      <label for="shape-opacity">Opacity:</label>
+      <div class="slider-container">
+        <input type="range" id="shape-opacity" min="0" max="100" value="${
+          this.opacity
+        }">
+        <input type="number" class="slider-value-input" data-slider="shape-opacity" min="0" max="100" value="${
+          this.opacity
+        }">%
       </div>
-      <div class="setting-group">
-        <label for="shape-opacity">Opacity:</label>
-        <div class="slider-container">
-          <input type="range" id="shape-opacity" min="0" max="100" value="${this.opacity}">
-          <input type="number" class="slider-value-input" data-slider="shape-opacity" min="0" max="100" value="${this.opacity}">%
-        </div>
-      </div>
-      <div class="setting-group" id="shape-filled-group" style="${this.shapeType === 'line' ? 'display: none;' : ''}">
-        <label>
-          <input type="checkbox" id="shape-filled" ${this.filled ? "checked" : ""}>
-          Filled
-        </label>
-      </div>
-    `;
+    </div>
+    <div class="setting-group" id="shape-filled-group" style="${
+      this.shapeType === "line" ? "display: none;" : ""
+    }">
+      <label>
+        <input type="checkbox" id="shape-filled" ${
+          this.filled ? "checked" : ""
+        }>
+        Fill
+      </label>
+    </div>
+  `;
   }
 
   // Initialize settings
@@ -402,16 +450,18 @@ class ShapeTool {
     const opacitySlider = document.getElementById("shape-opacity");
     const filledCheckbox = document.getElementById("shape-filled");
     const filledGroup = document.getElementById("shape-filled-group");
-    
+
     const sizeInput = document.querySelector('[data-slider="shape-size"]');
-    const opacityInput = document.querySelector('[data-slider="shape-opacity"]');
+    const opacityInput = document.querySelector(
+      '[data-slider="shape-opacity"]'
+    );
 
     if (shapeTypeSelect) {
       shapeTypeSelect.addEventListener("change", (e) => {
         this.setShapeType(e.target.value);
         // Show/hide filled option based on shape type
         if (filledGroup) {
-          filledGroup.style.display = e.target.value === 'line' ? 'none' : '';
+          filledGroup.style.display = e.target.value === "line" ? "none" : "";
         }
       });
     }
@@ -422,7 +472,7 @@ class ShapeTool {
         this.setSize(value);
         sizeInput.value = this.size;
       });
-      
+
       sizeInput.addEventListener("input", (e) => {
         const value = parseInt(e.target.value);
         if (value >= 1 && value <= 10) {
@@ -430,7 +480,7 @@ class ShapeTool {
           sizeSlider.value = this.size;
         }
       });
-      
+
       sizeInput.addEventListener("blur", (e) => {
         const value = parseInt(e.target.value);
         if (isNaN(value) || value < 1 || value > 10) {
@@ -445,7 +495,7 @@ class ShapeTool {
         this.setOpacity(value);
         opacityInput.value = this.opacity;
       });
-      
+
       opacityInput.addEventListener("input", (e) => {
         const value = parseInt(e.target.value);
         if (value >= 0 && value <= 100) {
@@ -453,7 +503,7 @@ class ShapeTool {
           opacitySlider.value = this.opacity;
         }
       });
-      
+
       opacityInput.addEventListener("blur", (e) => {
         const value = parseInt(e.target.value);
         if (isNaN(value) || value < 0 || value > 100) {

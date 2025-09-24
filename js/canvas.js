@@ -25,7 +25,7 @@ class CanvasManager {
 
     // NEW: Draw size display
     this.renderSelectionSizeDisplay(selection);
-}
+  }
 
   // NEW: Render selection size display
   renderSelectionSizeDisplay(selection) {
@@ -969,6 +969,23 @@ class CanvasManager {
     this.overlayCtx.globalAlpha = 1.0;
     this.overlayCtx.setLineDash([]);
   }
+  // Add this method to CanvasManager class
+  clearOverlayForTool() {
+    // Clear overlay but preserve any existing selection handles
+    const hasActiveSelection =
+      window.editor &&
+      window.editor.currentTool &&
+      window.editor.currentTool.name === "select" &&
+      window.editor.currentTool.selection;
+
+    if (hasActiveSelection) {
+      // Don't clear if we have an active selection - let the tool handle it
+      return false;
+    }
+
+    this.clearOverlay();
+    return true;
+  }
 
   /**
    * Get selection bounds
@@ -1750,4 +1767,203 @@ class CanvasManager {
       tolerance
     );
   }
+
+  // Add these methods to the CanvasManager class
+
+/**
+ * Show shape preview overlay
+ */
+showShapePreview(pixels, color, opacity = 100) {
+  if (!pixels || pixels.length === 0) return;
+
+  // Clear overlay but preserve any existing selection handles
+  this._clearOverlayPreservingShapePreview();
+
+  // Set up drawing context for preview
+  this.overlayCtx.save();
+  this.overlayCtx.globalAlpha = 0.7; // Semi-transparent preview
+  
+  // Calculate final color with opacity
+  const finalOpacity = (opacity / 100) * 0.7; // Apply both preview and tool opacity
+  this.overlayCtx.fillStyle = `rgba(${color[0]}, ${color[1]}, ${color[2]}, ${finalOpacity})`;
+
+  // Draw all preview pixels in one batch operation
+  this.overlayCtx.beginPath();
+  pixels.forEach(([x, y]) => {
+    // Only draw pixels within bounds
+    if (this.currentSprite && 
+        x >= 0 && x < this.currentSprite.width && 
+        y >= 0 && y < this.currentSprite.height) {
+      this.overlayCtx.rect(x * this.zoomLevel, y * this.zoomLevel, this.zoomLevel, this.zoomLevel);
+    }
+  });
+  this.overlayCtx.fill();
+
+  this.overlayCtx.restore();
+
+  // Re-render any selection handles that should be preserved
+  this._restoreSelectionHandles();
+}
+
+/**
+ * Clear shape preview
+ */
+clearShapePreview() {
+  // Check if select tool has an active selection
+  const hasActiveSelection =
+    window.editor &&
+    window.editor.tools &&
+    window.editor.tools.select &&
+    window.editor.tools.select.selection;
+
+  if (!hasActiveSelection) {
+    // Safe to clear everything
+    this.clearOverlay();
+  } else {
+    // More complex clearing to preserve selection handles
+    // In practice, just re-render the selection box
+    this.renderSelectionBox(window.editor.tools.select.selection);
+  }
+}
+
+/**
+ * Clear overlay while preserving selection for shape preview
+ */
+_clearOverlayPreservingShapePreview() {
+  const ctx = this.overlayCtx;
+
+  // Check if select tool has an active selection
+  const hasActiveSelection =
+    window.editor &&
+    window.editor.tools &&
+    window.editor.tools.select &&
+    window.editor.tools.select.selection;
+
+  if (!hasActiveSelection) {
+    // Safe to clear everything
+    ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+  } else {
+    // For shape preview, we can safely clear and then restore selection
+    ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+  }
+}
+
+/**
+ * Show shape preview with stroke outline (for hollow shapes)
+ */
+showShapePreviewWithStroke(pixels, color, opacity = 100, strokeWidth = 1) {
+  if (!pixels || pixels.length === 0) return;
+
+  this._clearOverlayPreservingShapePreview();
+
+  this.overlayCtx.save();
+  this.overlayCtx.globalAlpha = 0.7;
+  
+  const finalOpacity = (opacity / 100) * 0.7;
+  
+  // For stroke preview, we'll draw individual pixels with stroke
+  this.overlayCtx.strokeStyle = `rgba(${color[0]}, ${color[1]}, ${color[2]}, ${finalOpacity})`;
+  this.overlayCtx.lineWidth = strokeWidth;
+
+  pixels.forEach(([x, y]) => {
+    if (this.currentSprite && 
+        x >= 0 && x < this.currentSprite.width && 
+        y >= 0 && y < this.currentSprite.height) {
+      this.overlayCtx.strokeRect(
+        x * this.zoomLevel + 0.5, 
+        y * this.zoomLevel + 0.5, 
+        this.zoomLevel - 1, 
+        this.zoomLevel - 1
+      );
+    }
+  });
+
+  this.overlayCtx.restore();
+  this._restoreSelectionHandles();
+}
+
+/**
+ * Show shape preview with size information
+ */
+showShapePreviewWithInfo(pixels, color, opacity = 100, shapeInfo = null) {
+  // First show the regular shape preview
+  this.showShapePreview(pixels, color, opacity);
+  
+  // Then add info overlay if provided
+  if (shapeInfo && pixels.length > 0) {
+    this._renderShapeInfo(pixels, shapeInfo);
+  }
+}
+
+/**
+ * Render shape information overlay
+ */
+_renderShapeInfo(pixels, info) {
+  if (!pixels || pixels.length === 0) return;
+
+  // Find bounds of the shape
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  pixels.forEach(([x, y]) => {
+    minX = Math.min(minX, x);
+    minY = Math.min(minY, y);
+    maxX = Math.max(maxX, x);
+    maxY = Math.max(maxY, y);
+  });
+
+  const width = maxX - minX + 1;
+  const height = maxY - minY + 1;
+  const centerX = (minX + maxX) / 2;
+  const centerY = (minY + maxY) / 2;
+
+  // Prepare info text
+  let infoText = '';
+  if (info.type === 'line') {
+    const length = Math.round(Math.sqrt(Math.pow(width, 2) + Math.pow(height, 2)));
+    infoText = `Length: ${length}px`;
+  } else if (info.type === 'rectangle') {
+    infoText = `${width} × ${height}px`;
+  } else if (info.type === 'circle') {
+    const radius = Math.round(Math.max(width, height) / 2);
+    infoText = `Radius: ${radius}px`;
+  }
+
+  if (!infoText) return;
+
+  // Convert to screen coordinates
+  const screenCenterX = centerX * this.zoomLevel;
+  const screenCenterY = centerY * this.zoomLevel;
+
+  // Set text styling
+  this.overlayCtx.save();
+  this.overlayCtx.font = "12px Arial";
+  this.overlayCtx.textAlign = "center";
+  this.overlayCtx.textBaseline = "middle";
+
+  // Measure text to create background
+  const textMetrics = this.overlayCtx.measureText(infoText);
+  const textWidth = textMetrics.width;
+  const textHeight = 12;
+  const padding = 4;
+
+  // Position above the shape if possible
+  let textY = screenCenterY - (height * this.zoomLevel) / 2 - 20;
+  if (textY < textHeight + padding) {
+    textY = screenCenterY + (height * this.zoomLevel) / 2 + 20;
+  }
+
+  // Draw semi-transparent background
+  this.overlayCtx.fillStyle = "rgba(0, 0, 0, 0.7)";
+  this.overlayCtx.fillRect(
+    screenCenterX - textWidth / 2 - padding,
+    textY - textHeight / 2 - padding,
+    textWidth + padding * 2,
+    textHeight + padding * 2
+  );
+
+  // Draw white text
+  this.overlayCtx.fillStyle = "#ffffff";
+  this.overlayCtx.fillText(infoText, screenCenterX, textY);
+
+  this.overlayCtx.restore();
+}
 }
