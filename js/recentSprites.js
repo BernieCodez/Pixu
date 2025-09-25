@@ -386,7 +386,7 @@ class RecentSpritesManager {
     sprites.forEach((sprite) => {
       const spriteElement = document.createElement("div");
       spriteElement.className = "recent-sprite-item";
-      spriteElement.title = `${sprite.name} (${sprite.size})`;
+      spriteElement.setAttribute("data-tooltip", `${sprite.name} (${sprite.size})`);
 
       spriteElement.innerHTML = `
         <img src="${sprite.url}" alt="${sprite.name}" loading="lazy">

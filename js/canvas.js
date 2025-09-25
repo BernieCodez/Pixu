@@ -1568,7 +1568,10 @@ class CanvasManager {
           color = "#222";
           break;
         case "eraser":
-          color = "#e53935";
+          color = "#c4c4c4ff";
+          break;
+        case "shape":
+          color = "#ff00ffff";
           break;
         case "bucket":
           color = "#1976d2";
@@ -1582,8 +1585,11 @@ class CanvasManager {
         case "brightness":
           color = "#ffd900ff";
           break;
-        default:
+        case "smoothsharpen":
           color = "#ff9800";
+          break;
+        default:
+          color = "#e53935";
       }
     }
 

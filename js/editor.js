@@ -116,6 +116,7 @@ class PixelEditor {
       brightness: new BrightnessTool(this),
       smoothsharpen: new SmoothSharpenTool(this), // Add this line
       shape : new ShapeTool(this), // Add this line
+      miscellaneous: new MiscellaneousTool(this),
     };
 
     // Set tool colors and settings from saved preferences

@@ -332,7 +332,7 @@ input[type="number"]:hover {
     color: #fff;
 }
 .canvas-data{
-    z-index: 999;
+    z-index: 1;
     position:absolute;
     bottom: 20px;
     left: 20px;
@@ -371,13 +371,13 @@ input[type="number"]:hover {
 }
 
 /* Tooltips */
-[title]:hover::after {
-    content: attr(title);
+button:hover::after {
+    content: attr(data-tooltip);
     position: fixed;
     bottom: auto;
     top: auto;
     left: 50%;
-    transform: translateX(-50%);
+    transform: translateX(-50%) translateY(50%);
     background: rgba(0, 0, 0, 0.9);
     color: white;
     padding: 6px 8px;
@@ -389,18 +389,24 @@ input[type="number"]:hover {
     pointer-events: none;
 }
 
+button:hover{
+    z-index:100;
+}
+
 /* Special positioning for toolbar tooltips */
-.tool-btn[title]:hover::after {
+.tool-btn:hover::after {
+    content: attr(data-tooltip);
+    background: rgba(0, 0, 0, 0.9);
     z-index: 10001;
     position: fixed;
     top: 120px;
     left: var(--tooltip-x, 50%);
-    transform: translateX(-50%);
+    transform: translateY(-420%);
     margin-top: 0;
 }
 
 .tool-btn:hover {
-    --tooltip-x: 50%;
+    --tooltip-x: 125%;
 }
 
 /* Responsive Design */
@@ -422,7 +428,7 @@ input[type="number"]:hover {
 }
 
 /* Shape Select Dropdown Styling */
-.shape-select {
+.toolbar-dropdown {
   background: #2d2d2d;
   border: 1px solid #555;
   border-radius: 6px;
@@ -432,7 +438,7 @@ input[type="number"]:hover {
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s ease;
-  min-width: 120px;
+  width: 85px;
   appearance: none;
   background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6,9 12,15 18,9'%3e%3c/polyline%3e%3c/svg%3e");
   background-repeat: no-repeat;
@@ -441,35 +447,34 @@ input[type="number"]:hover {
   padding-right: 32px;
 }
 
-.shape-select:hover {
-  background: #3a3a3a;
+.toolbar-dropdown:hover {
+  background-color: #3a3a3a;
   border-color: #666;
-  transform: translateY(-1px);
 }
 
-.shape-select:focus {
+.toolbar-dropdown:focus {
   outline: none;
   border-color: #00d4ff;
   box-shadow: 0 0 0 2px rgba(0, 212, 255, 0.3);
-  background: #3a3a3a;
+  background-color: #3a3a3a;
 }
 
-.shape-select option {
+.toolbar-dropdown option {
   background: #2d2d2d;
   color: #fff;
   padding: 8px 12px;
   font-weight: 500;
 }
 
-.shape-select option:hover {
+.toolbar-dropdown option:hover {
   background: #00d4ff;
   color: #1a1a1a;
 }
 
-.shape-select option:checked {
+/* .toolbar-dropdown option:checked {
   background: #00d4ff;
   color: #1a1a1a;
-}
+} */
 
 /* Enhanced Setting Group for Shape Tool */
 .setting-group label {

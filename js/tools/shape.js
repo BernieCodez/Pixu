@@ -396,7 +396,7 @@ class ShapeTool {
     return `
     <div class="setting-group">
       <label for="shape-type">Shape:</label>
-      <select id="shape-type" class="shape-select">
+      <select id="shape-type" class="shape-select toolbar-dropdown">
         <option value="line" ${
           this.shapeType === "line" ? "selected" : ""
         }>Line</option>

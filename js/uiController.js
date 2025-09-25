@@ -199,12 +199,11 @@ class UIController {
       }
 
       // Tooltip showing color values
-      swatch.title =
-        a < 255
+      swatch.setAttribute("data-tooltip", a < 255
           ? `RGBA: (${r}, ${g}, ${b}, ${Math.round(
               (a / 255) * 100
             )}%)\nHEX: ${hex}`
-          : `RGB: (${r}, ${g}, ${b})\nHEX: ${hex}`;
+          : `RGB: (${r}, ${g}, ${b})\nHEX: ${hex}`);
 
       // Click handler to select color
       swatch.addEventListener("click", () => {
@@ -475,17 +474,17 @@ class UIController {
         layerItem.dataset.index = i;
 
         layerItem.innerHTML = `
-        <span class="drag-handle" title="Drag to reorder">
+        <span class="drag-handle" data-tooltip="Drag to reorder">
           <i class="fas fa-grip-vertical"></i>
         </span>
         <span class="layer-name">${layer.name || `Layer ${i + 1}`}</span>
         <input type="range" class="layer-opacity-slider" min="0" max="100" value="${Math.round(
           (layer.opacity || 1) * 100
-        )}" title="Opacity" />
+        )}" data-tooltip="Opacity" />
         <span class="layer-opacity-value">${Math.round(
           (layer.opacity || 1) * 100
         )}%</span>
-        <button class="btn btn-sm layer-visibility" title="Toggle Visibility">
+        <button class="btn btn-sm layer-visibility" data-tooltip="Toggle Visibility">
           <i class="fas ${
             layer.visible !== false ? "fa-eye" : "fa-eye-slash"
           }"></i>
