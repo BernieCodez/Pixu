@@ -199,11 +199,14 @@ class UIController {
       }
 
       // Tooltip showing color values
-      swatch.setAttribute("data-tooltip", a < 255
+      swatch.setAttribute(
+        "data-tooltip",
+        a < 255
           ? `RGBA: (${r}, ${g}, ${b}, ${Math.round(
               (a / 255) * 100
             )}%)\nHEX: ${hex}`
-          : `RGB: (${r}, ${g}, ${b})\nHEX: ${hex}`);
+          : `RGB: (${r}, ${g}, ${b})\nHEX: ${hex}`
+      );
 
       // Click handler to select color
       swatch.addEventListener("click", () => {
@@ -275,7 +278,6 @@ class UIController {
   }
 
   // Replace the initializeColorWheel method in UIController class
-
   initializeColorWheel() {
     // Prevent duplicate initialization
     if (this.colorPicker || this.colorWheel) {
@@ -291,46 +293,461 @@ class UIController {
 
     // Clear any existing content first
     const existingPickers = colorWheelContainer.querySelectorAll(
-      ".iro__color-picker, canvas"
+      ".iro__color-picker, canvas, .custom-color-picker"
     );
     existingPickers.forEach((picker) => picker.remove());
 
-    if (window.ColorWheel) {
-      // If using custom ColorWheel class
-      const canvas = colorWheelContainer.querySelector("canvas");
-      if (canvas) {
-        this.colorWheel = new window.ColorWheel(canvas, (hex) => {
-          const rgba = this.hexToRgba(hex);
-          this.editor.setPrimaryColor(rgba);
-          this.updateColorDisplay();
-          this.updateColorInputs(hex, rgba);
-          this.deselectColorPalette();
-        });
-      }
-    } else if (window.iro) {
-      // Fallback to iro.js - only create if not already exists
-      try {
-        this.colorPicker = new iro.ColorPicker(colorWheelContainer, {
-          width: 120,
-          color: {
-            hsl: { h: 0, s: 50, l: 50 },
-          },
-          borderWidth: 2,
-          borderColor: "#333",
-        });
+    // Create custom color picker with large square and two sliders
+    this.createCustomColorPicker(colorWheelContainer);
+  }
 
-        this.colorPicker.on("color:change", (color) => {
-          const hex = color.hexString;
-          const rgba = this.hexToRgba(hex);
-          this.editor.setPrimaryColor(rgba);
-          this.updateColorDisplay();
-          this.updateColorInputs(hex, rgba);
-          this.deselectColorPalette();
-        });
-      } catch (error) {
-        console.error("Failed to create iro color picker:", error);
+  createCustomColorPicker(container) {
+    // Create the main picker container
+    const pickerContainer = document.createElement("div");
+    pickerContainer.className = "custom-color-picker";
+    pickerContainer.style.cssText = `
+      width: auto;
+      height: auto;
+      position: relative;
+      margin: 0 auto;
+    `;
+
+    // Create the main color square (HSL saturation/lightness picker)
+    const colorSquare = document.createElement("canvas");
+    colorSquare.width = 200;
+    colorSquare.height = 160;
+    colorSquare.className = "color-square";
+    colorSquare.style.cssText = `
+      width: 200px;
+      height: 160px;
+      border: 1px solid #333;
+      cursor: crosshair;
+      display: block;
+      margin-bottom: 8px;
+      border-radius: 10px;
+    `;
+
+    // Create hue slider
+    const hueSlider = document.createElement("canvas");
+    hueSlider.width = 200;
+    hueSlider.height = 20;
+    hueSlider.className = "hue-slider";
+    hueSlider.style.cssText = `
+      width: 200px;
+      height: 20px;
+      border: 1px solid #333;
+      cursor: pointer;
+      display: block;
+      margin-bottom: 8px;
+      border-radius: 7px;
+    `;
+
+    // Create opacity slider
+    const opacitySlider = document.createElement("canvas");
+    opacitySlider.width = 200;
+    opacitySlider.height = 20;
+    opacitySlider.className = "opacity-slider";
+    opacitySlider.style.cssText = `
+      width: 200px;
+      height: 20px;
+      border: 1px solid #333;
+      cursor: pointer;
+      display: block;
+      border-radius: 7px;
+    `;
+
+    // Add elements to container
+    pickerContainer.appendChild(colorSquare);
+    pickerContainer.appendChild(hueSlider);
+    pickerContainer.appendChild(opacitySlider);
+    container.appendChild(pickerContainer);
+
+    // Initialize picker state
+    this.pickerState = {
+      hue: 0,
+      saturation: 100,
+      lightness: 50,
+      opacity: 100,
+      squareX: 200,
+      squareY: 80,
+      hueX: 0,
+      opacityX: 200,
+    };
+
+    // Set up event handlers and render
+    this.setupColorSquareEvents(colorSquare);
+    this.setupHueSliderEvents(hueSlider);
+    this.setupOpacitySliderEvents(opacitySlider);
+
+    this.renderColorSquare(colorSquare);
+    this.renderHueSlider(hueSlider);
+    this.renderOpacitySlider(opacitySlider);
+
+    // Store references
+    this.colorSquare = colorSquare;
+    this.hueSlider = hueSlider;
+    this.opacitySlider = opacitySlider;
+  }
+
+  setupColorSquareEvents(canvas) {
+    let isDragging = false;
+
+    const updateColorFromSquare = (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const x = Math.max(0, Math.min(200, e.clientX - rect.left));
+      const y = Math.max(0, Math.min(160, e.clientY - rect.top));
+
+      this.pickerState.squareX = x;
+      this.pickerState.squareY = y;
+
+      // Calculate saturation from X position (0 to 100%)
+      this.pickerState.saturation = (x / 200) * 100;
+
+      // Calculate lightness to match the actual rendering:
+      // The rendering creates: saturation gradient (white->hue) + black overlay
+      // This means we need to account for both the base lightness and the black overlay
+      const verticalRatio = y / 160; // 0 at top, 1 at bottom
+      const horizontalRatio = x / 200; // 0 at left, 1 at right
+
+      // At the top (y=0): white (100% lightness) to pure hue (50% lightness)
+      // At the bottom (y=160): black (0% lightness)
+      // The horizontal position affects how much of the pure hue we see
+      const baseLightness = 100 - horizontalRatio * 50; // 100% at left, 50% at right
+      this.pickerState.lightness = baseLightness * (1 - verticalRatio);
+
+      this.updateColorFromPicker();
+    };
+
+    canvas.addEventListener("mousedown", (e) => {
+      isDragging = true;
+      updateColorFromSquare(e);
+    });
+
+    document.addEventListener("mousemove", (e) => {
+      if (isDragging) {
+        updateColorFromSquare(e);
+      }
+    });
+
+    document.addEventListener("mouseup", () => {
+      isDragging = false;
+    });
+  }
+
+  setupHueSliderEvents(canvas) {
+    let isDragging = false;
+
+    const updateHue = (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const x = Math.max(0, Math.min(200, e.clientX - rect.left));
+
+      this.pickerState.hueX = x;
+      this.pickerState.hue = (x / 200) * 360;
+
+      this.renderColorSquare(this.colorSquare);
+      this.renderOpacitySlider(this.opacitySlider);
+      this.updateColorFromPicker();
+    };
+
+    canvas.addEventListener("mousedown", (e) => {
+      isDragging = true;
+      updateHue(e);
+    });
+
+    document.addEventListener("mousemove", (e) => {
+      if (isDragging) {
+        updateHue(e);
+      }
+    });
+
+    document.addEventListener("mouseup", () => {
+      isDragging = false;
+    });
+  }
+
+  setupOpacitySliderEvents(canvas) {
+    let isDragging = false;
+
+    const updateOpacity = (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const x = Math.max(0, Math.min(200, e.clientX - rect.left));
+
+      this.pickerState.opacityX = x;
+      this.pickerState.opacity = (x / 200) * 100;
+
+      this.updateColorFromPicker();
+    };
+
+    canvas.addEventListener("mousedown", (e) => {
+      isDragging = true;
+      updateOpacity(e);
+    });
+
+    document.addEventListener("mousemove", (e) => {
+      if (isDragging) {
+        updateOpacity(e);
+      }
+    });
+
+    document.addEventListener("mouseup", () => {
+      isDragging = false;
+    });
+  }
+
+  renderColorSquare(canvas) {
+    const ctx = canvas.getContext("2d");
+    const width = canvas.width;
+    const height = canvas.height;
+
+    // Create saturation gradient (left to right: white to pure hue)
+    const saturationGradient = ctx.createLinearGradient(0, 0, width, 0);
+    const hueColor = this.hslToRgb(this.pickerState.hue, 100, 50);
+    saturationGradient.addColorStop(0, "white");
+    saturationGradient.addColorStop(
+      1,
+      `rgb(${hueColor[0]}, ${hueColor[1]}, ${hueColor[2]})`
+    );
+
+    ctx.fillStyle = saturationGradient;
+    ctx.fillRect(0, 0, width, height);
+
+    // Create lightness gradient (top to bottom: transparent to black)
+    const lightnessGradient = ctx.createLinearGradient(0, 0, 0, height);
+    lightnessGradient.addColorStop(0, "rgba(0, 0, 0, 0)");
+    lightnessGradient.addColorStop(1, "rgba(0, 0, 0, 1)");
+
+    ctx.fillStyle = lightnessGradient;
+    ctx.fillRect(0, 0, width, height);
+
+    // Draw crosshair at current position
+    ctx.strokeStyle = "#fff";
+    ctx.lineWidth = 2;
+    ctx.shadowColor = "#000";
+    ctx.shadowBlur = 2;
+
+    ctx.beginPath();
+    ctx.arc(
+      this.pickerState.squareX,
+      this.pickerState.squareY,
+      6,
+      0,
+      2 * Math.PI
+    );
+    ctx.stroke();
+
+    ctx.shadowBlur = 0;
+  }
+
+  renderHueSlider(canvas) {
+    const ctx = canvas.getContext("2d");
+    const width = canvas.width;
+    const height = canvas.height;
+
+    // Create rainbow gradient
+    const gradient = ctx.createLinearGradient(0, 0, width, 0);
+    const colors = [
+      "rgb(255, 0, 0)", // Red
+      "rgb(255, 255, 0)", // Yellow
+      "rgb(0, 255, 0)", // Green
+      "rgb(0, 255, 255)", // Cyan
+      "rgb(0, 0, 255)", // Blue
+      "rgb(255, 0, 255)", // Magenta
+      "rgb(255, 0, 0)", // Red again
+    ];
+
+    for (let i = 0; i < colors.length; i++) {
+      gradient.addColorStop(i / (colors.length - 1), colors[i]);
+    }
+
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, width, height);
+
+    // Draw slider handle
+    ctx.strokeStyle = "#fff";
+    ctx.lineWidth = 2;
+    ctx.shadowColor = "#000";
+    ctx.shadowBlur = 2;
+
+    ctx.beginPath();
+    ctx.rect(this.pickerState.hueX - 2, 0, 4, height);
+    ctx.stroke();
+
+    ctx.shadowBlur = 0;
+  }
+
+  renderOpacitySlider(canvas) {
+    const ctx = canvas.getContext("2d");
+    const width = canvas.width;
+    const height = canvas.height;
+
+    // Draw checkerboard background
+    const checkSize = 8;
+    for (let x = 0; x < width; x += checkSize) {
+      for (let y = 0; y < height; y += checkSize) {
+        const isEven =
+          (Math.floor(x / checkSize) + Math.floor(y / checkSize)) % 2 === 0;
+        ctx.fillStyle = isEven ? "#ccc" : "#fff";
+        ctx.fillRect(x, y, checkSize, checkSize);
       }
     }
+
+    // Create opacity gradient with current color
+    const currentColor = this.hslToRgb(
+      this.pickerState.hue,
+      this.pickerState.saturation,
+      this.pickerState.lightness
+    );
+    const gradient = ctx.createLinearGradient(0, 0, width, 0);
+    gradient.addColorStop(
+      0,
+      `rgba(${currentColor[0]}, ${currentColor[1]}, ${currentColor[2]}, 0)`
+    );
+    gradient.addColorStop(
+      1,
+      `rgba(${currentColor[0]}, ${currentColor[1]}, ${currentColor[2]}, 1)`
+    );
+
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, width, height);
+
+    // Draw slider handle
+    ctx.strokeStyle = "#fff";
+    ctx.lineWidth = 2;
+    ctx.shadowColor = "#000";
+    ctx.shadowBlur = 2;
+
+    ctx.beginPath();
+    ctx.rect(this.pickerState.opacityX - 2, 0, 4, height);
+    ctx.stroke();
+
+    ctx.shadowBlur = 0;
+  }
+
+  updateColorFromPicker() {
+    const rgb = this.hslToRgb(
+      this.pickerState.hue,
+      this.pickerState.saturation,
+      this.pickerState.lightness
+    );
+
+    const rgba = [
+      rgb[0],
+      rgb[1],
+      rgb[2],
+      Math.round((this.pickerState.opacity / 100) * 255),
+    ];
+    const hex = this.rgbaToHex([rgb[0], rgb[1], rgb[2], 255]);
+
+    this.editor.setPrimaryColor(rgba);
+    this.updateColorDisplay();
+    this.updateColorInputs(hex, rgba);
+    this.deselectColorPalette();
+
+    // Re-render all picker components
+    this.renderColorSquare(this.colorSquare);
+    this.renderHueSlider(this.hueSlider);
+    this.renderOpacitySlider(this.opacitySlider);
+  }
+
+  // Add method to update picker when color is set from external source
+  updatePickerFromColor(rgba) {
+    if (!this.pickerState || !this.colorSquare) return;
+
+    const [r, g, b, a] = rgba;
+    const hsl = this.rgbToHsl(r, g, b);
+
+    this.pickerState.hue = hsl[0];
+    this.pickerState.saturation = hsl[1];
+    this.pickerState.lightness = hsl[2];
+    this.pickerState.opacity = (a / 255) * 100;
+
+    // Update marker positions
+    this.pickerState.hueX = (this.pickerState.hue / 360) * 200;
+    this.pickerState.squareX = (this.pickerState.saturation / 100) * 200;
+
+    // Reverse the lightness calculation to find Y position
+    const horizontalRatio = this.pickerState.squareX / 200;
+    const baseLightness = 100 - horizontalRatio * 50;
+
+    if (baseLightness > 0) {
+      const verticalRatio = 1 - this.pickerState.lightness / baseLightness;
+      this.pickerState.squareY = Math.max(
+        0,
+        Math.min(160, verticalRatio * 160)
+      );
+    } else {
+      this.pickerState.squareY = 160; // Bottom for pure black
+    }
+
+    this.pickerState.opacityX = (this.pickerState.opacity / 100) * 200;
+
+    // Re-render all components
+    this.renderColorSquare(this.colorSquare);
+    this.renderHueSlider(this.hueSlider);
+    this.renderOpacitySlider(this.opacitySlider);
+  }
+
+  rgbToHsl(r, g, b) {
+    r /= 255;
+    g /= 255;
+    b /= 255;
+
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    let h,
+      s,
+      l = (max + min) / 2;
+
+    if (max === min) {
+      h = s = 0;
+    } else {
+      const d = max - min;
+      s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+
+      switch (max) {
+        case r:
+          h = (g - b) / d + (g < b ? 6 : 0);
+          break;
+        case g:
+          h = (b - r) / d + 2;
+          break;
+        case b:
+          h = (r - g) / d + 4;
+          break;
+      }
+      h /= 6;
+    }
+
+    return [h * 360, s * 100, l * 100];
+  }
+
+  hslToRgb(h, s, l) {
+    h = h / 360;
+    s = s / 100;
+    l = l / 100;
+
+    const hue2rgb = (p, q, t) => {
+      if (t < 0) t += 1;
+      if (t > 1) t -= 1;
+      if (t < 1 / 6) return p + (q - p) * 6 * t;
+      if (t < 1 / 2) return q;
+      if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+      return p;
+    };
+
+    let r, g, b;
+
+    if (s === 0) {
+      r = g = b = l;
+    } else {
+      const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+      const p = 2 * l - q;
+      r = hue2rgb(p, q, h + 1 / 3);
+      g = hue2rgb(p, q, h);
+      b = hue2rgb(p, q, h - 1 / 3);
+    }
+
+    return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)];
   }
 
   initializeRecentSprites() {
