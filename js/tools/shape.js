@@ -4,7 +4,6 @@ class ShapeTool {
     this.editor = editor;
     this.name = "shape";
     this.size = 1;
-    this.opacity = 100;
     this.color = [0, 0, 0, 255];
     this.shapeType = "line";
     this.filled = false;
@@ -69,14 +68,13 @@ class ShapeTool {
       endX,
       endY
     );
-
-    // Create shape info for preview
     const shapeInfo = this.getShapeInfo(this.startX, this.startY, endX, endY);
 
+    // Use color's alpha directly
     this.editor.canvasManager.showShapePreviewWithInfo(
-      previewPixels, 
-      this.color, 
-      this.opacity,
+      previewPixels,
+      this.color,
+      100, // Pass 100 since we're using color's alpha
       shapeInfo
     );
   }
@@ -84,7 +82,7 @@ class ShapeTool {
   // Get shape information for preview display
   getShapeInfo(startX, startY, endX, endY) {
     const info = { type: this.shapeType };
-    
+
     switch (this.shapeType) {
       case "line":
         const dx = endX - startX;
@@ -101,15 +99,14 @@ class ShapeTool {
         );
         break;
     }
-    
+
     return info;
   }
 
   // Draw final shape
   drawShape(startX, startY, endX, endY) {
     const pixels = this.getShapePixels(startX, startY, endX, endY);
-    const color = [...this.color];
-    color[3] = Math.round((color[3] * this.opacity) / 100);
+    const color = [...this.color]; // Use color's alpha directly
 
     pixels.forEach(([x, y]) => {
       this.drawPixel(x, y, color);
@@ -297,9 +294,9 @@ class ShapeTool {
 
     const layerManager = this.editor.layerManager;
 
-    // Check bounds
     if (x >= 0 && x < layerManager.width && y >= 0 && y < layerManager.height) {
-      if (this.opacity < 100) {
+      // Use color's alpha for blending
+      if (color[3] < 255) {
         const existingPixel = layerManager.getPixel(x, y);
         const blendedColor = this.blendColors(existingPixel, color);
         layerManager.setPixel(x, y, blendedColor);
@@ -339,11 +336,6 @@ class ShapeTool {
   // Set brush size
   setSize(size) {
     this.size = Math.max(1, Math.min(10, size));
-  }
-
-  // Set opacity
-  setOpacity(opacity) {
-    this.opacity = Math.max(0, Math.min(100, opacity));
   }
 
   // Set shape type
@@ -419,17 +411,6 @@ class ShapeTool {
         }">
       </div>
     </div>
-    <div class="setting-group">
-      <label for="shape-opacity">Opacity:</label>
-      <div class="slider-container">
-        <input type="range" id="shape-opacity" min="0" max="100" value="${
-          this.opacity
-        }">
-        <input type="number" class="slider-value-input" data-slider="shape-opacity" min="0" max="100" value="${
-          this.opacity
-        }">%
-      </div>
-    </div>
     <div class="setting-group" id="shape-filled-group" style="${
       this.shapeType === "line" ? "display: none;" : ""
     }">
@@ -445,79 +426,51 @@ class ShapeTool {
 
   // Initialize settings
   initializeSettings() {
-    const shapeTypeSelect = document.getElementById("shape-type");
-    const sizeSlider = document.getElementById("shape-size");
-    const opacitySlider = document.getElementById("shape-opacity");
-    const filledCheckbox = document.getElementById("shape-filled");
-    const filledGroup = document.getElementById("shape-filled-group");
+  const shapeTypeSelect = document.getElementById("shape-type");
+  const sizeSlider = document.getElementById("shape-size");
+  const filledCheckbox = document.getElementById("shape-filled");
+  const filledGroup = document.getElementById("shape-filled-group");
 
-    const sizeInput = document.querySelector('[data-slider="shape-size"]');
-    const opacityInput = document.querySelector(
-      '[data-slider="shape-opacity"]'
-    );
+  const sizeInput = document.querySelector('[data-slider="shape-size"]');
 
-    if (shapeTypeSelect) {
-      shapeTypeSelect.addEventListener("change", (e) => {
-        this.setShapeType(e.target.value);
-        // Show/hide filled option based on shape type
-        if (filledGroup) {
-          filledGroup.style.display = e.target.value === "line" ? "none" : "";
-        }
-      });
-    }
-
-    if (sizeSlider && sizeInput) {
-      sizeSlider.addEventListener("input", (e) => {
-        const value = parseInt(e.target.value);
-        this.setSize(value);
-        sizeInput.value = this.size;
-      });
-
-      sizeInput.addEventListener("input", (e) => {
-        const value = parseInt(e.target.value);
-        if (value >= 1 && value <= 10) {
-          this.setSize(value);
-          sizeSlider.value = this.size;
-        }
-      });
-
-      sizeInput.addEventListener("blur", (e) => {
-        const value = parseInt(e.target.value);
-        if (isNaN(value) || value < 1 || value > 10) {
-          e.target.value = this.size;
-        }
-      });
-    }
-
-    if (opacitySlider && opacityInput) {
-      opacitySlider.addEventListener("input", (e) => {
-        const value = parseInt(e.target.value);
-        this.setOpacity(value);
-        opacityInput.value = this.opacity;
-      });
-
-      opacityInput.addEventListener("input", (e) => {
-        const value = parseInt(e.target.value);
-        if (value >= 0 && value <= 100) {
-          this.setOpacity(value);
-          opacitySlider.value = this.opacity;
-        }
-      });
-
-      opacityInput.addEventListener("blur", (e) => {
-        const value = parseInt(e.target.value);
-        if (isNaN(value) || value < 0 || value > 100) {
-          e.target.value = this.opacity;
-        }
-      });
-    }
-
-    if (filledCheckbox) {
-      filledCheckbox.addEventListener("change", (e) => {
-        this.setFilled(e.target.checked);
-      });
-    }
+  if (shapeTypeSelect) {
+    shapeTypeSelect.addEventListener("change", (e) => {
+      this.setShapeType(e.target.value);
+      if (filledGroup) {
+        filledGroup.style.display = e.target.value === "line" ? "none" : "";
+      }
+    });
   }
+
+  if (sizeSlider && sizeInput) {
+    sizeSlider.addEventListener("input", (e) => {
+      const value = parseInt(e.target.value);
+      this.setSize(value);
+      sizeInput.value = this.size;
+    });
+
+    sizeInput.addEventListener("input", (e) => {
+      const value = parseInt(e.target.value);
+      if (value >= 1 && value <= 10) {
+        this.setSize(value);
+        sizeSlider.value = this.size;
+      }
+    });
+
+    sizeInput.addEventListener("blur", (e) => {
+      const value = parseInt(e.target.value);
+      if (isNaN(value) || value < 1 || value > 10) {
+        e.target.value = this.size;
+      }
+    });
+  }
+
+  if (filledCheckbox) {
+    filledCheckbox.addEventListener("change", (e) => {
+      this.setFilled(e.target.checked);
+    });
+  }
+}
 
   // Get cursor
   getCursor() {

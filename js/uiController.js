@@ -67,8 +67,8 @@ class UIController {
     }
 
     // Clear existing content
-    canvasColorsContainer.innerHTML =
-      '<div class="palette-title">Canvas Colors</div>';
+    // canvasColorsContainer.innerHTML =
+    //   '<div class="palette-title">Canvas Colors</div>';
 
     // Create colors container
     const colorsContainer = document.createElement("div");
@@ -123,47 +123,41 @@ class UIController {
 
   // Add this new method to UIController:
   renderCanvasColorsPalette() {
-    if (!this.canvasColorsPalette) return;
+  if (!this.canvasColorsPalette) return;
 
-    this.canvasColorsPalette.innerHTML = "";
+  this.canvasColorsPalette.innerHTML = "";
 
-    if (this.canvasColors.size === 0) {
-      const emptyMessage = document.createElement("div");
-      emptyMessage.className = "empty-palette-message";
-      emptyMessage.textContent = "No colors on canvas";
-      emptyMessage.style.cssText = `
+  if (this.canvasColors.size === 0) {
+    const emptyMessage = document.createElement("div");
+    emptyMessage.className = "empty-palette-message";
+    emptyMessage.textContent = "No colors on canvas";
+    emptyMessage.style.cssText = `
       color: #888;
       font-size: 12px;
       padding: 8px;
       text-align: center;
       font-style: italic;
     `;
-      this.canvasColorsPalette.appendChild(emptyMessage);
-      return;
-    }
+    this.canvasColorsPalette.appendChild(emptyMessage);
+    return;
+  }
 
-    // Convert colors to array and sort by brightness for better organization
-    const colorsArray = Array.from(this.canvasColors)
-      .map((colorKey) => {
-        const [r, g, b, a] = colorKey.split(",").map(Number);
-        const brightness = (r * 0.299 + g * 0.587 + b * 0.114) / 255;
-        return { colorKey, r, g, b, a, brightness };
-      })
-      .sort((a, b) => b.brightness - a.brightness);
+  // Convert colors to array and sort by brightness
+  const colorsArray = Array.from(this.canvasColors)
+    .map((colorKey) => {
+      const [r, g, b, a] = colorKey.split(",").map(Number);
+      const brightness = (r * 0.299 + g * 0.587 + b * 0.114) / 255;
+      return { colorKey, r, g, b, a, brightness };
+    })
+    .sort((a, b) => b.brightness - a.brightness);
 
-    // Create color swatches
-    colorsArray.forEach(({ colorKey, r, g, b, a }) => {
-      const swatch = document.createElement("div");
-      swatch.className = "canvas-color-swatch";
-
-      // Create hex representation for display (ignore alpha for hex)
-      const hex = this.rgbaToHex([r, g, b, 255]);
-      const rgba = `rgba(${r}, ${g}, ${b}, ${a / 255})`;
-
-      swatch.style.cssText = `
+  // Create color swatches with proper transparency display
+  colorsArray.forEach(({ colorKey, r, g, b, a }) => {
+    const swatch = document.createElement("div");
+    swatch.className = "canvas-color-swatch";
+    swatch.style.cssText = `
       width: 20px;
       height: 20px;
-      background-color: ${rgba};
       border: 1px solid #333;
       border-radius: 3px;
       cursor: pointer;
@@ -173,94 +167,83 @@ class UIController {
       transition: transform 0.1s ease;
     `;
 
-      // Add checkerboard background for semi-transparent colors
-      if (a < 255) {
-        swatch.style.backgroundImage = `
-        linear-gradient(45deg, #666 25%, transparent 25%),
-        linear-gradient(-45deg, #666 25%, transparent 25%),
-        linear-gradient(45deg, transparent 75%, #666 75%),
-        linear-gradient(-45deg, transparent 75%, #666 75%)
-      `;
-        swatch.style.backgroundSize = "6px 6px";
-        swatch.style.backgroundPosition = "0 0, 0 3px, 3px -3px, -3px 0px";
+    // Always add checkerboard background
+    swatch.style.backgroundImage = this.createCheckerboardBackground();
+    swatch.style.backgroundSize = '6px 6px';
 
-        // Add the actual color as an overlay
-        const colorOverlay = document.createElement("div");
-        colorOverlay.style.cssText = `
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background-color: ${rgba};
-        border-radius: 2px;
-      `;
-        swatch.appendChild(colorOverlay);
+    // Add the color overlay
+    const colorOverlay = document.createElement("div");
+    colorOverlay.style.cssText = `
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: rgba(${r}, ${g}, ${b}, ${a / 255});
+      border-radius: 2px;
+    `;
+    swatch.appendChild(colorOverlay);
+
+    // Create hex representation for display
+    const hex = this.rgbaToHex([r, g, b, 255]);
+    swatch.setAttribute(
+      "data-tooltip",
+      `RGBA: (${r}, ${g}, ${b}, ${Math.round((a / 255) * 100)}%)\nHEX: ${hex}`
+    );
+
+    // Click handler to select color with full RGBA
+    swatch.addEventListener("click", () => {
+      // Remove selection from other swatches
+      this.deselectColorPalette();
+      document
+        .querySelectorAll(".canvas-color-swatch")
+        .forEach((s) => s.classList.remove("selected"));
+      swatch.classList.add("selected");
+
+      // Set as primary color with transparency
+      this.editor.setPrimaryColor([r, g, b, a]);
+      this.updateColorDisplay();
+      this.updateColorInputs(hex, [r, g, b, a]);
+
+      // Update color picker if available
+      if (this.colorSquare) {
+        this.updatePickerFromColor([r, g, b, a]);
       }
-
-      // Tooltip showing color values
-      swatch.setAttribute(
-        "data-tooltip",
-        a < 255
-          ? `RGBA: (${r}, ${g}, ${b}, ${Math.round(
-              (a / 255) * 100
-            )}%)\nHEX: ${hex}`
-          : `RGB: (${r}, ${g}, ${b})\nHEX: ${hex}`
-      );
-
-      // Click handler to select color
-      swatch.addEventListener("click", () => {
-        // Remove selection from main palette
-        this.deselectColorPalette();
-
-        // Add selection to this swatch
-        document
-          .querySelectorAll(".canvas-color-swatch")
-          .forEach((s) => s.classList.remove("selected"));
-        swatch.classList.add("selected");
-
-        // Set as primary color
-        this.editor.setPrimaryColor([r, g, b, a]);
-        this.updateColorDisplay();
-        this.updateColorInputs(hex, [r, g, b, a]);
-
-        // Update color wheel if available
-        if (this.colorPicker && this.colorPicker.color) {
-          this.colorPicker.color.hexString = hex;
-        }
-      });
-
-      // Hover effects
-      swatch.addEventListener("mouseenter", () => {
-        swatch.style.transform = "scale(1.1)";
-        swatch.style.zIndex = "10";
-      });
-
-      swatch.addEventListener("mouseleave", () => {
-        swatch.style.transform = "scale(1)";
-        swatch.style.zIndex = "1";
-      });
-
-      this.canvasColorsPalette.appendChild(swatch);
     });
 
-    // Add color count info
-    const colorCount = document.createElement("div");
-    colorCount.className = "canvas-colors-count";
-    colorCount.textContent = `${this.canvasColors.size} colors`;
-    colorCount.style.cssText = `
+    // Hover effects
+    swatch.addEventListener("mouseenter", () => {
+      swatch.style.transform = "scale(1.1)";
+      swatch.style.zIndex = "10";
+    });
+
+    swatch.addEventListener("mouseleave", () => {
+      swatch.style.transform = "scale(1)";
+      swatch.style.zIndex = "1";
+    });
+
+    this.canvasColorsPalette.appendChild(swatch);
+  });
+
+  // Add color count info
+  const colorCount = document.createElement("div");
+  colorCount.className = "canvas-colors-count";
+  colorCount.textContent = `${this.canvasColors.size} colors`;
+  colorCount.style.cssText = `
     color: #aaa;
     font-size: 11px;
     margin-top: 4px;
     text-align: center;
   `;
-    this.canvasColorsPalette.appendChild(colorCount);
-  }
+  this.canvasColorsPalette.appendChild(colorCount);
+}
   // Setup event listener for secondary color switching
   setupSecondaryColorSwitch() {
     const secondaryColor = document.getElementById("secondary-color");
-    if (secondaryColor) {
+    const primaryColor = document.getElementById("primary-color");
+    if (primaryColor && secondaryColor) {
       secondaryColor.addEventListener("click", this.swapPrimarySecondaryColor);
+      primaryColor.addEventListener("click", this.swapPrimarySecondaryColor);
     }
   }
 
@@ -292,10 +275,7 @@ class UIController {
     }
 
     // Clear any existing content first
-    const existingPickers = colorWheelContainer.querySelectorAll(
-      ".iro__color-picker, canvas, .custom-color-picker"
-    );
-    existingPickers.forEach((picker) => picker.remove());
+
 
     // Create custom color picker with large square and two sliders
     this.createCustomColorPicker(colorWheelContainer);
@@ -304,7 +284,7 @@ class UIController {
   createCustomColorPicker(container) {
     // Create the main picker container
     const pickerContainer = document.createElement("div");
-    pickerContainer.className = "custom-color-picker";
+
     pickerContainer.style.cssText = `
       width: auto;
       height: auto;
@@ -1472,9 +1452,6 @@ class UIController {
     // Canvas controls
     this.setupCanvasControls();
 
-    // Color picker
-    this.setupColorPicker();
-
     // Modal controls
     this.setupModals();
 
@@ -2147,15 +2124,7 @@ class UIController {
   }
 
   // Setup color picker event listeners
-  setupColorPicker() {
-    const colorPicker = document.getElementById("color-picker");
-    if (colorPicker) {
-      colorPicker.addEventListener("change", (e) => {
-        const rgba = this.hexToRgba(e.target.value);
-        this.editor.setPrimaryColor(rgba);
-      });
-    }
-  }
+
 
   // Setup modal event listeners
   setupModals() {
@@ -2351,27 +2320,55 @@ class UIController {
 
   // Initialize color palette
   initializeColorPalette() {
-    const paletteContainer = document.getElementById("color-palette");
-    if (!paletteContainer) return;
+  const paletteContainer = document.getElementById("color-palette");
+  if (!paletteContainer) return;
 
-    paletteContainer.innerHTML = "";
+  paletteContainer.innerHTML = "";
 
-    this.colorPalette.forEach((color) => {
-      const swatch = document.createElement("div");
-      swatch.className = "color-swatch";
-      swatch.style.backgroundColor = color;
-      swatch.title = color;
-      swatch.addEventListener("click", () => {
-        // Remove previous selection
-        this.deselectColorPalette();
-        // Add selection to clicked swatch
-        swatch.classList.add("selected");
-        // Convert hex to RGBA and set primary color
-        this.updateSelectedColor(color, "hex");
-      });
-      paletteContainer.appendChild(swatch);
+  this.colorPalette.forEach((color) => {
+    const swatch = document.createElement("div");
+    swatch.className = "color-swatch";
+    swatch.style.cssText = `
+      position: relative;
+      width: 20px;
+      height: 20px;
+      border-radius: 5px;
+      cursor: pointer;
+      margin: 2px;
+      display: inline-block;
+    `;
+    
+    // Add checkerboard background
+    swatch.style.backgroundImage = this.createCheckerboardBackground();
+    swatch.style.backgroundSize = '6px 6px';
+    
+    // Add color overlay
+    const colorOverlay = document.createElement("div");
+    colorOverlay.style.cssText = `
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: ${color};
+      border-radius: 2px;
+    `;
+    swatch.appendChild(colorOverlay);
+    
+    swatch.title = color;
+    swatch.addEventListener("click", () => {
+      // Remove previous selection
+      this.deselectColorPalette();
+      // Add selection to clicked swatch
+      swatch.classList.add("selected");
+      // Convert hex to RGBA (full opacity for palette colors)
+      const rgba = this.hexToRgba(color);
+      this.updateSelectedColor(color, "hex");
     });
-  }
+    
+    paletteContainer.appendChild(swatch);
+  });
+}
 
   // File import handlers
   openFileImport() {
@@ -2400,24 +2397,84 @@ class UIController {
 
   updateColorDisplay() {
     const primaryColor = document.getElementById("primary-color");
-    const colorPicker = document.getElementById("color-picker");
+  const secondaryColor = document.getElementById("secondary-color");
+
     if (primaryColor && this.editor.primaryColor) {
-      const hex = this.rgbaToHex(this.editor.primaryColor);
-      primaryColor.style.backgroundColor = hex;
-      if (colorPicker) colorPicker.value = hex;
-      // Update color wheel if it exists
-      if (this.colorPicker && this.colorPicker.color) {
-        this.colorPicker.color.hexString = hex;
-      }
-      // Update color value inputs
+      const [r, g, b, a] = this.editor.primaryColor;
+      const alpha = a / 255;
+
+      // Show checkerboard background for transparency
+      primaryColor.style.backgroundImage = this.createCheckerboardBackground();
+      primaryColor.style.backgroundSize = "8px 8px";
+
+      // Overlay the color with transparency
+      const colorOverlay =
+        primaryColor.querySelector(".color-overlay") ||
+        this.createColorOverlay(primaryColor);
+      colorOverlay.style.backgroundColor = `rgba(${r}, ${g}, ${b}, ${alpha})`;
+
+      const hex = this.rgbaToHex([r, g, b, 255]); // Hex without alpha for input
+
+
+      // Update color inputs
       this.updateColorInputs(hex, this.editor.primaryColor);
+
+      // Update custom color picker if exists
+      if (this.colorSquare) {
+        this.updatePickerFromColor(this.editor.primaryColor);
+      }
     }
+
     // Update secondary color display
-    const secondaryColorDiv = document.getElementById("secondary-color");
-    if (secondaryColorDiv && this.editor.secondaryColor) {
-      const hex2 = this.rgbaToHex(this.editor.secondaryColor);
-      secondaryColorDiv.style.backgroundColor = hex2;
+    if (secondaryColor && this.editor.secondaryColor) {
+      const [r, g, b, a] = this.editor.secondaryColor;
+      const alpha = a / 255;
+
+      secondaryColor.style.backgroundImage =
+        this.createCheckerboardBackground();
+      secondaryColor.style.backgroundSize = "8px 8px";
+
+      const colorOverlay =
+        secondaryColor.querySelector(".color-overlay") ||
+        this.createColorOverlay(secondaryColor);
+      colorOverlay.style.backgroundColor = `rgba(${r}, ${g}, ${b}, ${alpha})`;
     }
+  }
+
+  createCheckerboardBackground() {
+  // Create a proper checkerboard pattern like the opacity slider
+  // Using a data URL with a small canvas to create the pattern
+  const canvas = document.createElement('canvas');
+  canvas.width = 16;
+  canvas.height = 16;
+  const ctx = canvas.getContext('2d');
+  
+  // Light gray color
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, 16, 16);
+  
+  // Dark gray squares in checkerboard pattern
+  ctx.fillStyle = '#e0e0e0';
+  ctx.fillRect(0, 0, 8, 8);    // Top-left
+  ctx.fillRect(8, 8, 8, 8);    // Bottom-right
+  
+  return `url(${canvas.toDataURL()})`;
+}
+
+  createColorOverlay(parentElement) {
+    const overlay = document.createElement("div");
+    overlay.className = "color-overlay";
+    overlay.style.cssText = `
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    border-radius: 4px;
+  `;
+    parentElement.style.position = "relative";
+    parentElement.appendChild(overlay);
+    return overlay;
   }
 
   // In the updateSpritesList method, add a safety check at the beginning:
@@ -3876,28 +3933,44 @@ class UIController {
   // Update selected color from input value (HEX or RGB)
   updateSelectedColor(value, type = "hex") {
     let rgba;
+
     if (type === "hex") {
       let val = value.trim();
       if (!val.startsWith("#")) val = "#" + val;
       if (/^#[0-9A-Fa-f]{6}$/.test(val)) {
         rgba = this.hexToRgba(val);
+        // Preserve current alpha when changing hex
+        if (this.editor.primaryColor && this.editor.primaryColor.length > 3) {
+          rgba[3] = this.editor.primaryColor[3];
+        }
       }
-    } else if (type === "rgb") {
-      const rgbMatch = value.match(/^rgb\((\d{1,3}),(\d{1,3}),(\d{1,3})\)$/);
-      if (rgbMatch) {
-        const r = Math.min(255, parseInt(rgbMatch[1]));
-        const g = Math.min(255, parseInt(rgbMatch[2]));
-        const b = Math.min(255, parseInt(rgbMatch[3]));
-        rgba = [r, g, b, 255];
+    } else if (type === "rgba") {
+      // Support both rgb() and rgba() formats
+      const rgbaMatch = value.match(
+        /^rgba?\((\d{1,3}),\s*(\d{1,3}),\s*(\d{1,3})(?:,\s*([\d.]+))?\)$/
+      );
+      if (rgbaMatch) {
+        const r = Math.min(255, parseInt(rgbaMatch[1]));
+        const g = Math.min(255, parseInt(rgbaMatch[2]));
+        const b = Math.min(255, parseInt(rgbaMatch[3]));
+        const a = rgbaMatch[4]
+          ? Math.min(1, parseFloat(rgbaMatch[4])) * 255
+          : 255;
+        rgba = [r, g, b, Math.round(a)];
       }
     }
+
     if (rgba) {
       this.editor.setPrimaryColor(rgba);
-      const hex = this.rgbaToHex(rgba);
-      if (this.colorPicker && this.colorPicker.color) {
-        this.colorPicker.color.hexString = hex;
+      this.updateColorDisplay();
+
+      // Update custom color picker if it exists
+      if (this.colorSquare) {
+        this.updatePickerFromColor(rgba);
       }
-      this.updateColorInputs(hex, rgba);
+
+      // Deselect palette colors since we have a custom color
+      this.deselectColorPalette();
     }
   }
 
@@ -3913,8 +3986,8 @@ class UIController {
         this.colorMode = "rgb";
         hexInput.style.display = "none";
         labelHex.style.display = "none";
-        rgbInput.style.display = "";
-        labelRgb.style.display = "";
+        rgbInput.style.display = "block";
+        labelRgb.style.display = "block";
         toggleBtn.textContent = "Show HEX";
       } else {
         this.colorMode = "hex";
@@ -3930,6 +4003,8 @@ class UIController {
   setupColorInputListeners() {
     const hexInput = document.getElementById("color-hex");
     const rgbInput = document.getElementById("color-rgb");
+    const alphaSlider = document.getElementById("alpha-slider");
+
     if (hexInput) {
       hexInput.addEventListener("input", (e) => {
         this.updateSelectedColor(e.target.value, "hex");
@@ -3938,12 +4013,31 @@ class UIController {
         this.updateSelectedColor(e.target.value, "hex");
       });
     }
+
     if (rgbInput) {
       rgbInput.addEventListener("input", (e) => {
-        this.updateSelectedColor(e.target.value, "rgb");
+        this.updateSelectedColor(e.target.value, "rgba");
       });
       rgbInput.addEventListener("change", (e) => {
-        this.updateSelectedColor(e.target.value, "rgb");
+        this.updateSelectedColor(e.target.value, "rgba");
+      });
+    }
+
+    // Add alpha slider support
+    if (alphaSlider) {
+      alphaSlider.addEventListener("input", (e) => {
+        const currentColor = [...this.editor.primaryColor];
+        currentColor[3] = parseInt(e.target.value);
+        this.editor.setPrimaryColor(currentColor);
+        this.updateColorDisplay();
+
+        // Update alpha value display
+        const alphaValue = document.getElementById("alpha-value");
+        if (alphaValue) {
+          alphaValue.textContent = `${Math.round(
+            (currentColor[3] / 255) * 100
+          )}%`;
+        }
       });
     }
   }
@@ -3958,8 +4052,24 @@ class UIController {
   updateColorInputs(hex, rgba) {
     const hexInput = document.getElementById("color-hex");
     const rgbInput = document.getElementById("color-rgb");
+    const alphaSlider = document.getElementById("alpha-slider");
+    const alphaValue = document.getElementById("alpha-value");
+
     if (hexInput) hexInput.value = hex;
-    if (rgbInput) rgbInput.value = `rgb(${rgba[0]},${rgba[1]},${rgba[2]})`;
+
+    if (rgbInput) {
+      rgbInput.value = `rgba(${rgba[0]}, ${rgba[1]}, ${rgba[2]}, ${(
+        rgba[3] / 255
+      ).toFixed(2)})`;
+    }
+
+    // Update alpha controls if they exist
+    if (alphaSlider && rgba.length > 3) {
+      alphaSlider.value = rgba[3];
+      if (alphaValue) {
+        alphaValue.textContent = `${Math.round((rgba[3] / 255) * 100)}%`;
+      }
+    }
   }
   showExportModal() {
     const modal = document.getElementById("export-modal");

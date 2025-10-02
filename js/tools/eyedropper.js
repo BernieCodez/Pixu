@@ -68,7 +68,7 @@ class EyedropperTool {
     }
 
     // Provide visual feedback
-    this.showPickedColorFeedback(x, y, pickedColor, isPrimaryPick);
+    this.showPickedColorFeedback(x, y, pickedColor, isPrimaryPick, event);
   }
 
   // Comprehensive UI update method
@@ -96,10 +96,7 @@ class EyedropperTool {
     const hex = this.rgbaToHex(rgba);
 
     // Update color picker input
-    const colorPicker = document.getElementById("color-picker");
-    if (colorPicker) {
-      colorPicker.value = hex;
-    }
+
 
     // Update primary color display
     const primaryColor = document.getElementById("primary-color");
@@ -189,7 +186,7 @@ class EyedropperTool {
       preview.textContent = "Transparent";
       preview.style.backgroundColor = "transparent";
       preview.style.border = "2px dashed #666";
-      preview.style.color = "#fff";
+      preview.style.color = "#666";
     } else {
       preview.style.border = "2px solid #333";
       preview.style.color = this.getContrastColor(color);
@@ -205,10 +202,12 @@ class EyedropperTool {
   }
 
   // Show visual feedback when color is picked
-  showPickedColorFeedback(x, y, color, isPrimary) {
-    // Create ripple effect at pick position
+  showPickedColorFeedback(x, y, color, isPrimary, event) {
+    // Use cursor position from event if available
     let screenPos;
-    if (this.editor.canvasManager && this.editor.canvasManager.spriteToScreen) {
+    if (event && typeof event.clientX === "number" && typeof event.clientY === "number") {
+      screenPos = { x: event.clientX, y: event.clientY };
+    } else if (this.editor.canvasManager && this.editor.canvasManager.spriteToScreen) {
       screenPos = this.editor.canvasManager.spriteToScreen(x, y);
     } else {
       // Fallback positioning
@@ -393,7 +392,7 @@ class EyedropperTool {
         }
       );
 
-      // Update color info display on mouse move
+      // Update color info display and show color preview on mouse move
       this.editor.canvasManager.mainCanvas.addEventListener(
         "mousemove",
         (e) => {
@@ -403,6 +402,17 @@ class EyedropperTool {
               e.clientY
             );
             this.updateColorInfo(pos.x, pos.y);
+            this.showColorPreview(pos.x, pos.y); // <-- Always show preview on mouse move
+          }
+        }
+      );
+
+      // Hide color preview on mouse leave
+      this.editor.canvasManager.mainCanvas.addEventListener(
+        "mouseleave",
+        (e) => {
+          if (this.editor.currentTool === this) {
+            this.hideColorPreview();
           }
         }
       );

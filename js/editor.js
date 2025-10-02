@@ -6,7 +6,15 @@ class PixelEditor {
     this.uiManager = null;
     this.layerManager = null;
     this.animationManager = new AnimationManager(this);
-    this.storageManager = window.storageManager;
+    // Safely assign storageManager, fallback if not present
+    if (window.storageManager) {
+      this.storageManager = window.storageManager;
+    } else {
+      console.warn(
+        "window.storageManager not found during PixelEditor construction. Will retry during initialization."
+      );
+      this.storageManager = null;
+    }
 
     // Editor state
     this.sprites = []; // Initialize as empty array
@@ -67,6 +75,16 @@ class PixelEditor {
       this.updateUI();
     });
 
+    // Ensure storageManager is available
+    if (!this.storageManager && window.storageManager) {
+      this.storageManager = window.storageManager;
+    }
+    if (!this.storageManager) {
+      throw new Error(
+        "StorageManager is not available. Make sure js/storage.js is loaded before js/editor.js."
+      );
+    }
+
     // Load settings AFTER initializing layer manager
     this.settings = await this.storageManager.loadSettings();
 
@@ -79,9 +97,13 @@ class PixelEditor {
     // Load sprites from storage (now async)
     await this.loadSprites();
 
-    // Set initial colors
-    this.setPrimaryColor(this.hexToRgba(this.settings.primaryColor));
-    this.setSecondaryColor(this.hexToRgba(this.settings.secondaryColor));
+    // Set initial colors with proper alpha handling
+    const primaryColorHex = this.settings.primaryColor || "#000000";
+    const secondaryColorHex = this.settings.secondaryColor || "#FFFFFF";
+
+    // Convert hex to RGBA with full opacity by default
+    this.setPrimaryColor(this.hexToRgba(primaryColorHex, 255));
+    this.setSecondaryColor(this.hexToRgba(secondaryColorHex, 255));
 
     // Set initial tool
     this.setCurrentTool("brush");
@@ -91,7 +113,7 @@ class PixelEditor {
       this.createNewSprite();
     } else {
       this.setCurrentSprite(this.sprites[0]);
-      // CRITICAL FIX: Force render after setting current sprite
+      // Force render after setting current sprite
       setTimeout(() => {
         if (this.canvasManager) {
           this.canvasManager.render();
@@ -102,7 +124,9 @@ class PixelEditor {
     // Update UI
     this.updateUI();
 
-    console.log("Pixel Editor initialized successfully!");
+    console.log(
+      "Pixel Editor initialized successfully with transparency support!"
+    );
   }
 
   // Initialize all tools
@@ -115,7 +139,7 @@ class PixelEditor {
       eyedropper: new EyedropperTool(this),
       brightness: new BrightnessTool(this),
       smoothsharpen: new SmoothSharpenTool(this), // Add this line
-      shape : new ShapeTool(this), // Add this line
+      shape: new ShapeTool(this), // Add this line
       miscellaneous: new MiscellaneousTool(this),
     };
 
@@ -379,8 +403,8 @@ class PixelEditor {
 
   // Apply saved tool settings
   // Apply saved tool settings
+  // Update applyToolSettings to remove opacity settings
   applyToolSettings() {
-    // Safety check - if settings not loaded yet, use defaults
     if (!this.settings) {
       console.warn("Settings not loaded, skipping tool settings application");
       return;
@@ -388,7 +412,7 @@ class PixelEditor {
 
     if (this.tools.brush) {
       this.tools.brush.setSize(this.settings.brushSize);
-      this.tools.brush.setOpacity(this.settings.brushOpacity);
+      // REMOVED: this.tools.brush.setOpacity(this.settings.brushOpacity);
     }
 
     if (this.tools.bucket) {
@@ -399,7 +423,6 @@ class PixelEditor {
       this.tools.brightness.setIntensity(this.settings.brightnessIntensity);
     }
 
-    // Add smooth/sharpen tool settings
     if (this.tools.smoothsharpen) {
       this.tools.smoothsharpen.setIntensity(
         this.settings.smoothSharpenIntensity || 50
@@ -415,9 +438,41 @@ class PixelEditor {
   updateToolColors() {
     Object.values(this.tools).forEach((tool) => {
       if (tool.setColor) {
-        tool.setColor(this.primaryColor);
+        tool.setColor([...this.primaryColor]); // Pass a copy to avoid mutation
+      }
+      if (tool.setSecondaryColor) {
+        tool.setSecondaryColor([...this.secondaryColor]);
       }
     });
+  }
+
+  blendColors(baseColor, overlayColor) {
+    const [br, bg, bb, ba] = baseColor;
+    const [or, og, ob, oa] = overlayColor;
+
+    const baseAlpha = ba / 255;
+    const overlayAlpha = oa / 255;
+
+    // Alpha compositing formula
+    const outputAlpha = overlayAlpha + baseAlpha * (1 - overlayAlpha);
+
+    if (outputAlpha === 0) {
+      return [0, 0, 0, 0];
+    }
+
+    const outputRed =
+      (or * overlayAlpha + br * baseAlpha * (1 - overlayAlpha)) / outputAlpha;
+    const outputGreen =
+      (og * overlayAlpha + bg * baseAlpha * (1 - overlayAlpha)) / outputAlpha;
+    const outputBlue =
+      (ob * overlayAlpha + bb * baseAlpha * (1 - overlayAlpha)) / outputAlpha;
+
+    return [
+      Math.round(outputRed),
+      Math.round(outputGreen),
+      Math.round(outputBlue),
+      Math.round(outputAlpha * 255),
+    ];
   }
 
   // Set current tool
@@ -434,6 +489,14 @@ class PixelEditor {
 
     this.previousTool = this.currentTool;
     this.currentTool = this.tools[toolName];
+
+    // alert(toolName);
+    if (this.currentTool != "eyedropper") {
+      //run hideColorPreview() from eyedropper class
+      if (this.tools.eyedropper && this.tools.eyedropper.hideColorPreview) {
+        this.tools.eyedropper.hideColorPreview();
+      }
+    }
 
     // Update cursor
     if (this.canvasManager.mainCanvas) {
@@ -844,15 +907,45 @@ class PixelEditor {
 
   // Set primary color
   setPrimaryColor(color) {
-    this.primaryColor = [...color];
+    // Ensure we always have 4 components (RGBA)
+    if (Array.isArray(color) && color.length >= 3) {
+      this.primaryColor = [
+        Math.round(color[0]),
+        Math.round(color[1]),
+        Math.round(color[2]),
+        color.length > 3 ? Math.round(color[3]) : 255,
+      ];
+    } else {
+      console.warn("Invalid color format for setPrimaryColor:", color);
+      this.primaryColor = [0, 0, 0, 255]; // Fallback to opaque black
+    }
+
     this.updateToolColors();
     this.saveSettings();
+
+    // Update UI immediately
+    if (this.uiManager && this.uiManager.updateColorDisplay) {
+      this.uiManager.updateColorDisplay();
+    }
   }
 
   // Set secondary color
   setSecondaryColor(color) {
-    this.secondaryColor = [...color];
+    // Ensure we always have 4 components (RGBA)
+    if (Array.isArray(color) && color.length >= 3) {
+      this.secondaryColor = [
+        Math.round(color[0]),
+        Math.round(color[1]),
+        Math.round(color[2]),
+        color.length > 3 ? Math.round(color[3]) : 255,
+      ];
+    } else {
+      console.warn("Invalid color format for setSecondaryColor:", color);
+      this.secondaryColor = [255, 255, 255, 255]; // Fallback to opaque white
+    }
+
     this.saveSettings();
+
     if (this.uiManager && this.uiManager.updateColorDisplay) {
       this.uiManager.updateColorDisplay();
     }
@@ -942,6 +1035,8 @@ class PixelEditor {
   /**
    * Save settings to storage
    */
+
+  // Update saveSettings to remove opacity settings
   async saveSettings() {
     if (!this.settings) {
       this.settings = this.storageManager.getDefaultSettings();
@@ -949,11 +1044,12 @@ class PixelEditor {
 
     this.settings.primaryColor = this.rgbaToHex(this.primaryColor);
     this.settings.secondaryColor = this.rgbaToHex(this.secondaryColor);
+    this.settings.primaryAlpha = this.primaryColor[3] || 255;
+    this.settings.secondaryAlpha = this.secondaryColor[3] || 255;
 
-    // Save tool settings
     if (this.tools.brush) {
       this.settings.brushSize = this.tools.brush.size;
-      this.settings.brushOpacity = this.tools.brush.opacity;
+      // REMOVED: this.settings.brushOpacity = this.tools.brush.opacity;
     }
 
     if (this.tools.bucket) {
@@ -964,15 +1060,18 @@ class PixelEditor {
       this.settings.brightnessIntensity = this.tools.brightness.intensity;
     }
 
-    // Add smooth/sharpen tool settings
     if (this.tools.smoothsharpen) {
-      this.settings.smoothSharpenIntensity = this.tools.smoothsharpen.intensity;
-      this.settings.smoothSharpenSize = this.tools.smoothsharpen.size;
-      this.settings.smoothSharpenMode = this.tools.smoothsharpen.mode;
+      this.settings.smoothSharpenIntensity =
+        this.tools.smoothsharpen.intensity || 50;
+      this.settings.smoothSharpenSize = this.tools.smoothsharpen.size || 3;
+      this.settings.smoothSharpenMode =
+        this.tools.smoothsharpen.mode || "smooth";
     }
 
-    this.settings.showGrid = this.canvasManager.showGrid;
-    this.settings.zoomLevel = this.canvasManager.zoomLevel;
+    if (this.canvasManager) {
+      this.settings.showGrid = this.canvasManager.showGrid;
+      this.settings.zoomLevel = this.canvasManager.zoomLevel;
+    }
 
     try {
       await this.storageManager.saveSettings(this.settings);
@@ -1354,7 +1453,7 @@ class PixelEditor {
       return;
     }
 
-    // CRITICAL FIX: Save current LayerManager state to sprite before export
+    // Save current LayerManager state to sprite before export
     if (this.animationManager) {
       this.animationManager.saveLayerManagerToCurrentFrame();
     }
@@ -1366,20 +1465,26 @@ class PixelEditor {
     // Create SVG content
     let svgContent = `<svg width="${scaledWidth}" height="${scaledHeight}" xmlns="http://www.w3.org/2000/svg" style="image-rendering: pixelated;">`;
 
-    // FIXED: Use LayerManager composite data instead of sprite.getPixel
+    // Use LayerManager composite data for proper transparency handling
     if (this.layerManager) {
-      // Get all visible layers and composite them
       for (let y = 0; y < sprite.height; y++) {
         for (let x = 0; x < sprite.width; x++) {
           const pixel = this.layerManager.getCompositePixel(x, y);
           const [r, g, b, a] = pixel;
 
           if (a > 0) {
-            // Only render non-transparent pixels
-            const opacity = a / 255;
-            svgContent += `<rect x="${x * scale}" y="${
-              y * scale
-            }" width="${scale}" height="${scale}" fill="rgb(${r},${g},${b})" opacity="${opacity}"/>`;
+            const opacity = (a / 255).toFixed(3);
+            if (opacity < 1) {
+              // Use rgba for transparent pixels
+              svgContent += `<rect x="${x * scale}" y="${
+                y * scale
+              }" width="${scale}" height="${scale}" fill="rgba(${r},${g},${b},${opacity})"/>`;
+            } else {
+              // Use rgb for opaque pixels
+              svgContent += `<rect x="${x * scale}" y="${
+                y * scale
+              }" width="${scale}" height="${scale}" fill="rgb(${r},${g},${b})"/>`;
+            }
           }
         }
       }
@@ -1391,10 +1496,16 @@ class PixelEditor {
           const [r, g, b, a] = pixel;
 
           if (a > 0) {
-            const opacity = a / 255;
-            svgContent += `<rect x="${x * scale}" y="${
-              y * scale
-            }" width="${scale}" height="${scale}" fill="rgb(${r},${g},${b})" opacity="${opacity}"/>`;
+            const opacity = (a / 255).toFixed(3);
+            if (opacity < 1) {
+              svgContent += `<rect x="${x * scale}" y="${
+                y * scale
+              }" width="${scale}" height="${scale}" fill="rgba(${r},${g},${b},${opacity})"/>`;
+            } else {
+              svgContent += `<rect x="${x * scale}" y="${
+                y * scale
+              }" width="${scale}" height="${scale}" fill="rgb(${r},${g},${b})"/>`;
+            }
           }
         }
       }
@@ -2332,27 +2443,44 @@ class PixelEditor {
   /**
    * Convert hex color to RGBA array
    */
-  hexToRgba(hex) {
+  hexToRgba(hex, alpha = 255) {
     const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
     return result
       ? [
           parseInt(result[1], 16),
           parseInt(result[2], 16),
           parseInt(result[3], 16),
-          255,
+          Math.round(alpha),
         ]
-      : [0, 0, 0, 255];
+      : [0, 0, 0, alpha];
   }
 
   /**
    * Convert RGBA array to hex color
    */
   rgbaToHex(rgba) {
+    if (!Array.isArray(rgba) || rgba.length < 3) {
+      return "#000000";
+    }
+
     const [r, g, b] = rgba;
-    const toHex = (n) => Math.round(n).toString(16).padStart(2, "0");
+    const toHex = (n) =>
+      Math.round(Math.max(0, Math.min(255, n)))
+        .toString(16)
+        .padStart(2, "0");
     return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
   }
+  rgbaToString(rgba) {
+    if (!Array.isArray(rgba) || rgba.length < 3) {
+      return "rgba(0, 0, 0, 1)";
+    }
 
+    const [r, g, b, a = 255] = rgba;
+    const alpha = (a / 255).toFixed(2);
+    return `rgba(${Math.round(r)}, ${Math.round(g)}, ${Math.round(
+      b
+    )}, ${alpha})`;
+  }
   /**
    * Get editor statistics
    */

@@ -1,14 +1,13 @@
 // Bucket Tool - For filling areas with color
 class BucketTool {
-  constructor(editor) {
-    this.editor = editor;
-    this.name = "bucket";
-    this.color = [0, 0, 0, 255]; // Black
-    this.opacity = 100; // Opacity percentage (0-100)
-    this.tolerance = 0; // Color matching tolerance
-    this.fillAll = false; // New: fill all pixels of matching color
-    this.fillConnectedOnly = true; // Traditional flood fill behavior
-  }
+constructor(editor) {
+  this.editor = editor;
+  this.name = "bucket";
+  this.color = [0, 0, 0, 255]; // Black
+  this.tolerance = 0;
+  this.fillAll = false;
+  this.fillConnectedOnly = true;
+}
 
   // Handle mouse down event
   onMouseDown(x, y, event) {
@@ -47,93 +46,92 @@ class BucketTool {
   }
 
   // Traditional flood fill algorithm - FIXED VERSION
-  floodFill(startX, startY) {
-    if (!this.editor.layerManager) return;
-    const layerManager = this.editor.layerManager;
-    const activeLayer = layerManager.getActiveLayer();
-    if (!activeLayer || activeLayer.locked) return;
+ floodFill(startX, startY) {
+  if (!this.editor.layerManager) return;
+  const layerManager = this.editor.layerManager;
+  const activeLayer = layerManager.getActiveLayer();
+  if (!activeLayer || activeLayer.locked) return;
 
-    const targetColor = layerManager.getPixel(startX, startY);
-    if (this.opacity > 0 && this.colorsEqual(targetColor, this.color)) return;
+  const targetColor = layerManager.getPixel(startX, startY);
+  if (this.colorsEqual(targetColor, this.color)) return;
 
-    const stack = [[startX, startY]];
-    const visited = new Set();
-    const fillColor = [...this.color];
-    fillColor[3] = Math.round((fillColor[3] * this.opacity) / 100);
+  const stack = [[startX, startY]];
+  const visited = new Set();
+  const fillColor = [...this.color]; // Use color's alpha directly
 
-    // Use batch mode for multiple pixel operations
-    layerManager.setBatchMode(true);
+  layerManager.setBatchMode(true);
 
-    while (stack.length > 0) {
-      const [x, y] = stack.pop();
-      const key = `${x},${y}`;
-      if (
-        visited.has(key) ||
-        x < 0 ||
-        x >= layerManager.width ||
-        y < 0 ||
-        y >= layerManager.height
-      ) {
-        continue;
-      }
-      const currentColor = layerManager.getPixel(x, y);
-      if (!this.colorMatches(currentColor, targetColor)) {
-        continue;
-      }
-      visited.add(key);
-      if (this.opacity === 0) {
-        layerManager.setPixel(x, y, [0, 0, 0, 0]);
-      } else if (this.opacity < 100) {
-        const blendedColor = this.blendColors(currentColor, fillColor);
-        layerManager.setPixel(x, y, blendedColor);
-      } else {
-        layerManager.setPixel(x, y, fillColor);
-      }
-      stack.push([x + 1, y]);
-      stack.push([x - 1, y]);
-      stack.push([x, y + 1]);
-      stack.push([x, y - 1]);
+  while (stack.length > 0) {
+    const [x, y] = stack.pop();
+    const key = `${x},${y}`;
+    if (
+      visited.has(key) ||
+      x < 0 ||
+      x >= layerManager.width ||
+      y < 0 ||
+      y >= layerManager.height
+    ) {
+      continue;
     }
-
-    layerManager.setBatchMode(false);
-    this.editor.canvasManager.render();
+    const currentColor = layerManager.getPixel(x, y);
+    if (!this.colorMatches(currentColor, targetColor)) {
+      continue;
+    }
+    visited.add(key);
+    
+    // Use color's alpha for blending
+    if (fillColor[3] === 0) {
+      layerManager.setPixel(x, y, [0, 0, 0, 0]);
+    } else if (fillColor[3] < 255) {
+      const blendedColor = this.blendColors(currentColor, fillColor);
+      layerManager.setPixel(x, y, blendedColor);
+    } else {
+      layerManager.setPixel(x, y, fillColor);
+    }
+    
+    stack.push([x + 1, y]);
+    stack.push([x - 1, y]);
+    stack.push([x, y + 1]);
+    stack.push([x, y - 1]);
   }
+
+  layerManager.setBatchMode(false);
+  this.editor.canvasManager.render();
+}
 
   // Fill all pixels of matching color regardless of connectivity - FIXED VERSION
   fillAllPixels(startX, startY) {
-    if (!this.editor.layerManager) return;
-    const layerManager = this.editor.layerManager;
-    const activeLayer = layerManager.getActiveLayer();
-    if (!activeLayer || activeLayer.locked) return;
+  if (!this.editor.layerManager) return;
+  const layerManager = this.editor.layerManager;
+  const activeLayer = layerManager.getActiveLayer();
+  if (!activeLayer || activeLayer.locked) return;
 
-    const targetColor = layerManager.getPixel(startX, startY);
-    if (this.opacity > 0 && this.colorsEqual(targetColor, this.color)) return;
+  const targetColor = layerManager.getPixel(startX, startY);
+  if (this.colorsEqual(targetColor, this.color)) return;
 
-    const fillColor = [...this.color];
-    fillColor[3] = Math.round((fillColor[3] * this.opacity) / 100);
+  const fillColor = [...this.color]; // Use color's alpha directly
 
-    // Use batch mode for multiple pixel operations
-    layerManager.setBatchMode(true);
+  layerManager.setBatchMode(true);
 
-    for (let y = 0; y < layerManager.height; y++) {
-      for (let x = 0; x < layerManager.width; x++) {
-        const currentColor = layerManager.getPixel(x, y);
-        if (this.colorMatches(currentColor, targetColor)) {
-          if (this.opacity === 0) {
-            layerManager.setPixel(x, y, [0, 0, 0, 0]);
-          } else if (this.opacity < 100) {
-            const blendedColor = this.blendColors(currentColor, fillColor);
-            layerManager.setPixel(x, y, blendedColor);
-          } else {
-            layerManager.setPixel(x, y, fillColor);
-          }
+  for (let y = 0; y < layerManager.height; y++) {
+    for (let x = 0; x < layerManager.width; x++) {
+      const currentColor = layerManager.getPixel(x, y);
+      if (this.colorMatches(currentColor, targetColor)) {
+        if (fillColor[3] === 0) {
+          layerManager.setPixel(x, y, [0, 0, 0, 0]);
+        } else if (fillColor[3] < 255) {
+          const blendedColor = this.blendColors(currentColor, fillColor);
+          layerManager.setPixel(x, y, blendedColor);
+        } else {
+          layerManager.setPixel(x, y, fillColor);
         }
       }
     }
-
-    layerManager.setBatchMode(false);
-    this.editor.canvasManager.render();
   }
+
+  layerManager.setBatchMode(false);
+  this.editor.canvasManager.render();
+}
 
   // Blend two colors with alpha blending (copied from BrushTool)
   blendColors(background, foreground) {
@@ -242,110 +240,58 @@ class BucketTool {
 
   // Get tool settings UI elements
   getSettingsHTML() {
-    return `
-          <div class="setting-group">
-              <label for="fill-opacity">Opacity:</label>
-              <div class="slider-container">
-                  <input type="range" id="fill-opacity" min="0" max="100" value="${
-                    this.opacity
-                  }">
-                  <input type="number" class="slider-value-input" data-slider="fill-opacity" min="0" max="100" value="${
-                    this.opacity
-                  }">%
-              </div>
-          </div>
-          <div class="setting-group">
-              <label for="fill-tolerance">Tolerance:</label>
-              <div class="slider-container">
-                  <input type="range" id="fill-tolerance" min="0" max="100" value="${
-                    this.tolerance
-                  }">
-                  <input type="number" class="slider-value-input" data-slider="fill-tolerance" min="0" max="100" value="${
-                    this.tolerance
-                  }">%
-              </div>
-          </div>
-          <div class="setting-group">
-              <label>
-                  <input type="checkbox" id="fill-all-checkbox" ${
-                    this.fillAll ? "checked" : ""
-                  }>
-                  Fill All Matching
-              </label>
-          </div>
-      `;
-  }
+  return `
+    <div class="setting-group">
+      <label for="fill-tolerance">Tolerance:</label>
+      <div class="slider-container">
+        <input type="range" id="fill-tolerance" min="0" max="100" value="${this.tolerance}">
+        <input type="number" class="slider-value-input" data-slider="fill-tolerance" min="0" max="100" value="${this.tolerance}">%
+      </div>
+    </div>
+    <div class="setting-group">
+      <label>
+        <input type="checkbox" id="fill-all-checkbox" ${this.fillAll ? "checked" : ""}>
+        Fill All Matching
+      </label>
+    </div>
+  `;
+}
 
   // Initialize tool settings event listeners
   initializeSettings() {
-    const opacitySlider = document.getElementById("fill-opacity");
-    const toleranceSlider = document.getElementById("fill-tolerance");
-    const fillAllCheckbox = document.getElementById("fill-all-checkbox");
+  const toleranceSlider = document.getElementById("fill-tolerance");
+  const fillAllCheckbox = document.getElementById("fill-all-checkbox");
+  const toleranceInput = document.querySelector('[data-slider="fill-tolerance"]');
 
-    // Get the number inputs
-    const opacityInput = document.querySelector('[data-slider="fill-opacity"]');
-    const toleranceInput = document.querySelector(
-      '[data-slider="fill-tolerance"]'
-    );
+  if (toleranceSlider && toleranceInput) {
+    toleranceSlider.addEventListener("input", (e) => {
+      const value = parseInt(e.target.value);
+      this.setTolerance(value);
+      toleranceInput.value = this.tolerance;
+    });
 
-    if (opacitySlider && opacityInput) {
-      // Slider to input sync
-      opacitySlider.addEventListener("input", (e) => {
-        const value = parseInt(e.target.value);
-        this.setOpacity(value);
-        opacityInput.value = this.opacity;
-      });
-
-      // Input to slider sync
-      opacityInput.addEventListener("input", (e) => {
-        const value = parseInt(e.target.value);
-        if (value >= 0 && value <= 100) {
-          this.setOpacity(value);
-          opacitySlider.value = this.opacity;
-        }
-      });
-
-      // Validate on blur
-      opacityInput.addEventListener("blur", (e) => {
-        const value = parseInt(e.target.value);
-        if (isNaN(value) || value < 0 || value > 100) {
-          e.target.value = this.opacity;
-        }
-      });
-    }
-
-    if (toleranceSlider && toleranceInput) {
-      // Slider to input sync
-      toleranceSlider.addEventListener("input", (e) => {
-        const value = parseInt(e.target.value);
+    toleranceInput.addEventListener("input", (e) => {
+      const value = parseInt(e.target.value);
+      if (value >= 0 && value <= 100) {
         this.setTolerance(value);
-        toleranceInput.value = this.tolerance;
-      });
+        toleranceSlider.value = this.tolerance;
+      }
+    });
 
-      // Input to slider sync
-      toleranceInput.addEventListener("input", (e) => {
-        const value = parseInt(e.target.value);
-        if (value >= 0 && value <= 100) {
-          this.setTolerance(value);
-          toleranceSlider.value = this.tolerance;
-        }
-      });
-
-      // Validate on blur
-      toleranceInput.addEventListener("blur", (e) => {
-        const value = parseInt(e.target.value);
-        if (isNaN(value) || value < 0 || value > 100) {
-          e.target.value = this.tolerance;
-        }
-      });
-    }
-
-    if (fillAllCheckbox) {
-      fillAllCheckbox.addEventListener("change", (e) => {
-        this.setFillAll(e.target.checked);
-      });
-    }
+    toleranceInput.addEventListener("blur", (e) => {
+      const value = parseInt(e.target.value);
+      if (isNaN(value) || value < 0 || value > 100) {
+        e.target.value = this.tolerance;
+      }
+    });
   }
+
+  if (fillAllCheckbox) {
+    fillAllCheckbox.addEventListener("change", (e) => {
+      this.setFillAll(e.target.checked);
+    });
+  }
+}
 
   // Get tool cursor
   getCursor() {

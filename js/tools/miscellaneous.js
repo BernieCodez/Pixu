@@ -3,10 +3,9 @@ class MiscellaneousTool {
   constructor(editor) {
     this.editor = editor;
     this.name = "miscellaneous";
-    this.currentMode = "dither"; // Default mode
+    this.currentMode = "dither";
     this.ditherSize = 1;
-    this.ditherOpacity = 50;
-    this.mirrorAxis = "horizontal"; // horizontal, vertical, both
+    this.mirrorAxis = "horizontal";
     this.isDrawing = false;
     this.color = [0, 0, 0, 255];
     this.processedPixels = new Set();
@@ -15,7 +14,7 @@ class MiscellaneousTool {
   // Handle mouse down event
   onMouseDown(x, y, event) {
     if (!this.editor.layerManager) return;
-    
+
     if (this.currentMode === "dither" || this.currentMode === "mirror") {
       this.isDrawing = true;
       this.processedPixels.clear();
@@ -29,7 +28,7 @@ class MiscellaneousTool {
   // Handle mouse drag event
   onMouseDrag(x, y, lastX, lastY, event) {
     if (!this.editor.layerManager || !this.isDrawing) return;
-    
+
     if (this.currentMode === "dither" || this.currentMode === "mirror") {
       this.drawLine(lastX, lastY, x, y);
     }
@@ -38,7 +37,7 @@ class MiscellaneousTool {
   // Handle mouse up event
   onMouseUp(x, y, event) {
     if (!this.editor.layerManager || !this.isDrawing) return;
-    
+
     this.isDrawing = false;
     this.processedPixels.clear();
     this.editor.layerManager.endBatchOperation();
@@ -76,50 +75,50 @@ class MiscellaneousTool {
   }
 
   // Apply dithering effect
+  // Apply dithering effect
   applyDither(x, y) {
     if (!this.editor.layerManager) return;
-    
+
     const layerManager = this.editor.layerManager;
     const halfSize = Math.floor(this.ditherSize / 2);
-    
-    // Create dither pattern
+
     for (let dy = -halfSize; dy <= halfSize; dy++) {
       for (let dx = -halfSize; dx <= halfSize; dx++) {
         const pixelX = x + dx;
         const pixelY = y + dy;
-        
+
         if (
           pixelX >= 0 &&
           pixelX < layerManager.width &&
           pixelY >= 0 &&
           pixelY < layerManager.height
         ) {
-          // Create checkerboard dither pattern
-          const shouldDither = (pixelX + pixelY) % 2 === 0;
+          // Use checkerboard pattern to alternate between primary and secondary colors
+          const usePrimaryColor = (pixelX + pixelY) % 2 === 0;
+          const existingPixel = layerManager.getPixel(pixelX, pixelY);
           
-          if (shouldDither) {
-            const existingPixel = layerManager.getPixel(pixelX, pixelY);
-            const ditherColor = [...this.color];
-            ditherColor[3] = Math.round((ditherColor[3] * this.ditherOpacity) / 100);
-            
-            const blendedColor = this.blendColors(existingPixel, ditherColor);
-            layerManager.setPixel(pixelX, pixelY, blendedColor);
-          }
+          // Choose color based on checkerboard pattern
+          const ditherColor = usePrimaryColor 
+            ? [...this.color] 
+            : [...this.editor.secondaryColor];
+
+          const blendedColor = this.blendColors(existingPixel, ditherColor);
+          layerManager.setPixel(pixelX, pixelY, blendedColor);
         }
       }
     }
-    
+
     this.editor.canvasManager.render();
   }
 
   // Apply mirror drawing
   applyMirrorDraw(x, y) {
     if (!this.editor.layerManager) return;
-    
+
     const layerManager = this.editor.layerManager;
     const positions = this.getMirrorPositions(x, y);
-    
-    positions.forEach(pos => {
+
+    positions.forEach((pos) => {
       if (
         pos.x >= 0 &&
         pos.x < layerManager.width &&
@@ -133,7 +132,7 @@ class MiscellaneousTool {
         }
       }
     });
-    
+
     this.editor.canvasManager.render();
   }
 
@@ -143,7 +142,7 @@ class MiscellaneousTool {
     const centerX = Math.floor(layerManager.width / 2);
     const centerY = Math.floor(layerManager.height / 2);
     const positions = [{ x, y }]; // Original position
-    
+
     switch (this.mirrorAxis) {
       case "horizontal":
         positions.push({ x: layerManager.width - 1 - x, y });
@@ -162,7 +161,7 @@ class MiscellaneousTool {
         positions.push({ x: y, y: x }); // Swap x and y for diagonal mirror
         break;
     }
-    
+
     return positions;
   }
 
@@ -171,7 +170,7 @@ class MiscellaneousTool {
     if (this.editor.canvasManager && this.editor.canvasManager.centerView) {
       this.editor.canvasManager.centerView();
       if (this.editor.uiController) {
-        this.editor.uiController.showNotification('Canvas centered', 'success');
+        this.editor.uiController.showNotification("Canvas centered", "success");
       }
     }
   }
@@ -243,11 +242,6 @@ class MiscellaneousTool {
     this.ditherSize = Math.max(1, Math.min(10, size));
   }
 
-  // Set dither opacity
-  setDitherOpacity(opacity) {
-    this.ditherOpacity = Math.max(0, Math.min(100, opacity));
-  }
-
   // Set mirror axis
   setMirrorAxis(axis) {
     if (["horizontal", "vertical", "both", "diagonal"].includes(axis)) {
@@ -291,63 +285,77 @@ class MiscellaneousTool {
   // Get tool settings HTML
   getSettingsHTML() {
     return `
-      <div class="setting-group">
-        <label for="misc-mode">Mode:</label>
-        <select id="misc-mode" class="misc-select toolbar-dropdown">
-          <option value="dither" ${this.currentMode === "dither" ? "selected" : ""}>Dithering</option>
-          <option value="mirror" ${this.currentMode === "mirror" ? "selected" : ""}>Mirror Draw</option>
-          <option value="center" ${this.currentMode === "center" ? "selected" : ""}>Center Canvas</option>
-        </select>
+    <div class="setting-group">
+      <label for="misc-mode">Mode:</label>
+      <select id="misc-mode" class="misc-select toolbar-dropdown">
+        <option value="dither" ${
+          this.currentMode === "dither" ? "selected" : ""
+        }>Dithering</option>
+        <option value="mirror" ${
+          this.currentMode === "mirror" ? "selected" : ""
+        }>Mirror Draw</option>
+        <option value="center" ${
+          this.currentMode === "center" ? "selected" : ""
+        }>Center Canvas</option>
+      </select>
+    </div>
+    
+    <div class="setting-group dither-settings" ${
+      this.currentMode !== "dither" ? 'style="display: none;"' : ""
+    }>
+      <label for="dither-size">Size:</label>
+      <div class="slider-container">
+        <input type="range" id="dither-size" min="1" max="10" value="${
+          this.ditherSize
+        }">
+        <input type="number" class="slider-value-input" data-slider="dither-size" min="1" max="10" value="${
+          this.ditherSize
+        }">
       </div>
-      
-      <div class="setting-group dither-settings" ${this.currentMode !== "dither" ? 'style="display: none;"' : ""}>
-        <label for="dither-size">Size:</label>
-        <div class="slider-container">
-          <input type="range" id="dither-size" min="1" max="10" value="${this.ditherSize}">
-          <input type="number" class="slider-value-input" data-slider="dither-size" min="1" max="10" value="${this.ditherSize}">
-        </div>
-      </div>
-      
-      <div class="setting-group dither-settings" ${this.currentMode !== "dither" ? 'style="display: none;"' : ""}>
-        <label for="dither-opacity">Opacity:</label>
-        <div class="slider-container">
-          <input type="range" id="dither-opacity" min="0" max="100" value="${this.ditherOpacity}">
-          <input type="number" class="slider-value-input" data-slider="dither-opacity" min="0" max="100" value="${this.ditherOpacity}">%
-        </div>
-      </div>
-      
-      <div class="setting-group mirror-settings" ${this.currentMode !== "mirror" ? 'style="display: none;"' : ""}>
-        <label for="mirror-axis">Mirror Axis:</label>
-        <select id="mirror-axis" class="misc-select toolbar-dropdown">
-          <option value="horizontal" ${this.mirrorAxis === "horizontal" ? "selected" : ""}>Horizontal</option>
-          <option value="vertical" ${this.mirrorAxis === "vertical" ? "selected" : ""}>Vertical</option>
-          <option value="both" ${this.mirrorAxis === "both" ? "selected" : ""}>Both</option>
-          <option value="diagonal" ${this.mirrorAxis === "diagonal" ? "selected" : ""}>Diagonal</option>
-        </select>
-      </div>
-      
-      <div class="setting-group center-settings" ${this.currentMode !== "center" ? 'style="display: none;"' : ""}>
-        <p class="help-text">Click on canvas to center the view</p>
-        <button id="center-canvas-btn" class="btn btn-sm btn-secondary" style="width: 100%;">
-          <i class="fas fa-crosshairs"></i> Center Canvas
-        </button>
-      </div>
-    `;
+    </div>
+    
+    <div class="setting-group mirror-settings" ${
+      this.currentMode !== "mirror" ? 'style="display: none;"' : ""
+    }>
+      <label for="mirror-axis">Mirror Axis:</label>
+      <select id="mirror-axis" class="misc-select toolbar-dropdown">
+        <option value="horizontal" ${
+          this.mirrorAxis === "horizontal" ? "selected" : ""
+        }>Horizontal</option>
+        <option value="vertical" ${
+          this.mirrorAxis === "vertical" ? "selected" : ""
+        }>Vertical</option>
+        <option value="both" ${
+          this.mirrorAxis === "both" ? "selected" : ""
+        }>Both</option>
+        <option value="diagonal" ${
+          this.mirrorAxis === "diagonal" ? "selected" : ""
+        }>Diagonal</option>
+      </select>
+    </div>
+    
+    <div class="setting-group center-settings" ${
+      this.currentMode !== "center" ? 'style="display: none;"' : ""
+    }>
+      <p class="help-text">Click on canvas to center the view</p>
+      <button id="center-canvas-btn" class="btn btn-sm btn-secondary" style="width: 100%;">
+        <i class="fas fa-crosshairs"></i> Center Canvas
+      </button>
+    </div>
+  `;
   }
 
   // Initialize tool settings event listeners
   initializeSettings() {
     const modeSelect = document.getElementById("misc-mode");
     const ditherSizeSlider = document.getElementById("dither-size");
-    const ditherOpacitySlider = document.getElementById("dither-opacity");
     const mirrorAxisSelect = document.getElementById("mirror-axis");
     const centerCanvasBtn = document.getElementById("center-canvas-btn");
-    
-    // Get number inputs
-    const ditherSizeInput = document.querySelector('[data-slider="dither-size"]');
-    const ditherOpacityInput = document.querySelector('[data-slider="dither-opacity"]');
 
-    // Mode selection
+    const ditherSizeInput = document.querySelector(
+      '[data-slider="dither-size"]'
+    );
+
     if (modeSelect) {
       modeSelect.addEventListener("change", (e) => {
         this.setMode(e.target.value);
@@ -355,14 +363,13 @@ class MiscellaneousTool {
       });
     }
 
-    // Dither size controls
     if (ditherSizeSlider && ditherSizeInput) {
       ditherSizeSlider.addEventListener("input", (e) => {
         const value = parseInt(e.target.value);
         this.setDitherSize(value);
         ditherSizeInput.value = this.ditherSize;
       });
-      
+
       ditherSizeInput.addEventListener("input", (e) => {
         const value = parseInt(e.target.value);
         if (value >= 1 && value <= 10) {
@@ -372,31 +379,12 @@ class MiscellaneousTool {
       });
     }
 
-    // Dither opacity controls
-    if (ditherOpacitySlider && ditherOpacityInput) {
-      ditherOpacitySlider.addEventListener("input", (e) => {
-        const value = parseInt(e.target.value);
-        this.setDitherOpacity(value);
-        ditherOpacityInput.value = this.ditherOpacity;
-      });
-      
-      ditherOpacityInput.addEventListener("input", (e) => {
-        const value = parseInt(e.target.value);
-        if (value >= 0 && value <= 100) {
-          this.setDitherOpacity(value);
-          ditherOpacitySlider.value = this.ditherOpacity;
-        }
-      });
-    }
-
-    // Mirror axis selection
     if (mirrorAxisSelect) {
       mirrorAxisSelect.addEventListener("change", (e) => {
         this.setMirrorAxis(e.target.value);
       });
     }
 
-    // Center canvas button
     if (centerCanvasBtn) {
       centerCanvasBtn.addEventListener("click", () => {
         this.centerCanvasView();
@@ -410,15 +398,15 @@ class MiscellaneousTool {
     const mirrorSettings = document.querySelectorAll(".mirror-settings");
     const centerSettings = document.querySelectorAll(".center-settings");
 
-    ditherSettings.forEach(el => {
+    ditherSettings.forEach((el) => {
       el.style.display = this.currentMode === "dither" ? "" : "none";
     });
-    
-    mirrorSettings.forEach(el => {
+
+    mirrorSettings.forEach((el) => {
       el.style.display = this.currentMode === "mirror" ? "" : "none";
     });
-    
-    centerSettings.forEach(el => {
+
+    centerSettings.forEach((el) => {
       el.style.display = this.currentMode === "center" ? "" : "none";
     });
   }

@@ -13,7 +13,6 @@ function initializeApp() {
         const requiredElements = [
             'main-canvas',
             'overlay-canvas',
-            'color-picker',
             'sprites-list',
             'tool-settings'
         ];

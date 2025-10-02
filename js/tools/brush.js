@@ -1,15 +1,14 @@
 // Brush Tool - For painting pixels with Apply Once functionality
 class BrushTool {
   constructor(editor) {
-    this.editor = editor;
-    this.name = "brush";
-    this.size = 1;
-    this.opacity = 100;
-    this.color = [0, 0, 0, 255]; // Black
-    this.isDrawing = false;
-    this.applyOnce = false; // Apply once per mouse down
-    this.processedPixels = new Set(); // Track processed pixels for apply once
-  }
+  this.editor = editor;
+  this.name = "brush";
+  this.size = 1;
+  this.color = [0, 0, 0, 255]; // Black
+  this.isDrawing = false;
+  this.applyOnce = false;
+  this.processedPixels = new Set();
+}
 
   // Handle mouse down event
   onMouseDown(x, y, event) {
@@ -60,50 +59,46 @@ class BrushTool {
     if (!this.editor.layerManager) return;
     const layerManager = this.editor.layerManager;
     const halfSize = Math.floor(this.size / 2);
-    // Apply brush color with opacity
+
+    // Use color's alpha directly (no opacity multiplication)
     const color = [...this.color];
-    color[3] = Math.round((color[3] * this.opacity) / 100);
-    // Draw brush pattern
+
     for (let dy = -halfSize; dy <= halfSize; dy++) {
       for (let dx = -halfSize; dx <= halfSize; dx++) {
         const pixelX = x + dx;
         const pixelY = y + dy;
-        // Check if pixel is within layer bounds
+
         if (
           pixelX >= 0 &&
           pixelX < layerManager.width &&
           pixelY >= 0 &&
           pixelY < layerManager.height
         ) {
-          // For round brushes, check distance
           if (this.size > 1) {
             const distance = Math.sqrt(dx * dx + dy * dy);
             if (distance > this.size / 2) continue;
           }
-          
-          // Check if pixel should be processed (apply once mode)
+
           const pixelKey = `${pixelX},${pixelY}`;
           if (this.applyOnce && this.processedPixels.has(pixelKey)) {
             continue;
           }
-          
-          // Blend with existing pixel if opacity < 100%
-          if (this.opacity < 100) {
+
+          // Blend with existing pixel if alpha < 255
+          if (color[3] < 255) {
             const existingPixel = layerManager.getPixel(pixelX, pixelY);
             const blendedColor = this.blendColors(existingPixel, color);
             layerManager.setPixel(pixelX, pixelY, blendedColor);
           } else {
             layerManager.setPixel(pixelX, pixelY, color);
           }
-          
-          // Mark pixel as processed for apply once mode
+
           if (this.applyOnce) {
             this.processedPixels.add(pixelKey);
           }
         }
       }
     }
-    // Trigger canvas redraw
     this.editor.canvasManager.render();
   }
 
@@ -171,11 +166,6 @@ class BrushTool {
     this.size = Math.max(1, Math.min(10, size));
   }
 
-  // Set brush opacity
-  setOpacity(opacity) {
-    this.opacity = Math.max(0, Math.min(100, opacity));
-  }
-
   // Set apply once mode
   setApplyOnce(applyOnce) {
     this.applyOnce = applyOnce;
@@ -217,96 +207,62 @@ class BrushTool {
   // Get tool settings UI elements
   getSettingsHTML() {
     return `
-            <div class="setting-group">
-                <label for="brush-size">Size:</label>
-                <div class="slider-container">
-                    <input type="range" id="brush-size" min="1" max="10" value="${this.size}">
-                    <input type="number" class="slider-value-input" data-slider="brush-size" min="1" max="10" value="${this.size}">
-                </div>
-            </div>
-            <div class="setting-group">
-                <label for="brush-opacity">Opacity:</label>
-                <div class="slider-container">
-                    <input type="range" id="brush-opacity" min="0" max="100" value="${this.opacity}">
-                    <input type="number" class="slider-value-input" data-slider="brush-opacity" min="0" max="100" value="${this.opacity}">%
-                </div>
-            </div>
-            <div class="setting-group">
-                <label>
-                    <input type="checkbox" id="brush-apply-once" ${this.applyOnce ? "checked" : ""}>
-                    Apply Once
-                </label>
-            </div>
-        `;
-}
+    <div class="setting-group">
+      <label for="brush-size">Size:</label>
+      <div class="slider-container">
+        <input type="range" id="brush-size" min="1" max="10" value="${
+          this.size
+        }">
+        <input type="number" class="slider-value-input" data-slider="brush-size" min="1" max="10" value="${
+          this.size
+        }">
+      </div>
+    </div>
+    <div class="setting-group">
+      <label>
+        <input type="checkbox" id="brush-apply-once" ${
+          this.applyOnce ? "checked" : ""
+        }>
+        Apply Once
+      </label>
+    </div>
+  `;
+  }
 
   // Initialize tool settings event listeners
   initializeSettings() {
-    const sizeSlider = document.getElementById("brush-size");
-    const opacitySlider = document.getElementById("brush-opacity");
-    const applyOnceCheckbox = document.getElementById("brush-apply-once");
+  const sizeSlider = document.getElementById("brush-size");
+  const applyOnceCheckbox = document.getElementById("brush-apply-once");
+  const sizeInput = document.querySelector('[data-slider="brush-size"]');
+
+  if (sizeSlider && sizeInput) {
+    sizeSlider.addEventListener("input", (e) => {
+      const value = parseInt(e.target.value);
+      this.setSize(value);
+      sizeInput.value = this.size;
+    });
     
-    // Get the number inputs
-    const sizeInput = document.querySelector('[data-slider="brush-size"]');
-    const opacityInput = document.querySelector('[data-slider="brush-opacity"]');
+    sizeInput.addEventListener("input", (e) => {
+      const value = parseInt(e.target.value);
+      if (value >= 1 && value <= 10) {
+        this.setSize(value);
+        sizeSlider.value = this.size;
+      }
+    });
+    
+    sizeInput.addEventListener("blur", (e) => {
+      const value = parseInt(e.target.value);
+      if (isNaN(value) || value < 1 || value > 10) {
+        e.target.value = this.size;
+      }
+    });
+  }
 
-    if (sizeSlider && sizeInput) {
-        // Slider to input sync
-        sizeSlider.addEventListener("input", (e) => {
-            const value = parseInt(e.target.value);
-            this.setSize(value);
-            sizeInput.value = this.size;
-        });
-        
-        // Input to slider sync
-        sizeInput.addEventListener("input", (e) => {
-            const value = parseInt(e.target.value);
-            if (value >= 1 && value <= 10) {
-                this.setSize(value);
-                sizeSlider.value = this.size;
-            }
-        });
-        
-        // Validate on blur
-        sizeInput.addEventListener("blur", (e) => {
-            const value = parseInt(e.target.value);
-            if (isNaN(value) || value < 1 || value > 10) {
-                e.target.value = this.size;
-            }
-        });
-    }
-
-    if (opacitySlider && opacityInput) {
-        // Slider to input sync
-        opacitySlider.addEventListener("input", (e) => {
-            const value = parseInt(e.target.value);
-            this.setOpacity(value);
-            opacityInput.value = this.opacity;
-        });
-        
-        // Input to slider sync
-        opacityInput.addEventListener("input", (e) => {
-            const value = parseInt(e.target.value);
-            if (value >= 0 && value <= 100) {
-                this.setOpacity(value);
-                opacitySlider.value = this.opacity;
-            }
-        });
-        
-        // Validate on blur
-        opacityInput.addEventListener("blur", (e) => {
-            const value = parseInt(e.target.value);
-            if (isNaN(value) || value < 0 || value > 100) {
-                e.target.value = this.opacity;
-            }
-        });
-    }
-
-    if (applyOnceCheckbox) {
-        applyOnceCheckbox.addEventListener("change", (e) => {
-            this.setApplyOnce(e.target.checked);
-        });
-    }
+  if (applyOnceCheckbox) {
+    applyOnceCheckbox.addEventListener("change", (e) => {
+      this.setApplyOnce(e.target.checked);
+    });
+  }
 }
 
   // Get tool cursor
