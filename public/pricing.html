@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pricing - Pixalu</title>
+    <link rel="stylesheet" href="/css/main.css" />
+    <link
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <nav class="navbar">
+      <div class="nav-container">
+        <a href="/" class="nav-logo"><i class="fas fa-palette"></i> Pixalu</a>
+        <ul class="nav-menu">
+          <li><a href="/">Home</a></li>
+          <li><a href="/pricing.html" class="active">Pricing</a></li>
+          <li><a href="/gallery.html">Gallery</a></li>
+          <li><a href="/editor">Editor</a></li>
+        </ul>
+        <div class="nav-auth" id="nav-auth">
+          <button class="btn btn-secondary" id="login-btn">Login</button>
+          <button class="btn btn-primary" id="signup-btn">Sign Up</button>
+        </div>
+      </div>
+    </nav>
+
+    <main class="pricing-page">
+      <section class="pricing-hero">
+        <h1>Choose Your Plan</h1>
+        <p>Start creating amazing pixel art today</p>
+      </section>
+
+      <section class="pricing-cards">
+        <div class="pricing-card">
+          <div class="pricing-header">
+            <h3>Free</h3>
+            <div class="pricing-price">
+              <span class="price">$0</span>
+              <span class="period">/month</span>
+            </div>
+          </div>
+          <ul class="pricing-features">
+            <li><i class="fas fa-check"></i> Up to 10 sprites</li>
+            <li><i class="fas fa-check"></i> Basic tools</li>
+            <li><i class="fas fa-check"></i> 16x16 to 32x32 canvas</li>
+            <li><i class="fas fa-check"></i> PNG export</li>
+            <li><i class="fas fa-check"></i> Community gallery access</li>
+          </ul>
+          <button class="btn btn-secondary btn-large">Get Started</button>
+        </div>
+
+        <div class="pricing-card featured">
+          <div class="pricing-badge">Most Popular</div>
+          <div class="pricing-header">
+            <h3>Pro</h3>
+            <div class="pricing-price">
+              <span class="price">$9</span>
+              <span class="period">/month</span>
+            </div>
+          </div>
+          <ul class="pricing-features">
+            <li><i class="fas fa-check"></i> Unlimited sprites</li>
+            <li><i class="fas fa-check"></i> Advanced tools</li>
+            <li><i class="fas fa-check"></i> Up to 64x64 canvas</li>
+            <li><i class="fas fa-check"></i> All export formats (SVG, GIF)</li>
+            <li><i class="fas fa-check"></i> Animation support</li>
+            <li><i class="fas fa-check"></i> AI generation (100/month)</li>
+            <li><i class="fas fa-check"></i> Cloud storage</li>
+            <li><i class="fas fa-check"></i> Priority support</li>
+          </ul>
+          <button class="btn btn-primary btn-large">Upgrade to Pro</button>
+        </div>
+
+        <div class="pricing-card">
+          <div class="pricing-header">
+            <h3>Team</h3>
+            <div class="pricing-price">
+              <span class="price">$29</span>
+              <span class="period">/month</span>
+            </div>
+          </div>
+          <ul class="pricing-features">
+            <li><i class="fas fa-check"></i> Everything in Pro</li>
+            <li><i class="fas fa-check"></i> Up to 5 team members</li>
+            <li><i class="fas fa-check"></i> Shared sprite library</li>
+            <li><i class="fas fa-check"></i> Collaboration tools</li>
+            <li><i class="fas fa-check"></i> AI generation (500/month)</li>
+            <li><i class="fas fa-check"></i> Custom branding</li>
+            <li><i class="fas fa-check"></i> Team analytics</li>
+            <li><i class="fas fa-check"></i> Dedicated support</li>
+          </ul>
+          <button class="btn btn-secondary btn-large">Contact Sales</button>
+        </div>
+      </section>
+    </main>
+
+    <script type="module">
+      import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+      import {
+        getAuth,
+        onAuthStateChanged,
+      } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+
+      const firebaseConfig = {
+        apiKey: "AIzaSyA5kRKtJvgBxT1_suMUNjJHRW7M-7V03Wk",
+        authDomain: "pixaluapp.firebaseapp.com",
+        projectId: "pixaluapp",
+        storageBucket: "pixaluapp.firebasestorage.app",
+        messagingSenderId: "645940179071",
+        appId: "1:645940179071:web:d1d361f07a773b321b8f4a",
+        measurementId: "G-41CZ9Q72Z3",
+      };
+
+      const app = initializeApp(firebaseConfig);
+      const auth = getAuth(app);
+
+      onAuthStateChanged(auth, (user) => {
+        const navAuth = document.getElementById("nav-auth");
+        if (user) {
+          navAuth.innerHTML = `
+                    <span>Welcome, ${user.email}</span>
+                    <button class="btn btn-secondary" id="logout-btn">Logout</button>
+                `;
+        }
+      });
+    </script>
+  </body>
+</html>

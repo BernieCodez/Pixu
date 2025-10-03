@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pixalu - Professional Pixel Art Editor</title>
+    <link rel="stylesheet" href="/css/main.css" />
+    <link
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <nav class="navbar">
+      <div class="nav-container">
+        <a href="/" class="nav-logo"> <i class="fas fa-palette"></i> Pixalu </a>
+        <ul class="nav-menu">
+          <li><a href="/" class="active">Home</a></li>
+          <li><a href="/pricing">Pricing</a></li>
+          <li><a href="/gallery">Gallery</a></li>
+          <li><a href="/editor">Editor</a></li>
+        </ul>
+        <div class="nav-auth" id="nav-auth">
+          <button class="btn btn-secondary" id="login-btn">Login</button>
+          <button class="btn btn-primary" id="signup-btn">Sign Up</button>
+        </div>
+      </div>
+    </nav>
+
+    <main class="home-page">
+      <!-- Hero Section -->
+      <section class="hero-section">
+        <div class="hero-content">
+          <h1>Create Amazing Pixel Art</h1>
+          <p>
+            Professional pixel art editor with powerful tools, AI assistance,
+            and seamless cloud storage. Perfect for game developers, artists,
+            and creators.
+          </p>
+          <div class="hero-buttons">
+            <a href="/editor" class="btn btn-primary btn-large">
+              <i class="fas fa-paint-brush"></i> Start Creating
+            </a>
+            <a href="/gallery" class="btn btn-secondary btn-large">
+              <i class="fas fa-images"></i> Browse Gallery
+            </a>
+          </div>
+
+          <!-- PLACEHOLDER: Add your hero image/demo here -->
+          <div class="hero-image-placeholder">
+            <i
+              class="fas fa-image"
+              style="font-size: 48px; margin-right: 15px"
+            ></i>
+            Your Hero Image / Editor Demo Screenshot
+          </div>
+        </div>
+      </section>
+
+      <!-- Features Section -->
+      <section class="features-section">
+        <div class="features-container">
+          <h2 class="section-title">Powerful Features</h2>
+          <div class="features-grid">
+            <div class="feature-card">
+              <div class="feature-icon">
+                <i class="fas fa-paintbrush"></i>
+              </div>
+              <h3>Advanced Tools</h3>
+              <p>
+                Full suite of professional tools including brush, eraser, bucket
+                fill, selection, eyedropper, and more.
+              </p>
+            </div>
+
+            <div class="feature-card">
+              <div class="feature-icon">
+                <i class="fas fa-layer-group"></i>
+              </div>
+              <h3>Layer Support</h3>
+              <p>
+                Work with multiple layers for complex compositions. Organize,
+                hide, and blend layers with ease.
+              </p>
+            </div>
+
+            <div class="feature-card">
+              <div class="feature-icon">
+                <i class="fas fa-film"></i>
+              </div>
+              <h3>Animation</h3>
+              <p>
+                Create sprite animations with frame-by-frame control. Export as
+                animated GIF or sprite sheets.
+              </p>
+            </div>
+
+            <div class="feature-card">
+              <div class="feature-icon">
+                <i class="fas fa-robot"></i>
+              </div>
+              <h3>AI Generation</h3>
+              <p>
+                Generate pixel art from text prompts using advanced AI. Get
+                creative inspiration instantly.
+              </p>
+            </div>
+
+            <div class="feature-card">
+              <div class="feature-icon">
+                <i class="fas fa-cloud"></i>
+              </div>
+              <h3>Cloud Storage</h3>
+              <p>
+                Save your work securely in the cloud. Access your projects from
+                anywhere, anytime.
+              </p>
+            </div>
+
+            <div class="feature-card">
+              <div class="feature-icon">
+                <i class="fas fa-file-export"></i>
+              </div>
+              <h3>Multiple Exports</h3>
+              <p>
+                Export as PNG, SVG, or GIF. Scale your pixel art without quality
+                loss with SVG export.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Showcase Section -->
+      <section class="showcase-section">
+        <div class="features-container">
+          <h2 class="section-title">See It In Action</h2>
+
+          <!-- PLACEHOLDER: Add screenshots/demo video here -->
+          <div class="showcase-placeholder">
+            <div style="text-align: center">
+              <i
+                class="fas fa-play-circle"
+                style="font-size: 64px; margin-bottom: 20px; color: #444"
+              ></i>
+              <p>Video Demo / Editor Screenshots</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- CTA Section -->
+      <section class="cta-section">
+        <div class="cta-content">
+          <h2>Ready to Start Creating?</h2>
+          <p>Join thousands of artists and game developers using Pixalu</p>
+          <div class="hero-buttons">
+            <a href="/editor" class="btn btn-primary btn-large">
+              <i class="fas fa-rocket"></i> Get Started Free
+            </a>
+            <a href="/pricing" class="btn btn-secondary btn-large">
+              <i class="fas fa-dollar-sign"></i> View Pricing
+            </a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-content">
+        <div class="footer-links">
+          <a href="/pricing">Pricing</a>
+          <a href="/gallery">Gallery</a>
+          <a href="/editor">Editor</a>
+          <a href="#">About</a>
+          <a href="#">Contact</a>
+          <a href="#">Privacy Policy</a>
+          <a href="#">Terms of Service</a>
+        </div>
+        <p>&copy; 2025 Pixalu. All rights reserved.</p>
+      </div>
+    </footer>
+
+    <script type="module">
+      import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+      import {
+        getAuth,
+        onAuthStateChanged,
+      } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+
+      const firebaseConfig = {
+        apiKey: "YOUR_API_KEY",
+        authDomain: "YOUR_AUTH_DOMAIN",
+        projectId: "YOUR_PROJECT_ID",
+        storageBucket: "YOUR_STORAGE_BUCKET",
+        messagingSenderId: "YOUR_SENDER_ID",
+        appId: "YOUR_APP_ID",
+      };
+
+      const app = initializeApp(firebaseConfig);
+      const auth = getAuth(app);
+
+      onAuthStateChanged(auth, (user) => {
+        const navAuth = document.getElementById("nav-auth");
+        if (user) {
+          navAuth.innerHTML = `
+                    <span>Welcome, ${user.displayName || user.email}</span>
+                    <button class="btn btn-secondary" id="logout-btn">Logout</button>
+                `;
+        }
+      });
+    </script>
+  </body>
+</html>
