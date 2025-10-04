@@ -21,8 +21,8 @@
           <li><a href="/editor">Editor</a></li>
         </ul>
         <div class="nav-auth" id="nav-auth">
-          <button class="btn btn-secondary" id="login-btn">Login</button>
-          <button class="btn btn-primary" id="signup-btn">Sign Up</button>
+          <a href="/auth.html" class="btn btn-secondary">Login</a>
+          <a href="/auth.html" class="btn btn-primary">Sign Up</a>
         </div>
       </div>
     </nav>
@@ -186,15 +186,17 @@
       import {
         getAuth,
         onAuthStateChanged,
+        signOut,
       } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
       const firebaseConfig = {
-        apiKey: "YOUR_API_KEY",
-        authDomain: "YOUR_AUTH_DOMAIN",
-        projectId: "YOUR_PROJECT_ID",
-        storageBucket: "YOUR_STORAGE_BUCKET",
-        messagingSenderId: "YOUR_SENDER_ID",
-        appId: "YOUR_APP_ID",
+        apiKey: "AIzaSyA5kRKtJvgBxT1_suMUNjJHRW7M-7V03Wk",
+        authDomain: "pixaluapp.firebaseapp.com",
+        projectId: "pixaluapp",
+        storageBucket: "pixaluapp.firebasestorage.app",
+        messagingSenderId: "645940179071",
+        appId: "1:645940179071:web:d1d361f07a773b321b8f4a",
+        measurementId: "G-41CZ9Q72Z3",
       };
 
       const app = initializeApp(firebaseConfig);
@@ -203,10 +205,29 @@
       onAuthStateChanged(auth, (user) => {
         const navAuth = document.getElementById("nav-auth");
         if (user) {
+          // Check if user is anonymous (guest)
+          const displayName = user.isAnonymous 
+            ? "Guest" 
+            : (user.displayName || user.email);
+          
           navAuth.innerHTML = `
-                    <span>Welcome, ${user.displayName || user.email}</span>
+                    <span>Welcome, ${displayName}</span>
                     <button class="btn btn-secondary" id="logout-btn">Logout</button>
                 `;
+          
+          // Add logout functionality
+          const logoutBtn = document.getElementById("logout-btn");
+          if (logoutBtn) {
+            logoutBtn.addEventListener("click", async () => {
+              try {
+                await signOut(auth);
+                window.location.reload();
+              } catch (error) {
+                console.error("Logout error:", error);
+                alert("Failed to logout. Please try again.");
+              }
+            });
+          }
         }
       });
     </script>

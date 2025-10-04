@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sign In - Pixalu</title>
+    <link rel="stylesheet" href="/css/main.css" />
+    <link
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div class="auth-page">
+      <a href="/" class="back-home">
+        <i class="fas fa-arrow-left"></i>
+        Back to Home
+      </a>
+
+      <div class="auth-container">
+        <div class="auth-header">
+          <a href="/" class="auth-logo">
+            <i class="fas fa-palette"></i> Pixalu
+          </a>
+          <h2>Welcome Back!</h2>
+          <p>Sign in to continue creating amazing pixel art</p>
+        </div>
+
+        <div class="auth-tabs">
+          <button class="auth-tab active" data-tab="login">Login</button>
+          <button class="auth-tab" data-tab="signup">Sign Up</button>
+        </div>
+
+        <div class="alert alert-error" id="error-message"></div>
+        <div class="alert alert-success" id="success-message"></div>
+
+        <!-- Login Form -->
+        <form class="auth-form active" id="login-form">
+          <div class="form-group">
+            <label for="login-email">Email Address</label>
+            <input
+              type="email"
+              id="login-email"
+              placeholder="Enter your email"
+              required
+            />
+          </div>
+
+          <div class="form-group">
+            <label for="login-password">Password</label>
+            <div class="password-input-wrapper">
+              <input
+                type="password"
+                id="login-password"
+                placeholder="Enter your password"
+                required
+              />
+              <button type="button" class="password-toggle" data-target="login-password">
+                <i class="fas fa-eye"></i>
+              </button>
+            </div>
+          </div>
+
+          <div class="form-options">
+            <label class="form-checkbox">
+              <input type="checkbox" id="remember-me" />
+              Remember me
+            </label>
+            <a href="#" class="forgot-password">Forgot Password?</a>
+          </div>
+
+          <button type="submit" class="submit-btn">
+            <i class="fas fa-sign-in-alt"></i>
+            Sign In
+          </button>
+        </form>
+
+        <!-- Sign Up Form -->
+        <form class="auth-form" id="signup-form">
+          <div class="form-group">
+            <label for="signup-username">Username</label>
+            <input
+              type="text"
+              id="signup-username"
+              placeholder="Choose a username"
+              required
+              minlength="3"
+              maxlength="20"
+            />
+          </div>
+
+          <div class="form-group">
+            <label for="signup-email">Email Address</label>
+            <input
+              type="email"
+              id="signup-email"
+              placeholder="Enter your email"
+              required
+            />
+          </div>
+
+          <div class="form-group">
+            <label for="signup-password">Password</label>
+            <div class="password-input-wrapper">
+              <input
+                type="password"
+                id="signup-password"
+                placeholder="Create a password (min. 6 characters)"
+                required
+                minlength="6"
+              />
+              <button type="button" class="password-toggle" data-target="signup-password">
+                <i class="fas fa-eye"></i>
+              </button>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="signup-confirm-password">Confirm Password</label>
+            <div class="password-input-wrapper">
+              <input
+                type="password"
+                id="signup-confirm-password"
+                placeholder="Confirm your password"
+                required
+                minlength="6"
+              />
+              <button type="button" class="password-toggle" data-target="signup-confirm-password">
+                <i class="fas fa-eye"></i>
+              </button>
+            </div>
+          </div>
+
+          <div class="form-options">
+            <label class="form-checkbox">
+              <input type="checkbox" id="terms" required />
+              I agree to the <a href="/terms.html" target="_blank" style="color: #00d4ff; text-decoration: underline;">Terms of Service</a>
+            </label>
+          </div>
+
+          <button type="submit" class="submit-btn">
+            <i class="fas fa-user-plus"></i>
+            Create Account
+          </button>
+        </form>
+
+        <div class="auth-divider">
+          <span>or</span>
+        </div>
+
+        <div class="social-login">
+          <button class="social-btn" id="guest-login" style="width: 100%;">
+            <i class="fas fa-user-secret"></i>
+            Continue as Guest
+          </button>
+        </div>
+
+        <div class="auth-footer">
+          <p id="auth-footer-text">
+            Don't have an account? <a href="#" data-switch="signup">Sign up</a>
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <script type="module">
+      import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+      import {
+        getAuth,
+        signInWithEmailAndPassword,
+        createUserWithEmailAndPassword,
+        updateProfile,
+        signInAnonymously,
+        sendPasswordResetEmail,
+        setPersistence,
+        browserLocalPersistence,
+        browserSessionPersistence
+      } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+
+      // Firebase Configuration
+      const firebaseConfig = {
+        apiKey: "AIzaSyA5kRKtJvgBxT1_suMUNjJHRW7M-7V03Wk",
+        authDomain: "pixaluapp.firebaseapp.com",
+        projectId: "pixaluapp",
+        storageBucket: "pixaluapp.firebasestorage.app",
+        messagingSenderId: "645940179071",
+        appId: "1:645940179071:web:d1d361f07a773b321b8f4a",
+        measurementId: "G-41CZ9Q72Z3",
+      };
+
+      const app = initializeApp(firebaseConfig);
+      const auth = getAuth(app);
+
+      // DOM Elements
+      const loginForm = document.getElementById("login-form");
+      const signupForm = document.getElementById("signup-form");
+      const errorMessage = document.getElementById("error-message");
+      const successMessage = document.getElementById("success-message");
+      const authTabs = document.querySelectorAll(".auth-tab");
+      const authForms = document.querySelectorAll(".auth-form");
+      const authFooterText = document.getElementById("auth-footer-text");
+
+      // Helper Functions
+      function showError(message) {
+        errorMessage.textContent = message;
+        errorMessage.classList.add("show");
+        successMessage.classList.remove("show");
+        setTimeout(() => {
+          errorMessage.classList.remove("show");
+        }, 5000);
+      }
+
+      function showSuccess(message) {
+        successMessage.textContent = message;
+        successMessage.classList.add("show");
+        errorMessage.classList.remove("show");
+        setTimeout(() => {
+          successMessage.classList.remove("show");
+        }, 3000);
+      }
+
+      function disableForm(form, disabled) {
+        const inputs = form.querySelectorAll("input, button");
+        inputs.forEach((input) => {
+          input.disabled = disabled;
+        });
+      }
+
+      // Tab Switching
+      authTabs.forEach((tab) => {
+        tab.addEventListener("click", () => {
+          const targetTab = tab.dataset.tab;
+
+          authTabs.forEach((t) => t.classList.remove("active"));
+          tab.classList.add("active");
+
+          authForms.forEach((form) => form.classList.remove("active"));
+          document.getElementById(`${targetTab}-form`).classList.add("active");
+
+          // Update footer text
+          if (targetTab === "login") {
+            authFooterText.innerHTML =
+              'Don\'t have an account? <a href="#" data-switch="signup">Sign up</a>';
+          } else {
+            authFooterText.innerHTML =
+              'Already have an account? <a href="#" data-switch="login">Sign in</a>';
+          }
+
+          // Clear messages
+          errorMessage.classList.remove("show");
+          successMessage.classList.remove("show");
+        });
+      });
+
+      // Footer link switching
+      document.addEventListener("click", (e) => {
+        if (e.target.matches('[data-switch]')) {
+          e.preventDefault();
+          const targetTab = e.target.dataset.switch;
+          document.querySelector(`[data-tab="${targetTab}"]`).click();
+        }
+      });
+
+      // Password Toggle
+      document.querySelectorAll(".password-toggle").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const targetId = btn.dataset.target;
+          const input = document.getElementById(targetId);
+          const icon = btn.querySelector("i");
+
+          if (input.type === "password") {
+            input.type = "text";
+            icon.classList.remove("fa-eye");
+            icon.classList.add("fa-eye-slash");
+          } else {
+            input.type = "password";
+            icon.classList.remove("fa-eye-slash");
+            icon.classList.add("fa-eye");
+          }
+        });
+      });
+
+      // Login Form Submission
+      loginForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        disableForm(loginForm, true);
+
+        const email = document.getElementById("login-email").value;
+        const password = document.getElementById("login-password").value;
+        const rememberMe = document.getElementById("remember-me").checked;
+
+        try {
+          // Set persistence based on remember me checkbox
+          const persistence = rememberMe
+            ? browserLocalPersistence
+            : browserSessionPersistence;
+          await setPersistence(auth, persistence);
+
+          const userCredential = await signInWithEmailAndPassword(
+            auth,
+            email,
+            password
+          );
+
+          showSuccess("Login successful! Redirecting...");
+          setTimeout(() => {
+            window.location.href = "/editor";
+          }, 1500);
+        } catch (error) {
+          let errorMsg = "Login failed. Please try again.";
+          
+          switch (error.code) {
+            case "auth/user-not-found":
+              errorMsg = "No account found with this email.";
+              break;
+            case "auth/wrong-password":
+              errorMsg = "Incorrect password.";
+              break;
+            case "auth/invalid-email":
+              errorMsg = "Invalid email address.";
+              break;
+            case "auth/user-disabled":
+              errorMsg = "This account has been disabled.";
+              break;
+            case "auth/too-many-requests":
+              errorMsg = "Too many failed attempts. Please try again later.";
+              break;
+          }
+          
+          showError(errorMsg);
+          disableForm(loginForm, false);
+        }
+      });
+
+      // Sign Up Form Submission
+      signupForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        disableForm(signupForm, true);
+
+        const username = document.getElementById("signup-username").value;
+        const email = document.getElementById("signup-email").value;
+        const password = document.getElementById("signup-password").value;
+        const confirmPassword = document.getElementById("signup-confirm-password").value;
+        const termsAccepted = document.getElementById("terms").checked;
+
+        // Validation
+        if (username.length < 3 || username.length > 20) {
+          showError("Username must be between 3 and 20 characters.");
+          disableForm(signupForm, false);
+          return;
+        }
+
+        if (password !== confirmPassword) {
+          showError("Passwords do not match!");
+          disableForm(signupForm, false);
+          return;
+        }
+
+        if (!termsAccepted) {
+          showError("Please accept the Terms of Service.");
+          disableForm(signupForm, false);
+          return;
+        }
+
+        if (password.length < 6) {
+          showError("Password must be at least 6 characters long.");
+          disableForm(signupForm, false);
+          return;
+        }
+
+        try {
+          const userCredential = await createUserWithEmailAndPassword(
+            auth,
+            email,
+            password
+          );
+
+          // Update user profile with username as display name
+          await updateProfile(userCredential.user, {
+            displayName: username,
+          });
+
+          showSuccess("Account created successfully! Redirecting...");
+          setTimeout(() => {
+            window.location.href = "/editor";
+          }, 1500);
+        } catch (error) {
+          let errorMsg = "Sign up failed. Please try again.";
+          
+          switch (error.code) {
+            case "auth/email-already-in-use":
+              errorMsg = "An account with this email already exists.";
+              break;
+            case "auth/invalid-email":
+              errorMsg = "Invalid email address.";
+              break;
+            case "auth/weak-password":
+              errorMsg = "Password is too weak. Please use a stronger password.";
+              break;
+          }
+          
+          showError(errorMsg);
+          disableForm(signupForm, false);
+        }
+      });
+
+      // Guest Sign In (Anonymous)
+      document.getElementById("guest-login").addEventListener("click", async () => {
+        try {
+          const result = await signInAnonymously(auth);
+          showSuccess("Signed in as guest! Redirecting...");
+          setTimeout(() => {
+            window.location.href = "/editor";
+          }, 1500);
+        } catch (error) {
+          let errorMsg = "Guest sign-in failed. Please try again.";
+          
+          if (error.code === "auth/operation-not-allowed") {
+            errorMsg = "Guest sign-in is not enabled.";
+          }
+          
+          showError(errorMsg);
+        }
+      });
+
+      // Forgot Password
+      document.querySelector(".forgot-password").addEventListener("click", async (e) => {
+        e.preventDefault();
+        const email = document.getElementById("login-email").value;
+
+        if (!email) {
+          showError("Please enter your email address first.");
+          return;
+        }
+
+        try {
+          await sendPasswordResetEmail(auth, email);
+          showSuccess("Password reset email sent! Check your inbox.");
+        } catch (error) {
+          let errorMsg = "Failed to send password reset email.";
+          
+          if (error.code === "auth/user-not-found") {
+            errorMsg = "No account found with this email.";
+          } else if (error.code === "auth/invalid-email") {
+            errorMsg = "Invalid email address.";
+          }
+          
+          showError(errorMsg);
+        }
+      });
+    </script>
+  </body>
+</html>
