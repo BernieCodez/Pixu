@@ -1,0 +1,27 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // User sprite data
+    match /users/{userId}/sprites/{spriteId} {
+      // Users can only access their own sprites
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+      
+      // Frame chunks for large sprites
+      match /frames/{frameId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+    }
+    
+    // Gallery items (if you have a public gallery)
+    match /gallery/{itemId} {
+      // Anyone can read gallery items
+      allow read: if true;
+      
+      // Only the owner can write
+      allow create: if request.auth != null && 
+                      request.resource.data.userId == request.auth.uid;
+      allow update, delete: if request.auth != null && 
+                              resource.data.userId == request.auth.uid;
+    }
+  }
+}

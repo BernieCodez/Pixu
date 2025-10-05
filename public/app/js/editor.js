@@ -6,12 +6,16 @@ class PixelEditor {
     this.uiManager = null;
     this.layerManager = null;
     this.animationManager = new AnimationManager(this);
-    // Safely assign storageManager, fallback if not present
-    if (window.storageManager) {
+    // Prioritize hybridStorage over legacy storageManager
+    if (window.hybridStorage) {
+      this.storageManager = window.hybridStorage;
+      console.log('✅ Constructor: Using HybridStorageManager');
+    } else if (window.storageManager) {
       this.storageManager = window.storageManager;
+      console.warn('⚠️ Constructor: HybridStorage not available, using legacy StorageManager');
     } else {
       console.warn(
-        "window.storageManager not found during PixelEditor construction. Will retry during initialization."
+        "No storage manager found during PixelEditor construction. Will retry during initialization."
       );
       this.storageManager = null;
     }
@@ -35,12 +39,7 @@ class PixelEditor {
     });
 
     this.debouncedSave = this.debounce(async (sprite) => {
-      if (
-        this.storageManager &&
-        typeof this.storageManager.saveSprite === "function"
-      ) {
-        await this.storageManager.saveSprite(sprite);
-      }
+      await this.saveSpriteWithSync(sprite);
     }, 500); // Save after 500ms of inactivity
   }
   debounce(func, wait) {
@@ -54,6 +53,21 @@ class PixelEditor {
       timeout = setTimeout(later, wait);
     };
   }
+
+  /**
+   * Helper method to save sprite with cloud sync
+   */
+  async saveSpriteWithSync(sprite) {
+    if (!this.storageManager || typeof this.storageManager.saveSprite !== 'function') {
+      return false;
+    }
+    
+    const userId = window.currentUser ? window.currentUser.uid : null;
+    const saveOptions = userId ? { syncToCloud: true, userId } : { syncToCloud: false };
+    
+    return await this.storageManager.saveSprite(sprite, saveOptions);
+  }
+
   /**
    * Initialize the editor
    */
@@ -75,14 +89,23 @@ class PixelEditor {
       this.updateUI();
     });
 
-    // Ensure storageManager is available
-    if (!this.storageManager && window.storageManager) {
-      this.storageManager = window.storageManager;
-    }
+    // Verify storage manager is available
+    console.log('🔍 Initialize: Storage system check');
+    console.log('  this.storageManager:', this.storageManager ? this.storageManager.constructor.name : 'Missing');
+    
     if (!this.storageManager) {
       throw new Error(
-        "StorageManager is not available. Make sure js/storage.js is loaded before js/editor.js."
+        "Storage system is not available. Make sure hybridStorage.js is loaded before editor.js."
       );
+    }
+    
+    // Warn if using legacy storage
+    if (this.storageManager.constructor.name === 'StorageManager') {
+      console.error('❌ CRITICAL: Using legacy StorageManager instead of HybridStorageManager!');
+      console.error('   This will cause sprites to load from the wrong database.');
+      console.error('   Check that hybridStorage.js loaded before storage.js');
+    } else {
+      console.log('✅ Initialize: Using', this.storageManager.constructor.name);
     }
 
     // Load settings AFTER initializing layer manager
@@ -520,12 +543,7 @@ class PixelEditor {
     const sprite = new Sprite(width, height, spriteName);
     // Set up auto-save callback
     sprite.onChange = (s) => {
-      if (
-        this.storageManager &&
-        typeof this.storageManager.saveSprite === "function"
-      ) {
-        this.storageManager.saveSprite(s);
-      }
+      this.saveSpriteWithSync(s);
     };
     this.sprites.push(sprite);
     this.setCurrentSprite(sprite);
@@ -584,7 +602,7 @@ class PixelEditor {
   }
 
   // Delete sprite
-  deleteSprite(index) {
+  async deleteSprite(index) {
     // Validate index
     if (index < 0 || index >= this.sprites.length) {
       this.uiManager.showNotification("Invalid sprite index", "error");
@@ -599,6 +617,7 @@ class PixelEditor {
 
     const spriteName = this.sprites[index].name;
     const deletedSprite = this.sprites[index];
+    const deletedSpriteId = deletedSprite.id;
 
     // Remove sprite from array
     this.sprites.splice(index, 1);
@@ -609,7 +628,22 @@ class PixelEditor {
       this.setCurrentSprite(this.sprites[newIndex]);
     }
 
-    this.saveSprites();
+    // Save sprites and delete from cloud
+    await this.saveSprites();
+    
+    // Delete from cloud storage if user is logged in
+    if (window.currentUser && window.hybridStorage) {
+      try {
+        await window.hybridStorage.deleteSprite(deletedSpriteId, {
+          deleteFromCloud: true,
+          userId: window.currentUser.uid
+        });
+        console.log(`Deleted sprite ${spriteName} from cloud`);
+      } catch (error) {
+        console.error('Failed to delete sprite from cloud:', error);
+      }
+    }
+    
     this.uiManager.showNotification(`Deleted sprite: ${spriteName}`, "success");
     return true;
   }
@@ -777,7 +811,7 @@ class PixelEditor {
   /**
    * Crop current sprite to selection bounds
    */
-  cropToSelection(selection) {
+  async cropToSelection(selection) {
     if (!this.currentSprite || !this.layerManager || !selection) {
       console.warn("Cannot crop: missing sprite, layer manager, or selection");
       return false;
@@ -873,12 +907,7 @@ class PixelEditor {
       this.currentSprite.modifiedAt = new Date().toISOString();
 
       // Force save the sprite
-      if (
-        this.storageManager &&
-        typeof this.storageManager.saveSprite === "function"
-      ) {
-        this.storageManager.saveSprite(this.currentSprite);
-      }
+      await this.saveSpriteWithSync(this.currentSprite);
 
       // Update canvas manager
       this.canvasManager.updateCanvasSize();
@@ -989,12 +1018,12 @@ class PixelEditor {
   /**
    * Save sprites to storage
    */
-  /**
-   * Save sprites to storage
-   */
   async saveSprites() {
     try {
-      const success = await this.storageManager.saveSprites(this.sprites);
+      const userId = window.currentUser ? window.currentUser.uid : null;
+      const saveOptions = userId ? { syncToCloud: true, userId } : { syncToCloud: false };
+      
+      const success = await this.storageManager.saveSprites(this.sprites, saveOptions);
       if (!success) {
         this.uiManager.showNotification("Failed to save sprites", "error");
       }
@@ -1014,8 +1043,14 @@ class PixelEditor {
    */
   async loadSprites() {
     try {
-      const loadedSprites = await this.storageManager.loadSprites();
+      // Use hybridStorage with cloud sync if available
+      const userId = window.currentUser ? window.currentUser.uid : null;
+      const loadOptions = userId ? { preferCloud: true, userId } : {};
+      
+      const loadedSprites = await this.storageManager.loadSprites(loadOptions);
       this.sprites = loadedSprites || []; // Ensure it's always an array
+
+      console.log(`Loaded ${this.sprites.length} sprites (userId: ${userId || 'local only'})`);
 
       if (this.sprites.length > 0) {
         this.setCurrentSprite(this.sprites[0]);
@@ -1267,12 +1302,7 @@ class PixelEditor {
     sprite.onChange =
       originalOnChange ||
       ((s) => {
-        if (
-          this.storageManager &&
-          typeof this.storageManager.saveSprite === "function"
-        ) {
-          this.storageManager.saveSprite(s);
-        }
+        this.saveSpriteWithSync(s);
       });
 
     this.updateUI();
@@ -1353,12 +1383,7 @@ class PixelEditor {
 
     // Set up auto-save callback
     sprite.onChange = (s) => {
-      if (
-        this.storageManager &&
-        typeof this.storageManager.saveSprite === "function"
-      ) {
-        this.storageManager.saveSprite(s);
-      }
+      this.saveSpriteWithSync(s);
     };
 
     // Add to sprites array BEFORE setting current sprite

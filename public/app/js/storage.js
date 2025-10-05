@@ -339,9 +339,19 @@ class StorageManager {
     });
   }
 
-  // Optimized sprite saving with automatic chunking/compression
+  // Optimized sprite saving with automatic chunking/compression - now delegates to hybrid storage
   async saveSprite(sprite) {
     try {
+      // Use the new hybrid storage system if available
+      if (window.hybridStorage && window.hybridStorage !== this) {
+        const user = window.currentUser;
+        return await window.hybridStorage.saveSprite(sprite, {
+          syncToCloud: !!user,
+          userId: user?.uid
+        });
+      }
+
+      // Fallback to old implementation
       const pixelCount = sprite.width * sprite.height;
 
       if (pixelCount > this.chunkSize) {
@@ -355,9 +365,19 @@ class StorageManager {
     }
   }
 
-  // Optimized batch sprite saving
+  // Optimized batch sprite saving - now delegates to hybrid storage
   async saveSprites(sprites) {
     try {
+      // Use the new hybrid storage system if available
+      if (window.hybridStorage && window.hybridStorage !== this) {
+        const user = window.currentUser;
+        return await window.hybridStorage.saveSprites(sprites, {
+          syncToCloud: !!user,
+          userId: user?.uid
+        });
+      }
+
+      // Fallback to old implementation
       await this.ensureDB();
 
       const allSprites = sprites || [];

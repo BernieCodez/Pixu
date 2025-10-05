@@ -857,7 +857,11 @@ pixel art medieval castle, 16-bit retro game style</textarea
     />
 
     <!-- Scripts -->
+    <script src="/app/js/canvasStorage.js"></script>
+    <script src="/app/js/cloudStorage.js"></script>
+    <script src="/app/js/hybridStorage.js"></script>
     <script src="/app/js/storage.js"></script>
+    <script src="/app/js/storageTest.js"></script>
     <script src="/app/js/sprite.js"></script>
     <script src="/app/js/canvas.js"></script>
     <script src="/app/js/layerManager.js"></script>
@@ -875,6 +879,22 @@ pixel art medieval castle, 16-bit retro game style</textarea
     <script src="/app/js/editor.js"></script>
     <script src="/app/js/aiGenerator.js"></script>
     <script src="/app/js/animation.js"></script>
+    
+    <!-- Ensure hybridStorage is ready before initializing editor -->
+    <script>
+      // Force hybridStorage to be the primary storage system
+      if (!window.hybridStorage && window.HybridStorageManager) {
+        console.log('Creating hybridStorage instance...');
+        window.hybridStorage = new HybridStorageManager();
+      }
+      
+      if (window.hybridStorage) {
+        console.log('✓ HybridStorage ready:', window.hybridStorage.constructor.name);
+      } else {
+        console.error('✗ HybridStorage not available! Editor will fall back to legacy storage.');
+      }
+    </script>
+    
     <script src="/app/main.js" defer></script>
     <script type="module">
       import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
@@ -899,6 +919,14 @@ pixel art medieval castle, 16-bit retro game style</textarea
 
       // Make auth available globally
       window.firebaseAuth = auth;
+      window.firebaseApp = app;
+
+      // Initialize hybrid storage with cloud sync
+      if (window.hybridStorage) {
+        window.hybridStorage.initialize(app).then(() => {
+          console.log('Storage system initialized');
+        });
+      }
 
       onAuthStateChanged(auth, async (user) => {
         if (user) {
@@ -910,6 +938,21 @@ pixel art medieval castle, 16-bit retro game style</textarea
           localStorage.setItem("authToken", token);
 
           console.log("User logged in:", user.email);
+
+          // Reload sprites from cloud when user logs in
+          if (window.editor && window.editor.loadSprites) {
+            try {
+              const spriteCount = await window.editor.loadSprites();
+              console.log(`Reloaded ${spriteCount} sprites after login`);
+              
+              // Update UI
+              if (window.editor.uiManager && window.editor.uiManager.updateSpritesList) {
+                window.editor.uiManager.updateSpritesList();
+              }
+            } catch (error) {
+              console.error('Failed to reload sprites after login:', error);
+            }
+          }
         } else {
           // User is signed out
           window.currentUser = null;

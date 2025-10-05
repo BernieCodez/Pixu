@@ -53,15 +53,47 @@ function setupErrorHandling() {
         console.error('Global error:', event.error);
         
         if (editor && editor.uiController) {
-            editor.uiController.showNotification('An error occurred. Check the console for details.', 'error');
+            editor.uiController.showNotification('An error occurred. Check console for details.', 'error');
         }
     });
     
     window.addEventListener('unhandledrejection', (event) => {
         console.error('Unhandled promise rejection:', event.reason);
-        
-        if (editor && editor.uiController) {
-            editor.uiController.showNotification('An async error occurred. Check the console for details.', 'error');
+    });
+
+    // Auto-save before page unload
+    window.addEventListener('beforeunload', async (event) => {
+        if (editor && editor.currentSprite) {
+            try {
+                // Update modified timestamp
+                editor.currentSprite.modifiedAt = new Date().toISOString();
+                
+                // Force immediate save using the helper
+                if (editor.saveSpriteWithSync) {
+                    // Save locally immediately (don't await in beforeunload)
+                    editor.saveSpriteWithSync(editor.currentSprite).catch(err => {
+                        console.error('Failed to save on unload:', err);
+                    });
+                    console.log('Auto-saved sprite before page unload');
+                }
+            } catch (error) {
+                console.error('Failed to auto-save on unload:', error);
+            }
+        }
+    });
+
+    // Also save on visibility change (when tab becomes hidden)
+    document.addEventListener('visibilitychange', async () => {
+        if (document.hidden && editor && editor.currentSprite) {
+            try {
+                editor.currentSprite.modifiedAt = new Date().toISOString();
+                if (editor.saveSpriteWithSync) {
+                    await editor.saveSpriteWithSync(editor.currentSprite);
+                    console.log('Auto-saved sprite when tab hidden');
+                }
+            } catch (error) {
+                console.error('Failed to auto-save on visibility change:', error);
+            }
         }
     });
 }
