@@ -648,6 +648,39 @@ class PixelEditor {
     return true;
   }
 
+  // Move sprite - INSERT behavior
+  moveSprite(fromIndex, toIndex) {
+    // Allow toIndex to be at sprites.length (insert at end)
+    if (
+      fromIndex < 0 ||
+      fromIndex >= this.sprites.length ||
+      toIndex < 0 ||
+      toIndex > this.sprites.length ||
+      fromIndex === toIndex
+    ) {
+      return false;
+    }
+
+    // INSERT behavior: Remove from old position and insert at new position
+    const sprite = this.sprites.splice(fromIndex, 1)[0];
+    
+    // Adjust toIndex if necessary (when moving down, the index shifts after removal)
+    const insertIndex = fromIndex < toIndex ? toIndex - 1 : toIndex;
+    this.sprites.splice(insertIndex, 0, sprite);
+
+    // Update current sprite reference if needed
+    if (this.currentSprite === sprite) {
+      // Current sprite moved, it's still current but at a new index
+      // No need to change the reference, just update the UI
+    }
+
+    // Save and update UI
+    this.saveSprites();
+    this.updateUI();
+    
+    return true;
+  }
+
   /**
    * Resize current canvas
    */

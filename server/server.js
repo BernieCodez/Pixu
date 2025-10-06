@@ -66,6 +66,10 @@ app.get('/gallery', (req, res) => {
   res.sendFile(path.join(__dirname, '../public/gallery.html'));
 });
 
+app.get('/auth', (req, res) => {
+  res.sendFile(path.join(__dirname, '../public/auth.html'));
+}); 
+
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });

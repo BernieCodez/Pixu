@@ -54,6 +54,35 @@
   background: rgba(0, 212, 255, 0.2);
 }
 
+.sprite-item.multiselected {
+  border-color: rgba(0, 212, 255, 0.5);
+  background: rgba(0, 212, 255, 0.1);
+}
+
+.sprite-item.active.multiselected {
+  border-color: #00d4ff;
+  background: rgba(0, 212, 255, 0.2);
+}
+
+.sprite-item.dragging {
+  opacity: 0.5;
+}
+
+.sprite-item.drag-over {
+  border-color: #00d4ff;
+  background: rgba(0, 212, 255, 0.2);
+}
+
+.sprite-item.drag-over-before {
+  border-top: 3px solid #00d4ff;
+  box-shadow: 0 -4px 8px rgba(0, 212, 255, 0.5);
+}
+
+.sprite-item.drag-over-after {
+  border-bottom: 3px solid #00d4ff;
+  box-shadow: 0 4px 8px rgba(0, 212, 255, 0.5);
+}
+
 .sprite-size {
   font-size: 10px;
   color: #666;
@@ -447,6 +476,16 @@
   background: rgba(0, 212, 255, 0.3);
 }
 
+.layer-item.multiselected {
+  border-color: rgba(0, 212, 255, 0.5);
+  background: rgba(0, 212, 255, 0.1);
+}
+
+.layer-item.active.multiselected {
+  border-color: rgba(0, 212, 255, 1);
+  background: rgba(0, 212, 255, 0.2);
+}
+
 .layer-item.dragging {
   opacity: 0.5;
   transform: rotate(2deg);
@@ -455,7 +494,16 @@
 .layer-item.drag-over {
   background: rgba(74, 144, 226, 0.1);
   border-color: #4a90e2;
-  border-style: dashed;
+}
+
+.layer-item.drag-over-before {
+  border-top: 3px solid #00d4ff;
+  box-shadow: 0 -4px 8px rgba(0, 212, 255, 0.5);
+}
+
+.layer-item.drag-over-after {
+  border-bottom: 3px solid #00d4ff;
+  box-shadow: 0 4px 8px rgba(0, 212, 255, 0.5);
 }
 
 .drag-handle {
@@ -878,11 +926,31 @@
   opacity: 0.5;
 }
 
+.frame-item.multiselected {
+  border-color: rgba(0, 212, 255, 0.5);
+  background: rgba(0, 212, 255, 0.1);
+}
+
+.frame-item.active.multiselected {
+  border-color: #00d4ff;
+  background: rgba(0, 212, 255, 0.2);
+}
+
 .frame-item.dragging {
   opacity: 0.7;
   transform: rotate(3deg) scale(1.05);
   z-index: 1000;
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+}
+
+.frame-item.drag-over-before {
+  border-left: 3px solid #00d4ff;
+  box-shadow: -4px 0 8px rgba(0, 212, 255, 0.5);
+}
+
+.frame-item.drag-over-after {
+  border-right: 3px solid #00d4ff;
+  box-shadow: 4px 0 8px rgba(0, 212, 255, 0.5);
 }
 
 .frame-item.drag-over {
@@ -1097,11 +1165,81 @@
   }
 }
 
+/* Bulk Actions Bar */
+.bulk-actions-bar {
+  position: sticky;
+  bottom: 0;
+  background: linear-gradient(135deg, #1a4d6f, #2d2d2d);
+  border-top: 2px solid #00d4ff;
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  z-index: 10;
+  margin-top: 10px;
+  border-radius: 6px;
+  box-shadow: 0 -4px 12px rgba(0, 212, 255, 0.2);
+  animation: slideInUp 0.3s ease-out;
+}
+
+@keyframes slideInUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.bulk-count {
+  color: #00d4ff;
+  font-weight: 600;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.bulk-delete-btn {
+  background: linear-gradient(135deg, #dc3545, #c82333);
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.bulk-delete-btn:hover {
+  background: linear-gradient(135deg, #c82333, #bd2130);
+  transform: scale(1.05);
+  box-shadow: 0 4px 8px rgba(220, 53, 69, 0.4);
+}
+
+.bulk-delete-btn:active {
+  transform: scale(0.98);
+}
+
 /* Accessibility improvements */
 
 /* Reduced motion support - removed all transitions */
 @media (prefers-reduced-motion: reduce) {
   .frame-item.dragging {
+    transform: none;
+  }
+  
+  .bulk-actions-bar {
+    animation: none;
+  }
+  
+  .bulk-delete-btn:hover {
     transform: none;
   }
 }

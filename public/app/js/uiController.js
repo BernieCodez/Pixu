@@ -8,6 +8,14 @@ class UIController {
     this.canvasColors = new Set();
     this.canvasColorsPalette = null;
 
+    // Multiselect support
+    this.selectedLayerIndices = new Set();
+    this.selectedSpriteIndices = new Set();
+    this.selectedFrameIndices = new Set();
+    this.lastSelectedLayerIndex = null;
+    this.lastSelectedSpriteIndex = null;
+    this.lastSelectedFrameIndex = null;
+
     this.colorMode = "hex";
     this.colorPalette = [
       "#000000",
@@ -636,8 +644,17 @@ class UIController {
     const [r, g, b, a] = rgba;
     const hsl = this.rgbToHsl(r, g, b);
 
-    this.pickerState.hue = hsl[0];
-    this.pickerState.saturation = hsl[1];
+    // Only update hue and saturation if the color isn't pure black or pure white
+    // This prevents the indicator from snapping when dragging to black
+    if (hsl[2] > 0.1 && hsl[2] < 99.9) {
+      this.pickerState.hue = hsl[0];
+      this.pickerState.saturation = hsl[1];
+    } else if (hsl[2] >= 99.9) {
+      // Pure white - set saturation to 0 but keep hue
+      this.pickerState.saturation = 0;
+    }
+    // If pure black (hsl[2] <= 0.1), preserve existing hue and saturation values
+    
     this.pickerState.lightness = hsl[2];
     this.pickerState.opacity = (a / 255) * 100;
 
@@ -649,7 +666,7 @@ class UIController {
     const horizontalRatio = this.pickerState.squareX / 200;
     const baseLightness = 100 - horizontalRatio * 50;
 
-    if (baseLightness > 0) {
+    if (baseLightness > 0 && this.pickerState.lightness > 0) {
       const verticalRatio = 1 - this.pickerState.lightness / baseLightness;
       this.pickerState.squareY = Math.max(
         0,
@@ -866,7 +883,8 @@ class UIController {
         if (!layer) continue;
 
         const layerItem = document.createElement("div");
-        layerItem.className = `layer-item ${i === activeIndex ? "active" : ""}`;
+        const isSelected = this.selectedLayerIndices.has(i);
+        layerItem.className = `layer-item ${i === activeIndex ? "active" : ""} ${isSelected ? "multiselected" : ""}`;
         layerItem.setAttribute("draggable", "true");
         layerItem.dataset.index = i;
 
@@ -888,7 +906,7 @@ class UIController {
         </button>
       `;
 
-        // Click to select layer
+        // Click to select layer with multiselect support
         layerItem.addEventListener("click", (e) => {
           // Only select if not clicking slider or button
           if (
@@ -896,12 +914,7 @@ class UIController {
             !e.target.classList.contains("layer-visibility") &&
             !e.target.closest(".layer-visibility")
           ) {
-            this.editor.layerManager.setActiveLayer(i);
-            this.updateLayersList();
-            // this.showNotification(
-            //   `Selected ${layer.name || `Layer ${i + 1}`}`,
-            //   "info"
-            // );
+            this.handleLayerSelection(i, e.ctrlKey || e.metaKey, e.shiftKey);
           }
         });
 
@@ -939,17 +952,38 @@ class UIController {
         });
         layerItem.addEventListener("dragover", (e) => {
           e.preventDefault();
-          layerItem.classList.add("drag-over");
+          
+          // Determine if hovering over top or bottom half
+          const rect = layerItem.getBoundingClientRect();
+          const mouseY = e.clientY - rect.top;
+          const isTopHalf = mouseY < rect.height / 2;
+          
+          // Update visual indicator
+          layerItem.classList.remove("drag-over-before", "drag-over-after");
+          if (isTopHalf) {
+            layerItem.classList.add("drag-over-before");
+          } else {
+            layerItem.classList.add("drag-over-after");
+          }
         });
         layerItem.addEventListener("dragleave", (e) => {
-          layerItem.classList.remove("drag-over");
+          layerItem.classList.remove("drag-over-before", "drag-over-after");
         });
         layerItem.addEventListener("drop", (e) => {
           e.preventDefault();
-          layerItem.classList.remove("drag-over");
+          layerItem.classList.remove("drag-over-before", "drag-over-after");
+          
           const fromIndex = parseInt(e.dataTransfer.getData("text/plain"), 10);
-          const toIndex = i;
-          if (fromIndex !== toIndex) {
+          
+          // Determine drop position based on mouse position
+          const rect = layerItem.getBoundingClientRect();
+          const mouseY = e.clientY - rect.top;
+          const isTopHalf = mouseY < rect.height / 2;
+          
+          // Calculate target index: insert before (top) or after (bottom)
+          let toIndex = isTopHalf ? i : i + 1;
+          
+          if (fromIndex !== toIndex && fromIndex !== toIndex - 1) {
             this.editor.layerManager.moveLayer(fromIndex, toIndex);
             this.updateLayersList();
           }
@@ -1047,6 +1081,199 @@ class UIController {
     }
   }
 
+  // Multiselect handler for layers
+  handleLayerSelection(index, ctrlKey, shiftKey) {
+    if (shiftKey && this.lastSelectedLayerIndex !== null) {
+      // Shift-click: select range
+      this.selectedLayerIndices.clear();
+      const start = Math.min(this.lastSelectedLayerIndex, index);
+      const end = Math.max(this.lastSelectedLayerIndex, index);
+      for (let i = start; i <= end; i++) {
+        this.selectedLayerIndices.add(i);
+      }
+    } else if (ctrlKey) {
+      // Ctrl-click: toggle individual selection
+      if (this.selectedLayerIndices.has(index)) {
+        this.selectedLayerIndices.delete(index);
+      } else {
+        this.selectedLayerIndices.add(index);
+      }
+      this.lastSelectedLayerIndex = index;
+    } else {
+      // Regular click: select single layer
+      this.selectedLayerIndices.clear();
+      this.selectedLayerIndices.add(index);
+      this.lastSelectedLayerIndex = index;
+    }
+    
+    // Set active layer
+    this.editor.layerManager.setActiveLayer(index);
+    this.updateLayersList();
+  }
+
+  // Multiselect handler for sprites
+  handleSpriteSelection(index, ctrlKey, shiftKey, sprite) {
+    if (shiftKey && this.lastSelectedSpriteIndex !== null) {
+      // Shift-click: select range
+      this.selectedSpriteIndices.clear();
+      const start = Math.min(this.lastSelectedSpriteIndex, index);
+      const end = Math.max(this.lastSelectedSpriteIndex, index);
+      for (let i = start; i <= end; i++) {
+        this.selectedSpriteIndices.add(i);
+      }
+    } else if (ctrlKey) {
+      // Ctrl-click: toggle individual selection
+      if (this.selectedSpriteIndices.has(index)) {
+        this.selectedSpriteIndices.delete(index);
+      } else {
+        this.selectedSpriteIndices.add(index);
+      }
+      this.lastSelectedSpriteIndex = index;
+    } else {
+      // Regular click: select single sprite
+      this.selectedSpriteIndices.clear();
+      this.selectedSpriteIndices.add(index);
+      this.lastSelectedSpriteIndex = index;
+    }
+    
+    // Set current sprite
+    this.editor.setCurrentSprite(sprite);
+    this.updateSpritesList();
+  }
+
+  // Multiselect handler for frames
+  handleFrameSelection(index, ctrlKey, shiftKey) {
+    if (shiftKey && this.lastSelectedFrameIndex !== null) {
+      // Shift-click: select range
+      this.selectedFrameIndices.clear();
+      const start = Math.min(this.lastSelectedFrameIndex, index);
+      const end = Math.max(this.lastSelectedFrameIndex, index);
+      for (let i = start; i <= end; i++) {
+        this.selectedFrameIndices.add(i);
+      }
+    } else if (ctrlKey) {
+      // Ctrl-click: toggle individual selection
+      if (this.selectedFrameIndices.has(index)) {
+        this.selectedFrameIndices.delete(index);
+      } else {
+        this.selectedFrameIndices.add(index);
+      }
+      this.lastSelectedFrameIndex = index;
+    } else {
+      // Regular click: select single frame
+      this.selectedFrameIndices.clear();
+      this.selectedFrameIndices.add(index);
+      this.lastSelectedFrameIndex = index;
+    }
+    
+    // Set current frame
+    this.editor.animationManager.setCurrentFrame(index);
+    this.updateFramesList();
+    this.updateLayersList();
+  }
+
+  // Bulk delete selected layers
+  deleteSelectedLayers() {
+    if (this.selectedLayerIndices.size === 0) {
+      this.showNotification("No layers selected", "warning");
+      return;
+    }
+
+    const count = this.selectedLayerIndices.size;
+    const remainingLayers = this.editor.layerManager.layers.length - count;
+
+    if (remainingLayers < 1) {
+      this.showNotification("Cannot delete all layers", "error");
+      return;
+    }
+
+    this.showCustomConfirm(
+      `Delete ${count} selected layer${count > 1 ? 's' : ''}?`,
+      () => {
+        // Convert to array and sort in descending order to delete from end first
+        const indices = Array.from(this.selectedLayerIndices).sort((a, b) => b - a);
+        
+        indices.forEach(index => {
+          this.editor.layerManager.deleteLayer(index);
+        });
+
+        this.selectedLayerIndices.clear();
+        this.showNotification(`Deleted ${count} layer${count > 1 ? 's' : ''}`, "success");
+        this.updateLayersList();
+      }
+    );
+  }
+
+  // Bulk delete selected sprites
+  deleteSelectedSprites() {
+    if (this.selectedSpriteIndices.size === 0) {
+      this.showNotification("No sprites selected", "warning");
+      return;
+    }
+
+    const count = this.selectedSpriteIndices.size;
+    const remainingSprites = this.editor.sprites.length - count;
+
+    if (remainingSprites < 1) {
+      this.showNotification("Cannot delete all sprites", "error");
+      return;
+    }
+
+    this.showCustomConfirm(
+      `Delete ${count} selected sprite${count > 1 ? 's' : ''}?`,
+      () => {
+        // Convert to array and sort in descending order to delete from end first
+        const indices = Array.from(this.selectedSpriteIndices).sort((a, b) => b - a);
+        
+        indices.forEach(index => {
+          this.editor.deleteSprite(index);
+        });
+
+        this.selectedSpriteIndices.clear();
+        this.showNotification(`Deleted ${count} sprite${count > 1 ? 's' : ''}`, "success");
+        this.updateSpritesList();
+      }
+    );
+  }
+
+  // Bulk delete selected frames
+  deleteSelectedFrames() {
+    if (this.selectedFrameIndices.size === 0) {
+      this.showNotification("No frames selected", "warning");
+      return;
+    }
+
+    const sprite = this.editor.currentSprite;
+    if (!sprite || !sprite.frames) {
+      this.showNotification("No sprite active", "error");
+      return;
+    }
+
+    const count = this.selectedFrameIndices.size;
+    const remainingFrames = sprite.frames.length - count;
+
+    if (remainingFrames < 1) {
+      this.showNotification("Cannot delete all frames", "error");
+      return;
+    }
+
+    this.showCustomConfirm(
+      `Delete ${count} selected frame${count > 1 ? 's' : ''}?`,
+      () => {
+        // Convert to array and sort in descending order to delete from end first
+        const indices = Array.from(this.selectedFrameIndices).sort((a, b) => b - a);
+        
+        indices.forEach(index => {
+          this.editor.animationManager.deleteFrame(index);
+        });
+
+        this.selectedFrameIndices.clear();
+        this.showNotification(`Deleted ${count} frame${count > 1 ? 's' : ''}`, "success");
+        this.updateFramesList();
+      }
+    );
+  }
+
   // Add this method to UIController class to force layer UI update
   forceLayerUIUpdate() {
     // Force update layers list after a short delay to ensure layer manager is ready
@@ -1075,7 +1302,31 @@ class UIController {
             font-size: 14px;
         `;
 
-    const menuItems = [
+    // Check if multiple layers are selected
+    const multipleSelected = this.selectedLayerIndices.size > 1;
+    const selectedCount = this.selectedLayerIndices.size;
+
+    const menuItems = multipleSelected ? [
+      // Bulk operations menu
+      {
+        label: `Delete ${selectedCount} Layers`,
+        icon: "fas fa-trash",
+        action: () => {
+          this.deleteSelectedLayers();
+          this.hideContextMenu();
+        },
+        danger: true,
+      },
+      {
+        label: "Deselect All",
+        icon: "fas fa-times",
+        action: () => {
+          this.selectedLayerIndices.clear();
+          this.updateLayersList();
+          this.hideContextMenu();
+        },
+      },
+    ] : [
       {
         label: "Duplicate Layer",
         icon: "fas fa-copy",
@@ -1622,9 +1873,10 @@ class UIController {
     // Create frame thumbnails
     sprite.frames.forEach((frame, index) => {
       const frameItem = document.createElement("div");
+      const isSelected = this.selectedFrameIndices.has(index);
       frameItem.className = `frame-item ${
         index === this.editor.animationManager.currentFrameIndex ? "active" : ""
-      }`;
+      } ${isSelected ? "multiselected" : ""}`;
       frameItem.draggable = true;
       frameItem.dataset.frameIndex = index;
 
@@ -1649,16 +1901,15 @@ class UIController {
       frameItem.appendChild(thumbnail);
       frameItem.appendChild(frameInfo);
 
-      // Add event listeners
-      frameItem.addEventListener("click", () => {
-        this.editor.animationManager.setCurrentFrame(index);
-        this.updateFramesList();
-        this.updateLayersList();
+      // Add event listeners with multiselect support
+      frameItem.addEventListener("click", (e) => {
+        this.handleFrameSelection(index, e.ctrlKey || e.metaKey, e.shiftKey);
       });
 
       // ADDED: Right-click context menu for frame export
       frameItem.addEventListener("contextmenu", (e) => {
         e.preventDefault();
+        e.stopPropagation(); // Prevent event bubbling
         this.showFrameContextMenu(e, frame, index);
       });
 
@@ -1679,21 +1930,40 @@ class UIController {
 
       frameItem.addEventListener("dragover", (e) => {
         e.preventDefault();
-        frameItem.classList.add("drag-over");
+        
+        // Determine if hovering over left or right half
+        const rect = frameItem.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const isLeftHalf = mouseX < rect.width / 2;
+        
+        // Update visual indicator
+        frameItem.classList.remove("drag-over-before", "drag-over-after");
+        if (isLeftHalf) {
+          frameItem.classList.add("drag-over-before");
+        } else {
+          frameItem.classList.add("drag-over-after");
+        }
       });
 
       frameItem.addEventListener("dragleave", () => {
-        frameItem.classList.remove("drag-over");
+        frameItem.classList.remove("drag-over-before", "drag-over-after");
       });
 
       frameItem.addEventListener("drop", (e) => {
         e.preventDefault();
-        frameItem.classList.remove("drag-over");
+        frameItem.classList.remove("drag-over-before", "drag-over-after");
 
         const fromIndex = parseInt(e.dataTransfer.getData("text/plain"));
-        const toIndex = index;
+        
+        // Determine drop position based on mouse position
+        const rect = frameItem.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const isLeftHalf = mouseX < rect.width / 2;
+        
+        // Calculate target index: insert before (left) or after (right)
+        let toIndex = isLeftHalf ? index : index + 1;
 
-        if (fromIndex !== toIndex) {
+        if (fromIndex !== toIndex && fromIndex !== toIndex - 1) {
           this.editor.animationManager.moveFrame(fromIndex, toIndex);
           this.updateFramesList();
         }
@@ -1701,6 +1971,7 @@ class UIController {
 
       framesList.appendChild(frameItem);
     });
+
     this.updateFrameDisplay();
     this.updateCanvasColorsPalette();
   }
@@ -1724,7 +1995,31 @@ class UIController {
     font-size: 14px;
   `;
 
-    const menuItems = [
+    // Check if multiple frames are selected
+    const multipleSelected = this.selectedFrameIndices.size > 1;
+    const selectedCount = this.selectedFrameIndices.size;
+
+    const menuItems = multipleSelected ? [
+      // Bulk operations menu
+      {
+        label: `Delete ${selectedCount} Frames`,
+        icon: "fas fa-trash",
+        action: () => {
+          this.deleteSelectedFrames();
+          this.hideContextMenu();
+        },
+        danger: true,
+      },
+      {
+        label: "Deselect All",
+        icon: "fas fa-times",
+        action: () => {
+          this.selectedFrameIndices.clear();
+          this.updateFramesList();
+          this.hideContextMenu();
+        },
+      },
+    ] : [
       {
         label: "Export Frame (1x)",
         icon: "fas fa-download",
@@ -1825,20 +2120,34 @@ class UIController {
     });
 
     // Position and show menu
+    const menuWidth = 180;
+    const menuHeight = 300;
+    
+    // Use clientX/clientY for fixed positioning (relative to viewport)
     let left = event.clientX;
     let top = event.clientY;
 
-    if (left + 180 > window.innerWidth) {
-      left = window.innerWidth - 180 - 10;
+    // Debug: log coordinates
+    console.log('Frame context menu - clientX:', event.clientX, 'clientY:', event.clientY);
+    console.log('Frame context menu - pageX:', event.pageX, 'pageY:', event.pageY);
+
+    // Ensure menu stays within viewport
+    if (left + menuWidth > window.innerWidth) {
+      left = window.innerWidth - menuWidth - 10;
     }
-    if (top + 300 > window.innerHeight) {
-      top = window.innerHeight - 300 - 10;
+    if (top + menuHeight > window.innerHeight) {
+      top = window.innerHeight - menuHeight - 10;
     }
 
+    // Append to body first (before setting position to avoid reflow)
+    document.body.appendChild(contextMenu);
+    
+    // Apply positioning after appending
+    contextMenu.style.position = 'fixed';
     contextMenu.style.left = `${left}px`;
     contextMenu.style.top = `${top}px`;
-
-    document.body.appendChild(contextMenu);
+    contextMenu.style.zIndex = '10000';
+    
     this.activeContextMenu = contextMenu;
 
     document.addEventListener(
@@ -2314,6 +2623,20 @@ class UIController {
             e.preventDefault();
           }
           break;
+        case "delete":
+        case "backspace":
+          // Delete selected items (layers, sprites, or frames)
+          if (this.selectedLayerIndices.size > 1) {
+            this.deleteSelectedLayers();
+            e.preventDefault();
+          } else if (this.selectedSpriteIndices.size > 1) {
+            this.deleteSelectedSprites();
+            e.preventDefault();
+          } else if (this.selectedFrameIndices.size > 1) {
+            this.deleteSelectedFrames();
+            e.preventDefault();
+          }
+          break;
       }
     });
   }
@@ -2492,9 +2815,12 @@ class UIController {
 
     this.editor.sprites.forEach((sprite, index) => {
       const spriteItem = document.createElement("div");
+      const isSelected = this.selectedSpriteIndices.has(index);
       spriteItem.className = `sprite-item ${
         sprite === this.editor.currentSprite ? "active" : ""
-      }`;
+      } ${isSelected ? "multiselected" : ""}`;
+      spriteItem.setAttribute("draggable", "true");
+      spriteItem.dataset.index = index;
 
       // Create thumbnail
       const thumbnail = this.createSpriteThumbnail(sprite);
@@ -2509,17 +2835,67 @@ class UIController {
       spriteItem.appendChild(thumbnail);
       spriteItem.appendChild(spriteInfo);
 
-      // Click to select sprite
-      spriteItem.addEventListener("click", () => {
-        this.editor.setCurrentSprite(sprite);
-        // spriteItem.classList.add("active");
-        this.updateSpritesList();
+      // Click to select sprite with multiselect support
+      spriteItem.addEventListener("click", (e) => {
+        this.handleSpriteSelection(index, e.ctrlKey || e.metaKey, e.shiftKey, sprite);
       });
 
       // Right-click context menu
       spriteItem.addEventListener("contextmenu", (e) => {
         e.preventDefault();
         this.showSpriteContextMenu(e, sprite, index);
+      });
+
+      // Drag and drop events for reordering
+      spriteItem.addEventListener("dragstart", (e) => {
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", index);
+        spriteItem.classList.add("dragging");
+      });
+      
+      spriteItem.addEventListener("dragend", (e) => {
+        spriteItem.classList.remove("dragging");
+      });
+      
+      spriteItem.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        
+        // Determine if hovering over top or bottom half
+        const rect = spriteItem.getBoundingClientRect();
+        const mouseY = e.clientY - rect.top;
+        const isTopHalf = mouseY < rect.height / 2;
+        
+        // Update visual indicator
+        spriteItem.classList.remove("drag-over-before", "drag-over-after");
+        if (isTopHalf) {
+          spriteItem.classList.add("drag-over-before");
+        } else {
+          spriteItem.classList.add("drag-over-after");
+        }
+      });
+      
+      spriteItem.addEventListener("dragleave", (e) => {
+        spriteItem.classList.remove("drag-over-before", "drag-over-after");
+      });
+      
+      spriteItem.addEventListener("drop", (e) => {
+        e.preventDefault();
+        spriteItem.classList.remove("drag-over-before", "drag-over-after");
+        
+        const fromIndex = parseInt(e.dataTransfer.getData("text/plain"), 10);
+        
+        // Determine drop position based on mouse position
+        const rect = spriteItem.getBoundingClientRect();
+        const mouseY = e.clientY - rect.top;
+        const isTopHalf = mouseY < rect.height / 2;
+        
+        // Calculate target index: insert before (top) or after (bottom)
+        let toIndex = isTopHalf ? index : index + 1;
+        
+        if (fromIndex !== toIndex && fromIndex !== toIndex - 1) {
+          this.editor.moveSprite(fromIndex, toIndex);
+          this.updateSpritesList();
+        }
       });
 
       spritesList.appendChild(spriteItem);
@@ -3097,7 +3473,31 @@ class UIController {
             font-size: 14px;
         `;
 
-    const menuItems = [
+    // Check if multiple sprites are selected
+    const multipleSelected = this.selectedSpriteIndices.size > 1;
+    const selectedCount = this.selectedSpriteIndices.size;
+
+    const menuItems = multipleSelected ? [
+      // Bulk operations menu
+      {
+        label: `Delete ${selectedCount} Sprites`,
+        icon: "fas fa-trash",
+        action: () => {
+          this.deleteSelectedSprites();
+          this.hideContextMenu();
+        },
+        danger: true,
+      },
+      {
+        label: "Deselect All",
+        icon: "fas fa-times",
+        action: () => {
+          this.selectedSpriteIndices.clear();
+          this.updateSpritesList();
+          this.hideContextMenu();
+        },
+      },
+    ] : [
       {
         label: "Duplicate",
         icon: "fas fa-copy",
