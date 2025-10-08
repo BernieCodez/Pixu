@@ -56,6 +56,7 @@ class PixelEditor {
 
   /**
    * Helper method to save sprite with cloud sync
+   * OPTIMIZED: Now includes progress tracking for large sprites
    */
   async saveSpriteWithSync(sprite) {
     if (!this.storageManager || typeof this.storageManager.saveSprite !== 'function') {
@@ -64,6 +65,37 @@ class PixelEditor {
     
     const userId = window.currentUser ? window.currentUser.uid : null;
     const saveOptions = userId ? { syncToCloud: true, userId } : { syncToCloud: false };
+    
+    // OPTIMIZATION: Show progress for large sprites (> 100,000 pixels)
+    const spriteSize = sprite.width * sprite.height;
+    const isLargeSprite = spriteSize > 100000;
+    
+    if (isLargeSprite && userId && saveOptions.syncToCloud) {
+      // Add progress callback for large sprites
+      saveOptions.onProgress = (progress) => {
+        const percent = Math.round((progress.current / progress.total) * 100);
+        this.uiManager.showProgressNotification(
+          `Uploading ${sprite.name}...`,
+          percent
+        );
+      };
+      
+      try {
+        const result = await this.storageManager.saveSprite(sprite, saveOptions);
+        
+        // Hide progress and show success
+        this.uiManager.hideProgressNotification();
+        if (result) {
+          this.uiManager.showNotification(`${sprite.name} saved to cloud`, 'success');
+        }
+        
+        return result;
+      } catch (error) {
+        this.uiManager.hideProgressNotification();
+        this.uiManager.showNotification('Upload failed', 'error');
+        throw error;
+      }
+    }
     
     return await this.storageManager.saveSprite(sprite, saveOptions);
   }
@@ -1174,12 +1206,12 @@ class PixelEditor {
         if (data.sprites && Array.isArray(data.sprites)) {
           // Import multiple sprites
           data.sprites.forEach((spriteData) => {
-            if (spriteData.width > 64 || spriteData.height > 64) {
+            // WARNING: Notify about very large sprites
+            if (spriteData.width > 512 || spriteData.height > 512) {
               this.uiManager.showNotification(
-                `Skipped sprite "${spriteData.name}" - too large (${spriteData.width}x${spriteData.height})`,
+                `Warning: "${spriteData.name}" is very large (${spriteData.width}x${spriteData.height}). Performance may be affected.`,
                 "warning"
               );
-              return;
             }
 
             const sprite = new Sprite(
@@ -1232,16 +1264,16 @@ class PixelEditor {
       canvas.height = img.height;
       ctx.drawImage(img, 0, 0);
 
-      // Check if image exceeds maximum size
-      if (img.width > 64 || img.height > 64) {
-        // Show downscale modal
+      // WARNING: Show downscale option for very large images
+      if (img.width > 512 || img.height > 512) {
+        // Show downscale modal for large images
         const imageData = ctx.getImageData(0, 0, img.width, img.height);
         editor.uiManager.showDownscaleModal(imageData, img.width, img.height);
         editor._importingSprite = false;
         return;
       }
 
-      // Image is within limits, create sprite directly
+      // Image is within recommended limits, create sprite directly
       const imageData = ctx.getImageData(0, 0, img.width, img.height);
 
       if (!imageData || imageData.width === 0 || imageData.height === 0) {

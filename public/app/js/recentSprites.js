@@ -108,8 +108,8 @@ class RecentSpritesManager {
           ctx.drawImage(img, 0, 0);
           const imageData = ctx.getImageData(0, 0, img.width, img.height);
           
-          // If too large, show downscale modal
-          if (img.width > 64 || img.height > 64) {
+          // WARNING: Show downscale option for very large images
+          if (img.width > 512 || img.height > 512) {
             if (
               window.editor &&
               window.editor.uiManager &&
@@ -122,7 +122,7 @@ class RecentSpritesManager {
               );
             }
           } else {
-            // Otherwise, import directly
+            // Import directly for reasonable sizes
             if (window.editor && window.editor.createSpriteFromImageData) {
               window.editor.createSpriteFromImageData(
                 imageData,

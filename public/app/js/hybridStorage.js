@@ -8,6 +8,10 @@ class HybridStorageManager {
     this.syncTimer = null;
     this.pendingSync = new Set();
     this.isSyncing = false;
+    
+    // OPTIMIZATION: Debounce cloud syncs to prevent hammering the server
+    this._syncTimeouts = new Map(); // spriteId -> timeout
+    this.SYNC_DEBOUNCE_MS = 2000; // Wait 2 seconds before syncing to cloud
   }
 
   async initialize(firebaseApp) {
@@ -54,13 +58,25 @@ class HybridStorageManager {
         throw new Error('Failed to save sprite locally');
       }
 
-      // Sync to cloud if enabled and user is logged in
+      // OPTIMIZATION: Debounced cloud sync to avoid hammering the server
       if (syncToCloud && userId && this.cloudStorage && this.cloudStorage.initialized) {
-        // Don't wait for cloud sync - do it in background
-        this.pendingSync.add(sprite.id);
-        this.syncSpriteToCloud(sprite, userId).catch(err => {
-          console.warn('Background cloud sync failed (will retry later):', err.message);
-        });
+        // Cancel any pending sync for this sprite
+        if (this._syncTimeouts.has(sprite.id)) {
+          clearTimeout(this._syncTimeouts.get(sprite.id));
+        }
+        
+        // Schedule debounced cloud sync
+        const timeoutId = setTimeout(() => {
+          this._syncTimeouts.delete(sprite.id);
+          this.pendingSync.add(sprite.id);
+          
+          this.syncSpriteToCloud(sprite, userId).catch(err => {
+            console.warn('Background cloud sync failed (will retry later):', err.message);
+          });
+        }, this.SYNC_DEBOUNCE_MS);
+        
+        this._syncTimeouts.set(sprite.id, timeoutId);
+        console.log(`Scheduled cloud sync for ${sprite.name} in ${this.SYNC_DEBOUNCE_MS}ms`);
       }
 
       return true;
@@ -70,20 +86,48 @@ class HybridStorageManager {
     }
   }
 
-  async syncSpriteToCloud(sprite, userId) {
+  // OPTIMIZATION: Flush any pending syncs immediately (for explicit saves)
+  async flushPendingSyncs() {
+    const timeoutIds = Array.from(this._syncTimeouts.values());
+    this._syncTimeouts.clear();
+    
+    // Clear all pending timeouts
+    timeoutIds.forEach(timeoutId => clearTimeout(timeoutId));
+    
+    console.log(`Flushed ${timeoutIds.length} pending sync timers`);
+  }
+
+  async syncSpriteToCloud(sprite, userId, options = {}) {
     if (!userId || !this.cloudStorage || !this.cloudStorage.initialized) {
       return false;
     }
 
     try {
+      // Set progress callback if provided
+      if (options.onProgress && this.cloudStorage) {
+        this.cloudStorage.onProgress = options.onProgress;
+      }
+      
       const success = await this.cloudStorage.saveSprite(sprite, userId);
       if (success) {
         this.pendingSync.delete(sprite.id);
         console.log(`Synced sprite ${sprite.name} to cloud`);
       }
+      
+      // Clear progress callback
+      if (this.cloudStorage) {
+        this.cloudStorage.onProgress = null;
+      }
+      
       return success;
     } catch (error) {
       console.error('Failed to sync sprite to cloud:', error);
+      
+      // Clear progress callback on error
+      if (this.cloudStorage) {
+        this.cloudStorage.onProgress = null;
+      }
+      
       return false;
     }
   }

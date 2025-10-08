@@ -10,7 +10,13 @@ class CloudStorageManager {
     
     // Firestore has a 1MB document limit, so we'll chunk larger images
     this.MAX_CHUNK_SIZE = 900000; // ~900KB to be safe
-    this.COMPRESSION_QUALITY = 0.92; // PNG compression quality
+    this.COMPRESSION_QUALITY = 0.75; // OPTIMIZED: Reduced from 0.92 to 0.75 for faster uploads
+    
+    // Progress tracking
+    this.onProgress = null;
+    
+    // Check for OffscreenCanvas support
+    this.supportsOffscreenCanvas = typeof OffscreenCanvas !== 'undefined';
   }
 
   async initialize(firebaseApp) {
@@ -251,22 +257,16 @@ class CloudStorageManager {
     }
   }
 
-  // Convert sprite to efficient cloud storage format using canvas data URLs
-  async spriteToCloudFormat(sprite) {
-    const frames = [];
-    
-    for (const frame of sprite.frames) {
-      const layers = [];
-      
-      for (const layer of frame.layers) {
-        // Create canvas for this layer
-        const canvas = document.createElement('canvas');
-        canvas.width = frame.width;
-        canvas.height = frame.height;
-        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  // OPTIMIZATION: Convert layer to data URL using OffscreenCanvas when available
+  async layerToDataURL(layer, width, height) {
+    // Use OffscreenCanvas for non-blocking async processing
+    if (this.supportsOffscreenCanvas) {
+      try {
+        const canvas = new OffscreenCanvas(width, height);
+        const ctx = canvas.getContext('2d');
         
         // Draw pixels to canvas
-        const imageData = ctx.createImageData(frame.width, frame.height);
+        const imageData = ctx.createImageData(width, height);
         const data = imageData.data;
         
         if (layer.useTypedArray && layer.pixels instanceof Uint8Array) {
@@ -275,8 +275,8 @@ class CloudStorageManager {
         } else if (Array.isArray(layer.pixels)) {
           // Convert 2D array to typed array
           let index = 0;
-          for (let y = 0; y < frame.height; y++) {
-            for (let x = 0; x < frame.width; x++) {
+          for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
               const pixel = layer.pixels[y][x];
               data[index++] = pixel[0];
               data[index++] = pixel[1];
@@ -288,8 +288,78 @@ class CloudStorageManager {
         
         ctx.putImageData(imageData, 0, 0);
         
-        // Convert to data URL (PNG compression)
-        const dataURL = canvas.toDataURL('image/png', this.COMPRESSION_QUALITY);
+        // Convert to blob (async, non-blocking)
+        const blob = await canvas.convertToBlob({
+          type: 'image/png',
+          quality: this.COMPRESSION_QUALITY
+        });
+        
+        // Convert blob to data URL
+        return await this.blobToDataURL(blob);
+      } catch (error) {
+        console.warn('OffscreenCanvas failed, falling back to regular canvas:', error);
+        // Fall through to regular canvas
+      }
+    }
+    
+    // Fallback: Use regular canvas (synchronous, blocking)
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    
+    // Draw pixels to canvas
+    const imageData = ctx.createImageData(width, height);
+    const data = imageData.data;
+    
+    if (layer.useTypedArray && layer.pixels instanceof Uint8Array) {
+      // Direct copy for typed arrays
+      data.set(layer.pixels);
+    } else if (Array.isArray(layer.pixels)) {
+      // Convert 2D array to typed array
+      let index = 0;
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const pixel = layer.pixels[y][x];
+          data[index++] = pixel[0];
+          data[index++] = pixel[1];
+          data[index++] = pixel[2];
+          data[index++] = pixel[3];
+        }
+      }
+    }
+    
+    ctx.putImageData(imageData, 0, 0);
+    
+    // Convert to data URL (PNG compression)
+    return canvas.toDataURL('image/png', this.COMPRESSION_QUALITY);
+  }
+
+  // Helper to convert blob to data URL
+  blobToDataURL(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  // Convert sprite to efficient cloud storage format using canvas data URLs
+  // OPTIMIZED: Now uses OffscreenCanvas for async processing when available
+  async spriteToCloudFormat(sprite) {
+    const frames = [];
+    
+    // Calculate total layers for progress tracking
+    const totalLayers = sprite.frames.reduce((sum, frame) => sum + frame.layers.length, 0);
+    let processedLayers = 0;
+    
+    for (const frame of sprite.frames) {
+      const layers = [];
+      
+      for (const layer of frame.layers) {
+        // OPTIMIZATION: Use OffscreenCanvas for async processing when available
+        const dataURL = await this.layerToDataURL(layer, frame.width, frame.height);
         
         layers.push({
           id: layer.id,
@@ -300,6 +370,12 @@ class CloudStorageManager {
           blendMode: layer.blendMode || 'normal',
           dataURL // Much more efficient than pixel arrays
         });
+        
+        // Progress tracking
+        processedLayers++;
+        if (this.onProgress) {
+          this.onProgress({ current: processedLayers, total: totalLayers });
+        }
       }
       
       frames.push({

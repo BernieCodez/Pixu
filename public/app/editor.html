@@ -545,10 +545,10 @@
         <div class="modal-body">
           <div class="downscale-info">
             <p>
-              The imported image is <span id="original-dimensions"></span> which
-              exceeds the maximum size of 64x64 pixels.
+              The imported image is <span id="original-dimensions"></span>.
             </p>
-            <p>Please choose a target size for downscaling:</p>
+            <p><strong>⚠️ Warning:</strong> Large images may impact performance.</p>
+            <p>You can downscale it to a smaller size for better performance:</p>
           </div>
 
           <div class="input-group">
@@ -557,7 +557,7 @@
               type="number"
               id="target-width"
               min="1"
-              max="64"
+              max="4096"
               value="32"
             />
           </div>
@@ -568,7 +568,7 @@
               type="number"
               id="target-height"
               min="1"
-              max="64"
+              max="4096"
               value="32"
             />
           </div>
@@ -597,8 +597,11 @@
           <button class="btn btn-secondary" id="cancel-downscale">
             Cancel
           </button>
+          <button class="btn btn-warning" id="use-full-size">
+            Use Full Size Anyway
+          </button>
           <button class="btn btn-primary" id="apply-downscale">
-            Create Sprite
+            Downscale & Create
           </button>
         </div>
       </div>
@@ -617,7 +620,7 @@
               type="number"
               id="canvas-width"
               min="1"
-              max="128"
+              max="4096"
               value="16"
             />
           </div>
@@ -627,7 +630,7 @@
               type="number"
               id="canvas-height"
               min="1"
-              max="128"
+              max="4096"
               value="16"
             />
           </div>

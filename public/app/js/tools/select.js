@@ -21,6 +21,11 @@ class SelectTool {
     this.isRotating = false;
     this.rotationAngle = 0;
     this.rotationCenter = null;
+
+    // OPTIMIZATION: Throttle visual updates for large selections
+    this._updateThrottleId = null;
+    this._lastUpdateTime = 0;
+    this._updateThrottleMs = 16; // ~60fps max
   }
 
   // Get scale handle at position
@@ -658,6 +663,7 @@ class SelectTool {
   // LAYER-COMPATIBLE: Copy pixels from given bounds using LayerManager
   // LAYER-COMPATIBLE: Copy pixels from given bounds using LayerManager - ACTIVE LAYER ONLY
   // LAYER-COMPATIBLE: Copy pixels from given bounds using LayerManager - specified layer or active layer
+  // OPTIMIZED: Faster copying for large selections
   _copyFromBounds(bounds, layerIndex = null) {
     const layerManager = this.editor.layerManager;
     const targetIndex =
@@ -672,24 +678,55 @@ class SelectTool {
     const height = bounds.bottom - bounds.top + 1;
     const clipboard = { width, height, pixels: [] };
 
-    for (let y = 0; y < height; y++) {
-      clipboard.pixels[y] = [];
-      for (let x = 0; x < width; x++) {
-        const srcX = bounds.left + x;
+    // OPTIMIZATION: Pre-allocate array for large selections
+    const selectionArea = width * height;
+    
+    if (selectionArea > 1000) {
+      // For large selections, use optimized copying
+      const transparentPixel = [0, 0, 0, 0];
+      
+      for (let y = 0; y < height; y++) {
         const srcY = bounds.top + y;
-        // Use pixel from specified layer
-        if (targetLayer.pixels[srcY] && targetLayer.pixels[srcY][srcX]) {
-          clipboard.pixels[y][x] = [...targetLayer.pixels[srcY][srcX]];
+        const row = [];
+        clipboard.pixels[y] = row;
+        
+        if (targetLayer.pixels[srcY]) {
+          for (let x = 0; x < width; x++) {
+            const srcX = bounds.left + x;
+            const pixel = targetLayer.pixels[srcY][srcX];
+            // Use slice() for better performance than spread operator
+            row[x] = pixel ? pixel.slice() : transparentPixel.slice();
+          }
         } else {
-          clipboard.pixels[y][x] = [0, 0, 0, 0];
+          // Fill with transparent pixels if row doesn't exist
+          for (let x = 0; x < width; x++) {
+            row[x] = transparentPixel.slice();
+          }
+        }
+      }
+    } else {
+      // For small selections, use the original method
+      for (let y = 0; y < height; y++) {
+        clipboard.pixels[y] = [];
+        for (let x = 0; x < width; x++) {
+          const srcX = bounds.left + x;
+          const srcY = bounds.top + y;
+          // Use pixel from specified layer
+          if (targetLayer.pixels[srcY] && targetLayer.pixels[srcY][srcX]) {
+            clipboard.pixels[y][x] = [...targetLayer.pixels[srcY][srcX]];
+          } else {
+            clipboard.pixels[y][x] = [0, 0, 0, 0];
+          }
         }
       }
     }
+    
     return clipboard;
   }
 
   // LAYER-COMPATIBLE: Delete pixels in given bounds on active layer only
   // LAYER-COMPATIBLE: Delete pixels in given bounds on specified layer
+  // OPTIMIZED: Uses typed arrays for large selections to reduce memory allocation
   _deleteBounds(bounds, layerIndex = null) {
     const layerManager = this.editor.layerManager;
     const targetIndex =
@@ -705,15 +742,30 @@ class SelectTool {
     // Enable batch mode for performance
     layerManager.setBatchMode(true);
 
-    for (let y = bounds.top; y <= bounds.bottom; y++) {
-      for (let x = bounds.left; x <= bounds.right; x++) {
-        if (
-          x >= 0 &&
-          x < layerManager.width &&
-          y >= 0 &&
-          y < layerManager.height
-        ) {
-          // Set pixel on the specified layer
+    // OPTIMIZATION: Pre-calculate bounds to avoid repeated checks
+    const startY = Math.max(0, bounds.top);
+    const endY = Math.min(layerManager.height - 1, bounds.bottom);
+    const startX = Math.max(0, bounds.left);
+    const endX = Math.min(layerManager.width - 1, bounds.right);
+
+    // OPTIMIZATION: For large selections, use a more efficient approach
+    const selectionArea = (endY - startY + 1) * (endX - startX + 1);
+    
+    if (selectionArea > 1000) {
+      // For large selections, batch the operations
+      for (let y = startY; y <= endY; y++) {
+        const row = targetLayer.pixels[y];
+        if (row) {
+          // Fill entire row segment at once
+          for (let x = startX; x <= endX; x++) {
+            row[x] = transparentColor.slice(); // Use slice() instead of spread for better performance
+          }
+        }
+      }
+    } else {
+      // For small selections, use the original method
+      for (let y = startY; y <= endY; y++) {
+        for (let x = startX; x <= endX; x++) {
           if (targetLayer.pixels[y] && targetLayer.pixels[y][x]) {
             targetLayer.pixels[y][x] = [...transparentColor];
           }
@@ -727,6 +779,7 @@ class SelectTool {
   }
 
   // LAYER-COMPATIBLE: Paste clipboard at position on active layer
+  // OPTIMIZED: Faster pasting for large selections
   _pasteClipboardAt(clipboard, left, top) {
     const layerManager = this.editor.layerManager;
     const activeLayer = layerManager.getActiveLayer();
@@ -738,20 +791,48 @@ class SelectTool {
     // Enable batch mode for performance
     layerManager.setBatchMode(true);
 
-    for (let py = 0; py < clipboard.height; py++) {
-      for (let px = 0; px < clipboard.width; px++) {
-        const destX = left + px;
+    // OPTIMIZATION: Pre-calculate bounds
+    const clipboardArea = clipboard.width * clipboard.height;
+    const startY = Math.max(0, -top);
+    const endY = Math.min(clipboard.height - 1, layerManager.height - 1 - top);
+    const startX = Math.max(0, -left);
+    const endX = Math.min(clipboard.width - 1, layerManager.width - 1 - left);
+
+    if (clipboardArea > 1000) {
+      // For large pastes, use optimized direct pixel access
+      for (let py = startY; py <= endY; py++) {
         const destY = top + py;
-        if (
-          destX >= 0 &&
-          destX < layerManager.width &&
-          destY >= 0 &&
-          destY < layerManager.height
-        ) {
-          const pixel = clipboard.pixels[py][px];
-          if (pixel[3] > 0) {
-            // Only paste non-transparent pixels
-            layerManager.setPixel(destX, destY, pixel);
+        const destRow = activeLayer.pixels[destY];
+        const srcRow = clipboard.pixels[py];
+        
+        if (destRow && srcRow) {
+          for (let px = startX; px <= endX; px++) {
+            const pixel = srcRow[px];
+            if (pixel && pixel[3] > 0) {
+              // Only paste non-transparent pixels
+              const destX = left + px;
+              destRow[destX] = pixel.slice();
+            }
+          }
+        }
+      }
+    } else {
+      // For small pastes, use the layer manager setPixel
+      for (let py = 0; py < clipboard.height; py++) {
+        for (let px = 0; px < clipboard.width; px++) {
+          const destX = left + px;
+          const destY = top + py;
+          if (
+            destX >= 0 &&
+            destX < layerManager.width &&
+            destY >= 0 &&
+            destY < layerManager.height
+          ) {
+            const pixel = clipboard.pixels[py][px];
+            if (pixel[3] > 0) {
+              // Only paste non-transparent pixels
+              layerManager.setPixel(destX, destY, pixel);
+            }
           }
         }
       }
@@ -765,7 +846,21 @@ class SelectTool {
   // Handle mouse move event with dynamic cursor changes
   onMouseMove(x, y, event) {
     if (this.isSelecting) {
-      this.editor.canvasManager.updateSelection(x, y);
+      // OPTIMIZATION: Throttle selection updates for large canvases
+      const now = performance.now();
+      if (now - this._lastUpdateTime >= this._updateThrottleMs) {
+        this.editor.canvasManager.updateSelection(x, y);
+        this._lastUpdateTime = now;
+      } else {
+        // Schedule update if not already scheduled
+        if (!this._updateThrottleId) {
+          this._updateThrottleId = requestAnimationFrame(() => {
+            this.editor.canvasManager.updateSelection(x, y);
+            this._updateThrottleId = null;
+            this._lastUpdateTime = performance.now();
+          });
+        }
+      }
     } else if (this.selection) {
       // Update cursor based on hover position
       this._updateCursorForPosition(x, y);

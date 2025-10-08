@@ -3363,6 +3363,71 @@ class UIController {
     }, 3000);
   }
 
+  // OPTIMIZATION: Show progress notification for uploads
+  showProgressNotification(message, progress) {
+    // Remove existing progress notification if any
+    const existingProgress = document.getElementById('progress-notification');
+    if (existingProgress) {
+      existingProgress.remove();
+    }
+
+    const notification = document.createElement("div");
+    notification.id = 'progress-notification';
+    notification.className = 'notification notification-progress';
+    notification.style.position = "fixed";
+    notification.style.top = "20px";
+    notification.style.right = "20px";
+    notification.style.background = "#339af0";
+    notification.style.color = "white";
+    notification.style.padding = "12px 16px";
+    notification.style.borderRadius = "6px";
+    notification.style.zIndex = "10000";
+    notification.style.boxShadow = "0 4px 12px rgba(0, 0, 0, 0.3)";
+    notification.style.minWidth = "200px";
+
+    // Create progress bar
+    const messageDiv = document.createElement("div");
+    messageDiv.textContent = message;
+    messageDiv.style.marginBottom = "8px";
+
+    const progressBarContainer = document.createElement("div");
+    progressBarContainer.style.width = "100%";
+    progressBarContainer.style.height = "4px";
+    progressBarContainer.style.background = "rgba(255, 255, 255, 0.3)";
+    progressBarContainer.style.borderRadius = "2px";
+    progressBarContainer.style.overflow = "hidden";
+
+    const progressBar = document.createElement("div");
+    progressBar.style.width = `${progress}%`;
+    progressBar.style.height = "100%";
+    progressBar.style.background = "white";
+    progressBar.style.transition = "width 0.3s ease";
+
+    progressBarContainer.appendChild(progressBar);
+    notification.appendChild(messageDiv);
+    notification.appendChild(progressBarContainer);
+
+    document.body.appendChild(notification);
+
+    return notification;
+  }
+
+  // OPTIMIZATION: Hide progress notification
+  hideProgressNotification() {
+    const notification = document.getElementById('progress-notification');
+    if (notification) {
+      notification.style.opacity = "0";
+      notification.style.transform = "translateX(100%)";
+      notification.style.transition = "opacity 0.3s ease, transform 0.3s ease";
+
+      setTimeout(() => {
+        if (notification.parentNode) {
+          notification.remove();
+        }
+      }, 300);
+    }
+  }
+
   // Update all UI elements
   // In the updateAll method, make it safer:
   updateAll() {
@@ -3661,18 +3726,21 @@ class UIController {
     ).textContent = `${originalWidth}x${originalHeight}`;
 
     // Calculate initial target size maintaining aspect ratio
+    // Suggest 512 as default for very large images, or half size for others
     const aspectRatio = originalWidth / originalHeight;
     let targetWidth, targetHeight;
 
+    const suggestedSize = Math.min(512, Math.max(originalWidth, originalHeight) / 2);
+
     if (aspectRatio > 1) {
-      targetWidth = Math.min(64, originalWidth);
+      targetWidth = Math.round(suggestedSize);
       targetHeight = Math.round(targetWidth / aspectRatio);
     } else {
-      targetHeight = Math.min(64, originalHeight);
+      targetHeight = Math.round(suggestedSize);
       targetWidth = Math.round(targetHeight * aspectRatio);
     }
 
-    // Set initial values
+    // Set initial values (suggest reasonable downscale)
     document.getElementById("target-width").value = targetWidth;
     document.getElementById("target-height").value = targetHeight;
 
@@ -3698,6 +3766,7 @@ class UIController {
     );
     const cancelBtn = document.getElementById("cancel-downscale");
     const applyBtn = document.getElementById("apply-downscale");
+    const useFullSizeBtn = document.getElementById("use-full-size");
     const closeBtn = document.getElementById("downscale-modal-close");
 
     // Update preview when inputs change
@@ -3707,7 +3776,7 @@ class UIController {
         const newHeight = Math.round(
           parseInt(targetWidthInput.value) / aspectRatio
         );
-        targetHeightInput.value = Math.min(64, Math.max(1, newHeight));
+        targetHeightInput.value = Math.max(1, newHeight);
       }
       this.updateDownscalePreview();
     });
@@ -3718,7 +3787,7 @@ class UIController {
         const newWidth = Math.round(
           parseInt(targetHeightInput.value) * aspectRatio
         );
-        targetWidthInput.value = Math.min(64, Math.max(1, newWidth));
+        targetWidthInput.value = Math.max(1, newWidth);
       }
       this.updateDownscalePreview();
     });
@@ -3732,6 +3801,7 @@ class UIController {
     cancelBtn.addEventListener("click", () => this.hideDownscaleModal());
     closeBtn.addEventListener("click", () => this.hideDownscaleModal());
     applyBtn.addEventListener("click", () => this.applyDownscale());
+    useFullSizeBtn.addEventListener("click", () => this.useFullSizeImage());
 
     // Close on outside click
     modal.addEventListener("click", (e) => {
@@ -3835,20 +3905,49 @@ class UIController {
     this.originalImageHeight = null;
   }
 
+  // Use the full-size image without downscaling
+  async useFullSizeImage() {
+    if (!this.originalImageData || !this.editor) {
+      this.showNotification("No image data available", "error");
+      return;
+    }
+
+    try {
+      // Create sprite with full-size image
+      this.editor.createSpriteFromImageData(
+        this.originalImageData,
+        this.originalImageWidth,
+        this.originalImageHeight
+      );
+
+      this.showNotification(
+        `Created full-size sprite: ${this.originalImageWidth}x${this.originalImageHeight}`,
+        "success"
+      );
+
+      // Hide modal and clean up
+      this.hideDownscaleModal();
+    } catch (error) {
+      console.error("Failed to create full-size sprite:", error);
+      this.showNotification("Failed to create sprite", "error");
+    }
+  }
+
   async applyDownscale() {
     const targetWidth = parseInt(document.getElementById("target-width").value);
     const targetHeight = parseInt(
       document.getElementById("target-height").value
     );
 
+    // TEMPORARILY DISABLED: Size limit check for testing large sprite editing
     if (
       targetWidth < 1 ||
-      targetHeight < 1 ||
-      targetWidth > 64 ||
-      targetHeight > 64
+      targetHeight < 1
+      // || targetWidth > 64 ||
+      // targetHeight > 64
     ) {
       this.showNotification(
-        "Invalid dimensions. Use values between 1 and 64.",
+        "Invalid dimensions. Width and height must be at least 1.",
         "error"
       );
       return;
