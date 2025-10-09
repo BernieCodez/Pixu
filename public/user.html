@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>User Profile - Pixalu</title>
+    <link rel="stylesheet" href="/css/main.css" />
+    <link
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+      rel="stylesheet"
+    />
+    <style>
+      .user-profile-container {
+        max-width: 1200px;
+        margin: 80px auto 40px;
+        padding: 20px;
+      }
+      
+      .profile-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 40px;
+        border-radius: 12px;
+        margin-bottom: 30px;
+        position: relative;
+      }
+      
+      .profile-header-content {
+        display: flex;
+        align-items: center;
+        gap: 30px;
+      }
+      
+      .profile-avatar {
+        width: 120px;
+        height: 120px;
+        border-radius: 50%;
+        background: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 48px;
+        color: #667eea;
+        font-weight: bold;
+      }
+      
+      .profile-info h1 {
+        margin: 0 0 10px 0;
+        font-size: 32px;
+      }
+      
+      .profile-email {
+        opacity: 0.9;
+        margin-bottom: 15px;
+      }
+      
+      .profile-bio {
+        font-size: 16px;
+        line-height: 1.6;
+        margin-top: 15px;
+      }
+      
+      .edit-profile-btn {
+        position: absolute;
+        top: 20px;
+        right: 20px;
+        background: rgba(255, 255, 255, 0.2);
+        border: 2px solid white;
+        color: white;
+        padding: 10px 20px;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.3s;
+      }
+      
+      .edit-profile-btn:hover {
+        background: white;
+        color: #667eea;
+      }
+      
+      .profile-sections {
+        display: grid;
+        gap: 30px;
+      }
+      
+      .profile-section {
+        background: white;
+        padding: 30px;
+        border-radius: 12px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      }
+      
+      .section-title {
+        font-size: 24px;
+        margin-bottom: 20px;
+        color: #2d3748;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      
+      .projects-list, .sprites-grid {
+        display: grid;
+        gap: 20px;
+      }
+      
+      .sprites-grid {
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      }
+      
+      .sprite-item {
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        overflow: hidden;
+        transition: transform 0.3s, box-shadow 0.3s;
+      }
+      
+      .sprite-item:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 8px 15px rgba(0, 0, 0, 0.1);
+      }
+      
+      .sprite-image {
+        width: 100%;
+        height: 200px;
+        object-fit: contain;
+        background: #f7fafc;
+      }
+      
+      .sprite-info {
+        padding: 15px;
+      }
+      
+      .sprite-title {
+        font-weight: bold;
+        margin-bottom: 5px;
+        color: #2d3748;
+      }
+      
+      .sprite-stats {
+        display: flex;
+        gap: 15px;
+        color: #718096;
+        font-size: 14px;
+      }
+      
+      .project-item {
+        padding: 15px;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        transition: background 0.3s;
+      }
+      
+      .project-item:hover {
+        background: #f7fafc;
+      }
+      
+      .project-name {
+        font-weight: bold;
+        color: #667eea;
+        margin-bottom: 5px;
+      }
+      
+      .edit-modal {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.8);
+        z-index: 1000;
+        align-items: center;
+        justify-content: center;
+      }
+      
+      .edit-modal.active {
+        display: flex;
+      }
+      
+      .modal-content {
+        background: #1a1a2e;
+        color: #ffffff;
+        padding: 40px;
+        border-radius: 12px;
+        max-width: 600px;
+        width: 90%;
+        max-height: 80vh;
+        overflow-y: auto;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+      }
+      
+      .modal-content h2 {
+        color: #ffffff;
+        margin-bottom: 30px;
+      }
+      
+      .form-group {
+        margin-bottom: 20px;
+      }
+      
+      .form-group label {
+        display: block;
+        margin-bottom: 8px;
+        font-weight: 600;
+        color: #e2e8f0;
+      }
+      
+      .form-group input,
+      .form-group textarea {
+        width: 100%;
+        padding: 12px;
+        border: 1px solid #4a5568;
+        border-radius: 8px;
+        font-size: 14px;
+        background: #2d3748;
+        color: #ffffff;
+      }
+      
+      .form-group input:focus,
+      .form-group textarea:focus {
+        outline: none;
+        border-color: #667eea;
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+      }
+      
+      .form-group textarea {
+        min-height: 100px;
+        resize: vertical;
+      }
+      
+      .modal-actions {
+        display: flex;
+        gap: 10px;
+        justify-content: flex-end;
+        margin-top: 30px;
+      }
+      
+      .no-items {
+        text-align: center;
+        padding: 40px;
+        color: #718096;
+      }
+      
+      .customization-options {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 20px;
+      }
+      
+      .color-picker-group {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      
+      .color-picker-group input[type="color"] {
+        height: 50px;
+        border-radius: 8px;
+        cursor: pointer;
+        border: 2px solid #4a5568;
+        background: #2d3748;
+      }
+      
+      .color-picker-group label {
+        color: #e2e8f0;
+      }
+    </style>
+  </head>
+  <body>
+    <nav class="navbar">
+      <div class="nav-container">
+        <a href="/" class="nav-logo"><i class="fas fa-palette"></i> Pixalu</a>
+        <ul class="nav-menu">
+          <li><a href="/">Home</a></li>
+          <li><a href="/pricing">Pricing</a></li>
+          <li><a href="/gallery">Gallery</a></li>
+          <li><a href="/editor">Editor</a></li>
+        </ul>
+        <div class="nav-auth" id="nav-auth">
+          <a href="/auth" class="btn btn-secondary">Login</a>
+          <a href="/auth" class="btn btn-primary">Sign Up</a>
+        </div>
+      </div>
+    </nav>
+
+    <div class="user-profile-container">
+      <div id="loading" style="text-align: center; padding: 60px;">
+        <i class="fas fa-spinner fa-spin" style="font-size: 48px; color: #667eea;"></i>
+        <p style="margin-top: 20px; color: #718096;">Loading profile...</p>
+      </div>
+
+      <div id="profile-content" style="display: none;">
+        <div class="profile-header">
+          <button class="edit-profile-btn" id="edit-btn" style="display: none;">
+            <i class="fas fa-edit"></i> Edit Profile
+          </button>
+          
+          <div class="profile-header-content">
+            <div class="profile-avatar" id="profile-avatar"></div>
+            <div class="profile-info">
+              <h1 id="profile-name"></h1>
+              <div class="profile-email" id="profile-email"></div>
+              <div class="profile-bio" id="profile-bio"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="profile-sections">
+          <div class="profile-section">
+            <h2 class="section-title">
+              <i class="fas fa-code"></i> Projects
+            </h2>
+            <div class="projects-list" id="projects-list">
+              <div class="no-items">No projects yet</div>
+            </div>
+          </div>
+
+          <div class="profile-section">
+            <h2 class="section-title">
+              <i class="fas fa-image"></i> Published Sprites
+            </h2>
+            <div class="sprites-grid" id="sprites-grid">
+              <div class="no-items">No published sprites yet</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="error-message" style="display: none; text-align: center; padding: 60px;">
+        <i class="fas fa-exclamation-circle" style="font-size: 48px; color: #fc8181;"></i>
+        <h2 style="margin-top: 20px; color: #2d3748;">User Not Found</h2>
+        <p style="color: #718096;">This user profile doesn't exist.</p>
+        <a href="/gallery" class="btn btn-primary" style="margin-top: 20px;">Back to Gallery</a>
+      </div>
+    </div>
+
+    <!-- Edit Profile Modal -->
+    <div class="edit-modal" id="edit-modal">
+      <div class="modal-content">
+        <h2>Edit Your Profile</h2>
+        <form id="edit-form">
+          <div class="form-group">
+            <label for="edit-displayName">Display Name</label>
+            <input type="text" id="edit-displayName" required />
+          </div>
+          
+          <div class="form-group">
+            <label for="edit-bio">Bio</label>
+            <textarea id="edit-bio" placeholder="Tell us about yourself..."></textarea>
+          </div>
+          
+          <div class="form-group">
+            <label for="edit-projects">Projects (one per line)</label>
+            <textarea id="edit-projects" placeholder="Project Name - Description"></textarea>
+          </div>
+          
+          <div class="form-group">
+            <label>Customization</label>
+            <div class="customization-options">
+              <div class="color-picker-group">
+                <label for="edit-bgColor">Background Color</label>
+                <input type="color" id="edit-bgColor" value="#667eea" />
+              </div>
+              <div class="color-picker-group">
+                <label for="edit-textColor">Text Color</label>
+                <input type="color" id="edit-textColor" value="#ffffff" />
+              </div>
+            </div>
+          </div>
+          
+          <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" id="cancel-edit">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save Changes</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <script type="module">
+      import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+      import {
+        getAuth,
+        onAuthStateChanged,
+      } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+
+      const firebaseConfig = {
+        apiKey: "AIzaSyA5kRKtJvgBxT1_suMUNjJHRW7M-7V03Wk",
+        authDomain: "pixaluapp.firebaseapp.com",
+        projectId: "pixaluapp",
+        storageBucket: "pixaluapp.firebasestorage.app",
+        messagingSenderId: "645940179071",
+        appId: "1:645940179071:web:d1d361f07a773b321b8f4a",
+        measurementId: "G-41CZ9Q72Z3",
+      };
+
+      const app = initializeApp(firebaseConfig);
+      const auth = getAuth(app);
+
+      let currentUser = null;
+      let profileData = null;
+
+      // Get email from URL
+      const urlParams = new URLSearchParams(window.location.search);
+      const userEmail = urlParams.get('email');
+
+      if (!userEmail) {
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('error-message').style.display = 'block';
+      } else {
+        loadUserProfile(userEmail);
+      }
+
+      // Check authentication
+      onAuthStateChanged(auth, (user) => {
+        const navAuth = document.getElementById("nav-auth");
+        currentUser = user;
+        
+        if (user && !user.isAnonymous) {
+          const displayName = user.displayName || user.email;
+          navAuth.innerHTML = `
+            <a href="/user?email=${user.email}" class="btn btn-secondary">My Profile</a>
+            <span>Welcome, ${displayName}</span>
+            <button class="btn btn-secondary" id="logout-btn">Logout</button>
+          `;
+          
+          document.getElementById("logout-btn").addEventListener("click", async () => {
+            localStorage.removeItem('pixalu_auth_token');
+            await auth.signOut();
+            window.location.href = '/';
+          });
+          
+          // Show edit button if viewing own profile
+          if (user.email === userEmail) {
+            document.getElementById('edit-btn').style.display = 'block';
+          }
+        }
+      });
+
+      async function loadUserProfile(email) {
+        try {
+          const response = await fetch(`/api/auth/user/${encodeURIComponent(email)}`);
+          
+          if (!response.ok) {
+            throw new Error('User not found');
+          }
+          
+          profileData = await response.json();
+          displayProfile(profileData);
+          
+          document.getElementById('loading').style.display = 'none';
+          document.getElementById('profile-content').style.display = 'block';
+        } catch (error) {
+          console.error('Failed to load profile:', error);
+          document.getElementById('loading').style.display = 'none';
+          document.getElementById('error-message').style.display = 'block';
+        }
+      }
+
+      function displayProfile(data) {
+        // Apply customization
+        const header = document.querySelector('.profile-header');
+        if (data.customization) {
+          if (data.customization.bgColor) {
+            header.style.background = data.customization.bgColor;
+          }
+          if (data.customization.textColor) {
+            header.style.color = data.customization.textColor;
+          }
+        }
+        
+        // Display avatar (first letter of name)
+        const avatar = document.getElementById('profile-avatar');
+        avatar.textContent = (data.displayName || data.email)[0].toUpperCase();
+        
+        // Display info
+        document.getElementById('profile-name').textContent = data.displayName || 'Anonymous User';
+        document.getElementById('profile-email').textContent = data.email;
+        document.getElementById('profile-bio').textContent = data.bio || 'No bio yet.';
+        
+        // Display projects
+        const projectsList = document.getElementById('projects-list');
+        if (data.projects && data.projects.length > 0) {
+          projectsList.innerHTML = data.projects.map(project => `
+            <div class="project-item">
+              <div class="project-name">${project}</div>
+            </div>
+          `).join('');
+        } else {
+          projectsList.innerHTML = '<div class="no-items">No projects yet</div>';
+        }
+        
+        // Display sprites
+        const spritesGrid = document.getElementById('sprites-grid');
+        if (data.publishedSprites && data.publishedSprites.length > 0) {
+          spritesGrid.innerHTML = data.publishedSprites.map(sprite => `
+            <div class="sprite-item">
+              <img src="${sprite.imageUrl}" alt="${sprite.title}" class="sprite-image" />
+              <div class="sprite-info">
+                <div class="sprite-title">${sprite.title}</div>
+                <div class="sprite-stats">
+                  <span><i class="fas fa-heart"></i> ${sprite.likes || 0}</span>
+                  <span><i class="fas fa-eye"></i> ${sprite.views || 0}</span>
+                </div>
+              </div>
+            </div>
+          `).join('');
+        } else {
+          spritesGrid.innerHTML = '<div class="no-items">No published sprites yet</div>';
+        }
+      }
+
+      // Edit profile functionality
+      document.getElementById('edit-btn').addEventListener('click', () => {
+        document.getElementById('edit-displayName').value = profileData.displayName || '';
+        document.getElementById('edit-bio').value = profileData.bio || '';
+        document.getElementById('edit-projects').value = (profileData.projects || []).join('\n');
+        
+        if (profileData.customization) {
+          document.getElementById('edit-bgColor').value = profileData.customization.bgColor || '#667eea';
+          document.getElementById('edit-textColor').value = profileData.customization.textColor || '#ffffff';
+        }
+        
+        document.getElementById('edit-modal').classList.add('active');
+      });
+
+      document.getElementById('cancel-edit').addEventListener('click', () => {
+        document.getElementById('edit-modal').classList.remove('active');
+      });
+
+      document.getElementById('edit-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const token = localStorage.getItem('pixalu_auth_token');
+        if (!token) {
+          alert('Please log in to edit your profile');
+          return;
+        }
+        
+        const updates = {
+          displayName: document.getElementById('edit-displayName').value,
+          bio: document.getElementById('edit-bio').value,
+          projects: document.getElementById('edit-projects').value
+            .split('\n')
+            .filter(p => p.trim())
+            .map(p => p.trim()),
+          customization: {
+            bgColor: document.getElementById('edit-bgColor').value,
+            textColor: document.getElementById('edit-textColor').value,
+          }
+        };
+        
+        try {
+          const response = await fetch('/api/auth/profile', {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify(updates)
+          });
+          
+          if (!response.ok) {
+            throw new Error('Failed to update profile');
+          }
+          
+          const result = await response.json();
+          profileData = result.profile;
+          displayProfile(profileData);
+          
+          // Update navbar with new display name
+          if (currentUser && currentUser.email === profileData.email) {
+            const navAuth = document.getElementById("nav-auth");
+            navAuth.innerHTML = `
+              <a href="/user?email=${encodeURIComponent(profileData.email)}" class="btn btn-secondary">
+                <i class="fas fa-user"></i> My Profile
+              </a>
+              <span>Welcome, ${profileData.displayName}</span>
+              <button class="btn btn-secondary" id="logout-btn">Logout</button>
+            `;
+            
+            // Re-attach logout listener
+            document.getElementById("logout-btn").addEventListener("click", async () => {
+              localStorage.removeItem('pixalu_auth_token');
+              localStorage.removeItem('pixalu_session_token');
+              await auth.signOut();
+              window.location.href = '/';
+            });
+          }
+          
+          document.getElementById('edit-modal').classList.remove('active');
+          alert('Profile updated successfully!');
+        } catch (error) {
+          console.error('Update error:', error);
+          alert('Failed to update profile. Please try again.');
+        }
+      });
+    </script>
+  </body>
+</html>

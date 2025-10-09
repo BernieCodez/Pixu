@@ -302,6 +302,32 @@
             password
           );
 
+          // Get Firebase token and exchange for JWT
+          const firebaseToken = await userCredential.user.getIdToken();
+          
+          try {
+            const response = await fetch('/api/auth/login', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                email: email,
+                firebaseToken: firebaseToken
+              })
+            });
+            
+            if (response.ok) {
+              const data = await response.json();
+              // Store JWT token in localStorage
+              localStorage.setItem('pixalu_auth_token', data.token);
+              localStorage.setItem('pixalu_session_token', data.sessionToken);
+            }
+          } catch (fetchError) {
+            console.error('Failed to get JWT token:', fetchError);
+            // Continue anyway with Firebase auth
+          }
+
           showSuccess("Login successful! Redirecting...");
           setTimeout(() => {
             window.location.href = "/editor";
@@ -379,6 +405,32 @@
           await updateProfile(userCredential.user, {
             displayName: username,
           });
+
+          // Get Firebase token and exchange for JWT
+          const firebaseToken = await userCredential.user.getIdToken();
+          
+          try {
+            const response = await fetch('/api/auth/login', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                email: email,
+                firebaseToken: firebaseToken
+              })
+            });
+            
+            if (response.ok) {
+              const data = await response.json();
+              // Store JWT token in localStorage
+              localStorage.setItem('pixalu_auth_token', data.token);
+              localStorage.setItem('pixalu_session_token', data.sessionToken);
+            }
+          } catch (fetchError) {
+            console.error('Failed to get JWT token:', fetchError);
+            // Continue anyway with Firebase auth
+          }
 
           showSuccess("Account created successfully! Redirecting...");
           setTimeout(() => {

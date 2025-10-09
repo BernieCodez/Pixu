@@ -315,6 +315,14 @@ class CanvasManager {
     this.panStartOffset = { x: 0, y: 0 };
     this.panOffset = { x: 0, y: 0 }; // Make sure this is explicitly set to {x:0, y:0}
 
+    // OPTIMIZATION: Dirty region tracking for selective redraw
+    this.dirtyRegion = null; // { left, top, right, bottom }
+    this.fullRedrawNeeded = true;
+
+    // OPTIMIZATION: Throttle mousemove events using requestAnimationFrame
+    this.mouseMoveThrottled = false;
+    this.pendingMouseMove = null;
+
     // Selection state
     this.selection = {
       active: false,
@@ -443,6 +451,8 @@ class CanvasManager {
     this.overlayCanvas.style.width = `${sprite.width * this.zoomLevel}px`;
     this.overlayCanvas.style.height = `${sprite.height * this.zoomLevel}px`;
 
+    // OPTIMIZATION: Request full redraw when sprite changes
+    this.requestFullRedraw();
     this.render();
     this.updateCanvasData();
   }
@@ -501,6 +511,43 @@ class CanvasManager {
   }
 
   /**
+   * Mark a region as dirty (needs redraw)
+   * OPTIMIZATION: Selective redraw - only repaint changed areas
+   */
+  markDirtyRegion(x, y, width = 1, height = 1) {
+    if (!this.dirtyRegion) {
+      this.dirtyRegion = {
+        left: x,
+        top: y,
+        right: x + width - 1,
+        bottom: y + height - 1
+      };
+    } else {
+      // Expand dirty region to include new area
+      this.dirtyRegion.left = Math.min(this.dirtyRegion.left, x);
+      this.dirtyRegion.top = Math.min(this.dirtyRegion.top, y);
+      this.dirtyRegion.right = Math.max(this.dirtyRegion.right, x + width - 1);
+      this.dirtyRegion.bottom = Math.max(this.dirtyRegion.bottom, y + height - 1);
+    }
+  }
+
+  /**
+   * Clear dirty region tracking
+   */
+  clearDirtyRegion() {
+    this.dirtyRegion = null;
+    this.fullRedrawNeeded = false;
+  }
+
+  /**
+   * Request a full canvas redraw
+   */
+  requestFullRedraw() {
+    this.fullRedrawNeeded = true;
+    this.dirtyRegion = null;
+  }
+
+  /**
    * Render the current sprite to canvas
    */
   /**
@@ -513,21 +560,51 @@ class CanvasManager {
       return;
     }
 
-    // Clear canvas
-    this.mainCtx.clearRect(0, 0, this.mainCanvas.width, this.mainCanvas.height);
+    // OPTIMIZATION: Full redraw when needed, otherwise selective redraw
+    if (this.fullRedrawNeeded || !this.dirtyRegion) {
+      // Full canvas redraw
+      this.mainCtx.clearRect(0, 0, this.mainCanvas.width, this.mainCanvas.height);
 
-    // Use layer manager if available
-    if (window.editor && window.editor.layerManager) {
-      this.renderWithLayers();
-    } else {
-      // Fallback to original rendering
-      this.renderTransparencyBackground();
-      this.renderSprite();
-    }
+      // Use layer manager if available
+      if (window.editor && window.editor.layerManager) {
+        this.renderWithLayers();
+      } else {
+        // Fallback to original rendering
+        this.renderTransparencyBackground();
+        this.renderSprite();
+      }
 
-    // Render grid if enabled
-    if (this.showGrid && this.zoomLevel >= 4) {
-      this.renderGrid();
+      // Render grid if enabled
+      if (this.showGrid && this.zoomLevel >= 4) {
+        this.renderGrid();
+      }
+
+      this.clearDirtyRegion();
+    } else if (this.dirtyRegion) {
+      // OPTIMIZATION: Selective redraw - only update dirty region
+      // This is much faster for small changes on large canvases
+      const region = this.dirtyRegion;
+      const x = region.left * this.zoomLevel;
+      const y = region.top * this.zoomLevel;
+      const width = (region.right - region.left + 1) * this.zoomLevel;
+      const height = (region.bottom - region.top + 1) * this.zoomLevel;
+
+      // Clear only the dirty region
+      this.mainCtx.clearRect(x, y, width, height);
+
+      // Re-render only the dirty region
+      if (window.editor && window.editor.layerManager) {
+        this.renderWithLayersRegion(region);
+      } else {
+        this.renderSpriteRegion(region);
+      }
+
+      // Render grid in dirty region if enabled
+      if (this.showGrid && this.zoomLevel >= 4) {
+        this.renderGridRegion(region);
+      }
+
+      this.clearDirtyRegion();
     }
   }
 
@@ -583,6 +660,57 @@ class CanvasManager {
         this.mainCanvas.height
       );
     }
+  }
+
+  /**
+   * OPTIMIZATION: Render only a specific region with layers
+   */
+  renderWithLayersRegion(region) {
+    // Render checkerboard background in region
+    this.renderTransparencyBackgroundRegion(region);
+
+    // Get composite image data from layer manager
+    const imageData = window.editor.layerManager.getCompositeImageData();
+
+    // Create temporary canvas for the region
+    const tempCanvas = document.createElement("canvas");
+    tempCanvas.width = region.right - region.left + 1;
+    tempCanvas.height = region.bottom - region.top + 1;
+    const tempCtx = tempCanvas.getContext("2d");
+
+    // Extract region from imageData
+    const regionData = tempCtx.createImageData(tempCanvas.width, tempCanvas.height);
+    for (let y = 0; y < tempCanvas.height; y++) {
+      for (let x = 0; x < tempCanvas.width; x++) {
+        const srcX = region.left + x;
+        const srcY = region.top + y;
+        const srcIdx = (srcY * imageData.width + srcX) * 4;
+        const dstIdx = (y * tempCanvas.width + x) * 4;
+        
+        regionData.data[dstIdx] = imageData.data[srcIdx];
+        regionData.data[dstIdx + 1] = imageData.data[srcIdx + 1];
+        regionData.data[dstIdx + 2] = imageData.data[srcIdx + 2];
+        regionData.data[dstIdx + 3] = imageData.data[srcIdx + 3];
+      }
+    }
+
+    tempCtx.putImageData(regionData, 0, 0);
+
+    // Disable smoothing for pixel-perfect scaling
+    this.mainCtx.imageSmoothingEnabled = false;
+
+    // Draw scaled region
+    this.mainCtx.drawImage(
+      tempCanvas,
+      0,
+      0,
+      tempCanvas.width,
+      tempCanvas.height,
+      region.left * this.zoomLevel,
+      region.top * this.zoomLevel,
+      tempCanvas.width * this.zoomLevel,
+      tempCanvas.height * this.zoomLevel
+    );
   }
   /**
    * Optimized rendering for large sprites using ImageData
@@ -650,6 +778,37 @@ class CanvasManager {
     this.mainCtx.fillStyle = "#e0e0e0";
     for (let y = 0; y < this.currentSprite.height; y++) {
       for (let x = 0; x < this.currentSprite.width; x++) {
+        if ((x + y) % 2 === 1) {
+          this.mainCtx.fillRect(
+            x * this.zoomLevel,
+            y * this.zoomLevel,
+            this.zoomLevel,
+            this.zoomLevel
+          );
+        }
+      }
+    }
+  }
+
+  /**
+   * OPTIMIZATION: Render checkerboard background in a specific region only
+   */
+  renderTransparencyBackgroundRegion(region) {
+    const checkerSize = Math.max(1, this.zoomLevel / 4);
+    
+    // Fill region with white
+    this.mainCtx.fillStyle = "#ffffff";
+    this.mainCtx.fillRect(
+      region.left * this.zoomLevel,
+      region.top * this.zoomLevel,
+      (region.right - region.left + 1) * this.zoomLevel,
+      (region.bottom - region.top + 1) * this.zoomLevel
+    );
+
+    // Draw checkerboard pattern in region
+    this.mainCtx.fillStyle = "#e0e0e0";
+    for (let y = region.top; y <= region.bottom; y++) {
+      for (let x = region.left; x <= region.right; x++) {
         if ((x + y) % 2 === 1) {
           this.mainCtx.fillRect(
             x * this.zoomLevel,
@@ -741,6 +900,55 @@ class CanvasManager {
       this.mainCtx.moveTo(0, pos);
       this.mainCtx.lineTo(this.mainCanvas.width, pos);
       this.mainCtx.stroke();
+    }
+  }
+
+  /**
+   * OPTIMIZATION: Render grid overlay in a specific region only
+   */
+  renderGridRegion(region) {
+    this.mainCtx.strokeStyle = "rgba(0, 0, 0, 0.2)";
+    this.mainCtx.lineWidth = 1;
+
+    // Vertical lines in region
+    for (let x = region.left; x <= region.right + 1; x++) {
+      const pos = x * this.zoomLevel + 0.5;
+      this.mainCtx.beginPath();
+      this.mainCtx.moveTo(pos, region.top * this.zoomLevel);
+      this.mainCtx.lineTo(pos, (region.bottom + 1) * this.zoomLevel);
+      this.mainCtx.stroke();
+    }
+
+    // Horizontal lines in region
+    for (let y = region.top; y <= region.bottom + 1; y++) {
+      const pos = y * this.zoomLevel + 0.5;
+      this.mainCtx.beginPath();
+      this.mainCtx.moveTo(region.left * this.zoomLevel, pos);
+      this.mainCtx.lineTo((region.right + 1) * this.zoomLevel, pos);
+      this.mainCtx.stroke();
+    }
+  }
+
+  /**
+   * OPTIMIZATION: Render sprite region only (for selective redraw)
+   */
+  renderSpriteRegion(region) {
+    for (let y = region.top; y <= region.bottom; y++) {
+      for (let x = region.left; x <= region.right; x++) {
+        if (x >= 0 && x < this.currentSprite.width && 
+            y >= 0 && y < this.currentSprite.height) {
+          const [r, g, b, a] = this.currentSprite.getPixel(x, y);
+          if (a > 0) {
+            this.mainCtx.fillStyle = `rgba(${r}, ${g}, ${b}, ${a / 255})`;
+            this.mainCtx.fillRect(
+              x * this.zoomLevel,
+              y * this.zoomLevel,
+              this.zoomLevel,
+              this.zoomLevel
+            );
+          }
+        }
+      }
     }
   }
 
@@ -1075,57 +1283,78 @@ class CanvasManager {
       }
     });
     this.mainCanvas.addEventListener("mousemove", (e) => {
-      // Handle panning
-      if (this.isPanning) {
-        this.updatePan(e.clientX, e.clientY);
+      // OPTIMIZATION: Throttle mousemove events using requestAnimationFrame
+      // This prevents excessive processing when mouse moves rapidly
+      if (this.mouseMoveThrottled) {
+        // Store the latest event to process after the current frame
+        this.pendingMouseMove = e;
         return;
       }
 
-      const pos = this.screenToSprite(e.clientX, e.clientY);
-
-      // Update mouse coordinates display
-      this.updateMouseCoordinates(pos.x, pos.y); // Add this line
-
-      if (window.editor && window.editor.currentTool) {
-        if (this.isDrawing) {
-          window.editor.currentTool.onMouseDrag(
-            pos.x,
-            pos.y,
-            this.lastPos.x,
-            this.lastPos.y,
-            e
-          );
-        } else {
-          window.editor.currentTool.onMouseMove(pos.x, pos.y, e);
+      this.mouseMoveThrottled = true;
+      
+      // Schedule processing for next animation frame
+      requestAnimationFrame(() => {
+        // Use pending event if available, otherwise use original
+        const event = this.pendingMouseMove || e;
+        this.pendingMouseMove = null;
+        
+        // Handle panning
+        if (this.isPanning) {
+          this.updatePan(event.clientX, event.clientY);
+          this.mouseMoveThrottled = false;
+          return;
         }
-      }
-      this.lastPos = pos;
-      if (
-        this.currentSprite &&
-        pos.x >= 0 &&
-        pos.x < this.currentSprite.width &&
-        pos.y >= 0 &&
-        pos.y < this.currentSprite.height
-      ) {
-        if (
-          !this.hoveredPixel ||
-          this.hoveredPixel.x !== pos.x ||
-          this.hoveredPixel.y !== pos.y
-        ) {
-          this.hoveredPixel = { x: pos.x, y: pos.y };
-          this.renderHoverOutline();
-        }
-      } else {
-        if (this.hoveredPixel) {
-          this.hoveredPixel = null;
-          // Only clear hover outline, not selection overlay
-          if (this.selection.active) {
-            this.renderSelection();
+
+        const pos = this.screenToSprite(event.clientX, event.clientY);
+
+        // Update mouse coordinates display
+        this.updateMouseCoordinates(pos.x, pos.y);
+
+        if (window.editor && window.editor.currentTool) {
+          if (this.isDrawing) {
+            window.editor.currentTool.onMouseDrag(
+              pos.x,
+              pos.y,
+              this.lastPos.x,
+              this.lastPos.y,
+              event
+            );
           } else {
-            this.clearOverlay();
+            window.editor.currentTool.onMouseMove(pos.x, pos.y, event);
           }
         }
-      }
+        this.lastPos = pos;
+        
+        if (
+          this.currentSprite &&
+          pos.x >= 0 &&
+          pos.x < this.currentSprite.width &&
+          pos.y >= 0 &&
+          pos.y < this.currentSprite.height
+        ) {
+          if (
+            !this.hoveredPixel ||
+            this.hoveredPixel.x !== pos.x ||
+            this.hoveredPixel.y !== pos.y
+          ) {
+            this.hoveredPixel = { x: pos.x, y: pos.y };
+            this.renderHoverOutline();
+          }
+        } else {
+          if (this.hoveredPixel) {
+            this.hoveredPixel = null;
+            // Only clear hover outline, not selection overlay
+            if (this.selection.active) {
+              this.renderSelection();
+            } else {
+              this.clearOverlay();
+            }
+          }
+        }
+        
+        this.mouseMoveThrottled = false;
+      });
     });
 
     // Mouse events on main canvas

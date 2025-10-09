@@ -332,6 +332,11 @@ class LayerManager {
     // Update pixel data
     layer.pixels[y][x] = [...color];
 
+    // OPTIMIZATION: Mark dirty region for selective redraw
+    if (window.editor && window.editor.canvasManager) {
+      window.editor.canvasManager.markDirtyRegion(x, y, 1, 1);
+    }
+
     if (this.batchMode) {
       this.pendingUpdates = true;
     } else {

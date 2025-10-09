@@ -68,6 +68,10 @@ app.get('/gallery', (req, res) => {
 
 app.get('/auth', (req, res) => {
   res.sendFile(path.join(__dirname, '../public/auth.html'));
+});
+
+app.get('/user', (req, res) => {
+  res.sendFile(path.join(__dirname, '../public/user.html'));
 }); 
 
 // Health check

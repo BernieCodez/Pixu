@@ -34,12 +34,29 @@
         <div class="gallery-filters">
           <button class="filter-btn active" data-sort="recent">Recent</button>
           <button class="filter-btn" data-sort="popular">Popular</button>
-          <input
-            type="text"
-            class="search-input"
-            placeholder="Search by tags..."
-            id="search-input"
-          />
+          <div style="position: relative; flex: 1; max-width: 400px;">
+            <input
+              type="text"
+              class="search-input"
+              placeholder="Search by tags or users..."
+              id="search-input"
+            />
+            <div id="search-results" style="
+              position: absolute;
+              top: 100%;
+              left: 0;
+              right: 0;
+              background: white;
+              border: 1px solid #e2e8f0;
+              border-radius: 8px;
+              margin-top: 5px;
+              max-height: 300px;
+              overflow-y: auto;
+              display: none;
+              box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+              z-index: 100;
+            "></div>
+          </div>
         </div>
       </section>
 
@@ -72,24 +89,62 @@
       const app = initializeApp(firebaseConfig);
       const auth = getAuth(app);
 
-      onAuthStateChanged(auth, (user) => {
+      // Check for auto-login with JWT
+      async function checkAutoLogin() {
+        const token = localStorage.getItem('pixalu_auth_token');
+        
+        if (token) {
+          try {
+            const response = await fetch('/api/auth/verify', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ token })
+            });
+            
+            if (response.ok) {
+              const data = await response.json();
+              updateNavBar(data.user);
+              return data.user;
+            } else {
+              localStorage.removeItem('pixalu_auth_token');
+              localStorage.removeItem('pixalu_session_token');
+            }
+          } catch (error) {
+            console.error('Auto-login failed:', error);
+          }
+        }
+        return null;
+      }
+
+      function updateNavBar(user) {
         const navAuth = document.getElementById("nav-auth");
         if (user) {
-          // Check if user is anonymous (guest)
-          const displayName = user.isAnonymous 
-            ? "Guest" 
-            : (user.displayName || user.email);
-          
+          // Always use the latest displayName from the user object
+          const displayName = user.displayName || user.email.split('@')[0];
           navAuth.innerHTML = `
-                    <span>Welcome, ${displayName}</span>
-                    <button class="btn btn-secondary" id="logout-btn">Logout</button>
-                `;
+            <a href="/user?email=${encodeURIComponent(user.email)}" class="btn btn-secondary">
+              <i class="fas fa-user"></i> My Profile
+            </a>
+            <span>Welcome, ${displayName}</span>
+            <button class="btn btn-secondary" id="logout-btn">Logout</button>
+          `;
           
-          // Add logout functionality
           const logoutBtn = document.getElementById("logout-btn");
           if (logoutBtn) {
             logoutBtn.addEventListener("click", async () => {
               try {
+                const token = localStorage.getItem('pixalu_auth_token');
+                if (token) {
+                  await fetch('/api/auth/logout', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token })
+                  });
+                }
+                localStorage.removeItem('pixalu_auth_token');
+                localStorage.removeItem('pixalu_session_token');
                 await signOut(auth);
                 window.location.reload();
               } catch (error) {
@@ -99,9 +154,109 @@
             });
           }
         }
+      }
+
+      // Try auto-login first
+      checkAutoLogin();
+
+      // Also listen to Firebase auth changes
+      onAuthStateChanged(auth, async (user) => {
+        if (user && !localStorage.getItem('pixalu_auth_token')) {
+          // User is logged in with Firebase but no JWT, try to get fresh data
+          try {
+            const firebaseToken = await user.getIdToken();
+            const response = await fetch('/api/auth/login', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                email: user.email,
+                firebaseToken: firebaseToken
+              })
+            });
+            
+            if (response.ok) {
+              const data = await response.json();
+              localStorage.setItem('pixalu_auth_token', data.token);
+              localStorage.setItem('pixalu_session_token', data.sessionToken);
+              updateNavBar(data.user);
+            } else {
+              // Fallback to Firebase user data
+              updateNavBar({
+                email: user.email,
+                displayName: user.displayName || user.email.split('@')[0],
+                uid: user.uid
+              });
+            }
+          } catch (error) {
+            console.error('Token generation failed:', error);
+            updateNavBar({
+              email: user.email,
+              displayName: user.displayName || user.email.split('@')[0],
+              uid: user.uid
+            });
+          }
+        }
       });
 
       let currentSort = "recent";
+      let searchTimeout = null;
+
+      // Search functionality
+      const searchInput = document.getElementById('search-input');
+      const searchResults = document.getElementById('search-results');
+      
+      searchInput.addEventListener('input', (e) => {
+        const query = e.target.value.trim();
+        
+        clearTimeout(searchTimeout);
+        
+        if (query.length < 2) {
+          searchResults.style.display = 'none';
+          return;
+        }
+        
+        searchTimeout = setTimeout(() => searchUsers(query), 300);
+      });
+      
+      // Close search results when clicking outside
+      document.addEventListener('click', (e) => {
+        if (!searchInput.contains(e.target) && !searchResults.contains(e.target)) {
+          searchResults.style.display = 'none';
+        }
+      });
+      
+      async function searchUsers(query) {
+        try {
+          const response = await fetch(`/api/auth/search?q=${encodeURIComponent(query)}`);
+          const data = await response.json();
+          
+          if (data.users && data.users.length > 0) {
+            searchResults.innerHTML = data.users.map(user => `
+              <a href="/user?email=${encodeURIComponent(user.email)}" style="
+                display: block;
+                padding: 12px 16px;
+                color: #2d3748;
+                text-decoration: none;
+                border-bottom: 1px solid #f7fafc;
+                transition: background 0.2s;
+              " onmouseover="this.style.background='#f7fafc'" onmouseout="this.style.background='white'">
+                <div style="font-weight: 600;">${user.displayName || user.email}</div>
+                <div style="font-size: 12px; color: #718096;">${user.email}</div>
+              </a>
+            `).join('');
+            searchResults.style.display = 'block';
+          } else {
+            searchResults.innerHTML = `
+              <div style="padding: 20px; text-align: center; color: #718096;">
+                No users found
+              </div>
+            `;
+            searchResults.style.display = 'block';
+          }
+        } catch (error) {
+          console.error('Search error:', error);
+        }
+      }
 
       async function loadGallery(sort = "recent") {
         const grid = document.getElementById("gallery-grid");
@@ -147,6 +302,14 @@
                           item.views || 0
                         }</span>
                     </div>
+                    ${item.userEmail ? `
+                      <div style="margin-top: 8px;">
+                        <a href="/user?email=${encodeURIComponent(item.userEmail)}" 
+                           style="color: #667eea; font-size: 12px; text-decoration: none;">
+                          <i class="fas fa-user"></i> View Artist
+                        </a>
+                      </div>
+                    ` : ''}
                 </div>
             </div>
         `
@@ -163,6 +326,16 @@
         `;
         }
       }
+
+      // Filter buttons
+      document.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          currentSort = btn.dataset.sort;
+          loadGallery(currentSort);
+        });
+      });
 
       loadGallery();
     </script>

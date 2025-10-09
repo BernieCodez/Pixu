@@ -202,30 +202,110 @@
       const app = initializeApp(firebaseConfig);
       const auth = getAuth(app);
 
-      onAuthStateChanged(auth, (user) => {
+      // Check for auto-login with JWT
+      async function checkAutoLogin() {
+        const token = localStorage.getItem('pixalu_auth_token');
+        
+        if (token) {
+          try {
+            const response = await fetch('/api/auth/verify', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ token })
+            });
+            
+            if (response.ok) {
+              const data = await response.json();
+              updateNavBar(data.user);
+              return data.user;
+            } else {
+              localStorage.removeItem('pixalu_auth_token');
+              localStorage.removeItem('pixalu_session_token');
+            }
+          } catch (error) {
+            console.error('Auto-login failed:', error);
+          }
+        }
+        return null;
+      }
+
+      function updateNavBar(user) {
         const navAuth = document.getElementById("nav-auth");
         if (user) {
-          // Check if user is anonymous (guest)
-          const displayName = user.isAnonymous 
-            ? "Guest" 
-            : (user.displayName || user.email);
-          
+          // Always use the latest displayName from the user object
+          const displayName = user.displayName || user.email.split('@')[0];
           navAuth.innerHTML = `
-                    <span>Welcome, ${displayName}</span>
-                    <button class="btn btn-secondary" id="logout-btn">Logout</button>
-                `;
+            <a href="/user?email=${encodeURIComponent(user.email)}" class="btn btn-secondary">
+              <i class="fas fa-user"></i> My Profile
+            </a>
+            <span>Welcome, ${displayName}</span>
+            <button class="btn btn-secondary" id="logout-btn">Logout</button>
+          `;
           
-          // Add logout functionality
           const logoutBtn = document.getElementById("logout-btn");
           if (logoutBtn) {
             logoutBtn.addEventListener("click", async () => {
               try {
+                const token = localStorage.getItem('pixalu_auth_token');
+                if (token) {
+                  await fetch('/api/auth/logout', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token })
+                  });
+                }
+                localStorage.removeItem('pixalu_auth_token');
+                localStorage.removeItem('pixalu_session_token');
                 await signOut(auth);
                 window.location.reload();
               } catch (error) {
                 console.error("Logout error:", error);
                 alert("Failed to logout. Please try again.");
               }
+            });
+          }
+        }
+      }
+
+      // Try auto-login first
+      checkAutoLogin();
+
+      // Also listen to Firebase auth changes
+      onAuthStateChanged(auth, async (user) => {
+        if (user && !localStorage.getItem('pixalu_auth_token')) {
+          // User is logged in with Firebase but no JWT, try to get fresh data
+          try {
+            const firebaseToken = await user.getIdToken();
+            const response = await fetch('/api/auth/login', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                email: user.email,
+                firebaseToken: firebaseToken
+              })
+            });
+            
+            if (response.ok) {
+              const data = await response.json();
+              localStorage.setItem('pixalu_auth_token', data.token);
+              localStorage.setItem('pixalu_session_token', data.sessionToken);
+              updateNavBar(data.user);
+            } else {
+              // Fallback to Firebase user data
+              updateNavBar({
+                email: user.email,
+                displayName: user.displayName || user.email.split('@')[0],
+                uid: user.uid
+              });
+            }
+          } catch (error) {
+            console.error('Token generation failed:', error);
+            updateNavBar({
+              email: user.email,
+              displayName: user.displayName || user.email.split('@')[0],
+              uid: user.uid
             });
           }
         }
