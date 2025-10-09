@@ -34,14 +34,72 @@ class PixelEditor {
     // Settings - will be loaded async
     this.settings = null;
 
+    // Performance optimization flags
+    this.pendingSpriteSave = false;
+    this._performanceMetrics = {};
+
     this.initialize().catch((error) => {
       console.error("Failed to initialize editor:", error);
     });
 
-    this.debouncedSave = this.debounce(async (sprite) => {
-      await this.saveSpriteWithSync(sprite);
-    }, 500); // Save after 500ms of inactivity
+    // OPTIMIZATION: Debounced save that doesn't block the main thread
+    this.debouncedSave = this.debounce((sprite) => {
+      this.pendingSpriteSave = true;
+      this.queueIdle(async () => {
+        if (!this.pendingSpriteSave) return;
+        this.pendingSpriteSave = false;
+        try {
+          await this.saveSpriteWithSync(sprite);
+        } catch (e) {
+          console.error('Background save error:', e);
+        }
+      }, 1000);
+    }, 250); // Reduced debounce time since save happens on idle
   }
+
+  /**
+   * OPTIMIZATION: Queue work during browser idle time to avoid blocking input
+   */
+  queueIdle(fn, timeout = 1500) {
+    const cb = () => {
+      try {
+        fn();
+      } catch (e) {
+        console.error('Idle callback error:', e);
+      }
+    };
+    if (window.requestIdleCallback) {
+      requestIdleCallback(cb, { timeout });
+    } else {
+      setTimeout(cb, 0);
+    }
+  }
+
+  /**
+   * OPTIMIZATION: Performance measurement helper
+   */
+  perf(label, fn) {
+    const t0 = performance.now();
+    const r = fn();
+    const t1 = performance.now();
+    const duration = t1 - t0;
+    
+    // Only warn if operation took longer than a frame (16ms)
+    if (duration > 16) {
+      console.warn(`⚠️ ${label} took ${Math.round(duration)}ms`);
+    }
+    
+    // Track metrics for analysis
+    if (!this._performanceMetrics[label]) {
+      this._performanceMetrics[label] = { count: 0, total: 0, max: 0 };
+    }
+    this._performanceMetrics[label].count++;
+    this._performanceMetrics[label].total += duration;
+    this._performanceMetrics[label].max = Math.max(this._performanceMetrics[label].max, duration);
+    
+    return r;
+  }
+
   debounce(func, wait) {
     let timeout;
     return function executedFunction(...args) {
@@ -56,7 +114,7 @@ class PixelEditor {
 
   /**
    * Helper method to save sprite with cloud sync
-   * OPTIMIZED: Now includes progress tracking for large sprites
+   * OPTIMIZED: Now includes progress tracking for large sprites and creates serializable snapshots
    */
   async saveSpriteWithSync(sprite) {
     if (!this.storageManager || typeof this.storageManager.saveSprite !== 'function') {
@@ -65,6 +123,9 @@ class PixelEditor {
     
     const userId = window.currentUser ? window.currentUser.uid : null;
     const saveOptions = userId ? { syncToCloud: true, userId } : { syncToCloud: false };
+    
+    // OPTIMIZATION: Create a serializable snapshot without blocking the paint path
+    const snapshot = this.createSerializableSnapshot(sprite);
     
     // OPTIMIZATION: Show progress for large sprites (> 100,000 pixels)
     const spriteSize = sprite.width * sprite.height;
@@ -81,7 +142,7 @@ class PixelEditor {
       };
       
       try {
-        const result = await this.storageManager.saveSprite(sprite, saveOptions);
+        const result = await this.storageManager.saveSprite(snapshot, saveOptions);
         
         // Hide progress and show success
         this.uiManager.hideProgressNotification();
@@ -97,7 +158,40 @@ class PixelEditor {
       }
     }
     
-    return await this.storageManager.saveSprite(sprite, saveOptions);
+    return await this.storageManager.saveSprite(snapshot, saveOptions);
+  }
+
+  /**
+   * OPTIMIZATION: Create a serializable snapshot of sprite without deep cloning on main thread
+   */
+  createSerializableSnapshot(sprite) {
+    const frames = (sprite.frames || []).map((f) => ({
+      width: f.width,
+      height: f.height,
+      activeLayerIndex: f.activeLayerIndex ?? 0,
+      layers: (f.layers || []).map((l) => ({
+        name: l.name,
+        visible: l.visible !== false,
+        opacity: l.opacity ?? 1,
+        locked: l.locked ?? false,
+        blendMode: l.blendMode ?? 'normal',
+        // Share reference for typed arrays (they're already cloneable)
+        // For nested arrays, we need to serialize but can do it more efficiently
+        pixels: l.pixels,
+        useTypedArray: l.useTypedArray
+      })),
+    }));
+    
+    return {
+      id: sprite.id,
+      name: sprite.name,
+      width: sprite.width,
+      height: sprite.height,
+      createdAt: sprite.createdAt,
+      modifiedAt: sprite.modifiedAt,
+      isAnimated: sprite.isAnimated,
+      frames
+    };
   }
 
   /**
@@ -233,7 +327,7 @@ class PixelEditor {
   }
 
   // Add this new method to save layer changes back to sprite
-  // Also fix the saveLayersToSprite method to prevent corruption
+  // OPTIMIZATION: Share references to avoid deep clones on every change
   saveLayersToSprite() {
     if (!this.currentSprite || !this.layerManager || !this.animationManager)
       return;
@@ -250,26 +344,39 @@ class PixelEditor {
       !activeLayer.pixels ||
       activeLayer.pixels.length === 0
     ) {
-      console.warn("LayerManager has no valid data to save, skipping");
       return;
     }
 
     // CRITICAL FIX: Prevent recursive saves during import
     if (this._savingLayers) {
-      console.log("Already saving layers, preventing recursion");
       return;
     }
 
     this._savingLayers = true;
 
     try {
-      // Save current layer state to current frame
-      this.animationManager.saveLayerManagerToCurrentFrame();
+      const frameIndex = (this.animationManager && typeof this.animationManager.currentFrameIndex === "number")
+        ? this.animationManager.currentFrameIndex
+        : 0;
+      
+      if (!this.currentSprite.frames?.[frameIndex]) {
+        this.currentSprite.initializeFrames?.();
+      }
+      
+      const frame = this.currentSprite.frames[frameIndex];
+      frame.width = this.layerManager.width;
+      frame.height = this.layerManager.height;
+      frame.activeLayerIndex = this.layerManager.activeLayerIndex;
+      
+      // OPTIMIZATION: Share references to avoid O(N) clones on every change
+      // Snapshot will be created during save, not here
+      frame.layers = this.layerManager.layers;
+      this.currentSprite.layers = this.layerManager.layers; // back-compat
 
       // Mark sprite as modified
       this.currentSprite.modifiedAt = new Date().toISOString();
 
-      // Trigger auto-save with delay to prevent conflicts
+      // Trigger auto-save with delay - happens on idle time
       if (this.debouncedSave) {
         this.debouncedSave(this.currentSprite);
       }
@@ -297,8 +404,14 @@ class PixelEditor {
     return sprite;
   }
 
-  // Replace the setCurrentSprite method
+  // Optimized setCurrentSprite method with async loading for large sprites
   setCurrentSprite(sprite) {
+    // OPTIMIZATION: Start performance measurement
+    const perfStart = performance.now();
+    
+    // Prevent excessive UI updates during sprite switching
+    document.body.classList.add('switching-sprite');
+
     // Save current frame if switching sprites
     if (
       this.currentSprite &&
@@ -314,50 +427,61 @@ class PixelEditor {
     if (sprite) {
       sprite.onChange = (s) => this.debouncedSave(s);
 
-      // CRITICAL FIX: Validate and initialize frames before proceeding
-      if (!sprite.frames || sprite.frames.length === 0) {
-        console.log("Sprite has no frames, initializing...");
-        sprite.initializeFrames();
-      }
+      // OPTIMIZATION: Only validate if sprite looks corrupted (much faster)
+      // Trust that sprites from storage are already valid
+      const needsValidation = !sprite.frames || 
+                             sprite.frames.length === 0 || 
+                             !sprite.frames[0] || 
+                             !sprite.frames[0].layers ||
+                             sprite.frames[0].layers.length === 0;
 
-      // CRITICAL FIX: Validate frame data integrity
-      if (
-        sprite.frames[0] &&
-        (!sprite.frames[0].layers || sprite.frames[0].layers.length === 0)
-      ) {
-        console.warn("Frame has no layers, reinitializing sprite structure");
-        sprite.initializeFrames();
-      }
-
-      // CRITICAL FIX: Validate pixel data exists and is valid
-      const firstFrame = sprite.frames[0];
-      if (firstFrame && firstFrame.layers && firstFrame.layers[0]) {
-        const firstLayer = firstFrame.layers[0];
-        if (
-          !firstLayer.pixels ||
-          !Array.isArray(firstLayer.pixels) ||
-          firstLayer.pixels.length === 0
-        ) {
-          console.warn(
-            "Layer has no valid pixel data, creating empty pixel array"
-          );
-          firstLayer.pixels = sprite.createEmptyPixelArray();
+      if (needsValidation) {
+        console.warn("Sprite needs validation, initializing...");
+        if (!sprite.frames || sprite.frames.length === 0) {
+          sprite.initializeFrames();
+        }
+        
+        // Only check first layer if validation needed
+        if (sprite.frames[0] && (!sprite.frames[0].layers || sprite.frames[0].layers.length === 0)) {
+          sprite.initializeFrames();
         }
       }
+      
+      // Make sure pixels are using TypedArrays for large sprites
+      const isLargeSprite = sprite.width * sprite.height > 10000;
+      
+      // Convert all layers to use TypedArrays if they're not already
+      if (isLargeSprite && sprite.frames && sprite.frames[0]) {
+        sprite.frames.forEach(frame => {
+          if (frame.layers) {
+            frame.layers.forEach(layer => {
+              if (!layer.useTypedArray && Array.isArray(layer.pixels)) {
+                // Convert to TypedArray
+                const typedPixels = new Uint8Array(sprite.width * sprite.height * 4);
+                for (let y = 0; y < sprite.height; y++) {
+                  for (let x = 0; x < sprite.width; x++) {
+                    if (layer.pixels[y] && layer.pixels[y][x]) {
+                      const index = (y * sprite.width + x) * 4;
+                      const pixel = layer.pixels[y][x];
+                      typedPixels[index] = pixel[0] || 0;
+                      typedPixels[index + 1] = pixel[1] || 0;
+                      typedPixels[index + 2] = pixel[2] || 0;
+                      typedPixels[index + 3] = pixel[3] || 0;
+                    }
+                  }
+                }
+                layer.pixels = typedPixels;
+                layer.useTypedArray = true;
+              }
+            });
+          }
+        });
+      }
 
-      // Validate sprite has pixel data for backward compatibility
-      if (!sprite.pixels || sprite.pixels.length === 0) {
-        if (
-          sprite.frames &&
-          sprite.frames[0] &&
-          sprite.frames[0].layers &&
-          sprite.frames[0].layers[0] &&
-          sprite.frames[0].layers[0].pixels
-        ) {
-          sprite.pixels = sprite.frames[0].layers[0].pixels;
-        } else {
-          sprite.pixels = sprite.createEmptyPixelArray();
-        }
+      // OPTIMIZATION: Skip backward compatibility check - assume modern sprite format
+      // Only fallback if absolutely necessary
+      if (!sprite.pixels && sprite.frames && sprite.frames[0] && sprite.frames[0].layers && sprite.frames[0].layers[0]) {
+        sprite.pixels = sprite.frames[0].layers[0].pixels;
       }
 
       // Load first frame into animation manager and layer manager
@@ -375,27 +499,52 @@ class PixelEditor {
 
     this._switchingSprites = false;
 
-    // Force immediate render
-    if (this.canvasManager) {
-      this.canvasManager.render();
-    }
-
-    // Save to history after sprite is loaded
-    setTimeout(() => {
-      if (this.layerManager && !this._switchingSprites) {
-        const activeLayer = this.layerManager.getActiveLayer();
-        if (
-          activeLayer &&
-          activeLayer.pixels &&
-          activeLayer.pixels.length > 0
-        ) {
-          this.layerManager.saveToHistory();
-        }
+    // OPTIMIZATION: Use two-phase rendering for immediate feedback
+    // Phase 1: Immediate Canvas Setup (fast)
+    requestAnimationFrame(() => {
+      // Force render (already fast with our optimizations)
+      if (this.canvasManager) {
+        this.canvasManager.render();
       }
-    }, 100);
+      
+      // Remove the switching-sprite class to show the canvas
+      document.body.classList.remove('switching-sprite');
+      
+      // Phase 2: Defer UI updates until after rendering (slow)
+      // Use requestIdleCallback if available, otherwise setTimeout
+      const scheduleUpdate = window.requestIdleCallback || ((cb) => setTimeout(cb, 0));
+      
+      scheduleUpdate(() => {
+        this.updateUI();
+        
+        // OPTIMIZATION: Defer expensive palette update even further
+        if (this.uiManager && this.uiManager.updateCanvasColorsPalette) {
+          setTimeout(() => {
+            this.uiManager.updateCanvasColorsPalette();
+          }, 100); // Delay palette update by 100ms for better responsiveness
+        }
 
-    this.updateUI();
-    this.uiManager.updateCanvasColorsPalette();
+        // OPTIMIZATION: Defer history save - not needed immediately
+        if (this.layerManager) {
+          const activeLayer = this.layerManager.getActiveLayer();
+          if (activeLayer && activeLayer.pixels) {
+            // If it's a large sprite, defer history save even more
+            const isLargeSprite = sprite.width * sprite.height > 10000;
+            if (isLargeSprite) {
+              setTimeout(() => {
+                this.layerManager.saveToHistory();
+              }, 500); // Longer delay for large sprites
+            } else {
+              this.layerManager.saveToHistory();
+            }
+          }
+        }
+
+        // Log performance
+        const perfEnd = performance.now();
+        console.log(`✨ Sprite switch took: ${(perfEnd - perfStart).toFixed(2)}ms`);
+      }, window.requestIdleCallback ? { timeout: 100 } : undefined);
+    });
   }
 
   // Update saveLayersToSprite to check for sprite switching
@@ -569,17 +718,23 @@ class PixelEditor {
 
   /**
    * Create a new sprite
+   * OPTIMIZATION: Use debounced save and queue heavy work during idle time
    */
   createNewSprite(width = 16, height = 16, name = null) {
     const spriteName = name || `Sprite ${this.sprites.length + 1}`;
     const sprite = new Sprite(width, height, spriteName);
-    // Set up auto-save callback
+    
+    // Set up auto-save callback (do not block UI)
     sprite.onChange = (s) => {
-      this.saveSpriteWithSync(s);
+      this.debouncedSave(s);
     };
+    
     this.sprites.push(sprite);
     this.setCurrentSprite(sprite);
-    this.saveSprites();
+    
+    // Queue save during idle time instead of blocking immediately
+    this.queueIdle(() => this.saveSprites());
+    
     this.uiManager.showNotification(
       `Created new sprite: ${spriteName}`,
       "success"

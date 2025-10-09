@@ -16,7 +16,11 @@ class LayerManager {
     // History system
     this.history = [];
     this.historyIndex = -1;
-    this.maxHistorySize = 50;
+    const pixelCount = width * height;
+    // Use patch-based history for large sprites, full snapshots for small ones
+    this.usePatchHistory = pixelCount > 10000;
+    this.maxHistorySize = pixelCount > 100000 ? 20 : 50;
+    this._changedPixels = null; // Track changes during batch operations
 
     this.createDefaultLayer();
     this.saveToHistory(); // Save initial state
@@ -29,24 +33,76 @@ class LayerManager {
       this.history.splice(this.historyIndex + 1);
     }
 
-    // Create deep copy of current state
-    const state = {
-      width: this.width,
-      height: this.height,
-      activeLayerIndex: this.activeLayerIndex,
-      timestamp: Date.now(),
-      layers: this.layers.map((layer) => ({
-        id: layer.id,
-        name: layer.name,
-        visible: layer.visible,
-        opacity: layer.opacity,
-        locked: layer.locked,
-        blendMode: layer.blendMode,
-        pixels: layer.pixels.map((row) => row.map((pixel) => [...pixel])),
-      })),
-    };
+    // OPTIMIZATION: Use patch-based history for large sprites
+    if (this.usePatchHistory && this._changedPixels && this._changedPixels.size > 0) {
+      // Only save changed pixels (patch)
+      const patch = {
+        type: 'patch',
+        timestamp: Date.now(),
+        activeLayerIndex: this.activeLayerIndex,
+        changes: Array.from(this._changedPixels).map(key => {
+          const [layerIdx, x, y] = key.split(',').map(Number);
+          const layer = this.layers[layerIdx];
+          let color = [0, 0, 0, 0];
+          if (layer) {
+            if (layer.useTypedArray) {
+              color = this._getPixel(layer.pixels, x, y);
+            } else if (layer.pixels[y] && layer.pixels[y][x]) {
+              color = [...layer.pixels[y][x]];
+            }
+          }
+          return {
+            layerIdx,
+            x,
+            y,
+            color
+          };
+        })
+      };
+      this.history.push(patch);
+      this._changedPixels.clear();
+    } else {
+      // Full snapshot for small sprites or first save
+      const state = {
+        type: 'snapshot',
+        width: this.width,
+        height: this.height,
+        activeLayerIndex: this.activeLayerIndex,
+        timestamp: Date.now(),
+        layers: this.layers.map((layer) => {
+          // Handle both TypedArrays and nested arrays
+          let pixelsCopy;
+          
+          if (layer.useTypedArray) {
+            // For TypedArrays, create a clone
+            pixelsCopy = new Uint8Array(layer.pixels);
+          } else if (Array.isArray(layer.pixels)) {
+            // For 2D arrays, deep copy
+            pixelsCopy = layer.pixels.map((row) => 
+              Array.isArray(row) ? row.map((pixel) => 
+                Array.isArray(pixel) ? [...pixel] : [0, 0, 0, 0]
+              ) : []
+            );
+          } else {
+            // Fallback for any other case
+            pixelsCopy = new Uint8Array(this.width * this.height * 4);
+          }
+          
+          return {
+            id: layer.id,
+            name: layer.name,
+            visible: layer.visible,
+            opacity: layer.opacity,
+            locked: layer.locked,
+            blendMode: layer.blendMode,
+            pixels: pixelsCopy,
+            useTypedArray: layer.useTypedArray
+          };
+        }),
+      };
+      this.history.push(state);
+    }
 
-    this.history.push(state);
     this.historyIndex++;
 
     // Limit history size
@@ -59,9 +115,10 @@ class LayerManager {
   // Undo last action
   undo() {
     if (this.historyIndex > 0) {
+      const currentState = this.history[this.historyIndex];
       this.historyIndex--;
-      const state = this.history[this.historyIndex];
-      this.restoreFromState(state);
+      const targetState = this.history[this.historyIndex];
+      this.restoreFromState(targetState, currentState);
       return true;
     }
     return false;
@@ -70,33 +127,80 @@ class LayerManager {
   // Redo next action
   redo() {
     if (this.historyIndex < this.history.length - 1) {
+      const currentState = this.history[this.historyIndex];
       this.historyIndex++;
-      const state = this.history[this.historyIndex];
-      this.restoreFromState(state);
+      const targetState = this.history[this.historyIndex];
+      this.restoreFromState(targetState, currentState);
       return true;
     }
     return false;
   }
 
-  // Restore from history state
-  restoreFromState(state) {
+  // Restore from history state (optimized for patches)
+  restoreFromState(state, reverseFrom = null) {
     // Prevent saving to history during restore
     this._restoring = true;
 
-    this.width = state.width;
-    this.height = state.height;
-    this.activeLayerIndex = state.activeLayerIndex;
+    if (state.type === 'patch') {
+      // Apply patch changes
+      this.activeLayerIndex = state.activeLayerIndex;
+      
+      // Reverse previous patch if moving backward
+      if (reverseFrom && reverseFrom.type === 'patch') {
+        for (const change of reverseFrom.changes) {
+          const layer = this.layers[change.layerIdx];
+          if (layer && layer.pixels) {
+            if (layer.useTypedArray) {
+              this._setPixel(layer.pixels, change.x, change.y, change.color);
+            } else if (layer.pixels[change.y]) {
+              layer.pixels[change.y][change.x] = [...change.color];
+            }
+          }
+        }
+      }
+    } else {
+      // Full snapshot restore
+      this.width = state.width;
+      this.height = state.height;
+      this.activeLayerIndex = state.activeLayerIndex;
 
-    // Deep copy layers from state
-    this.layers = state.layers.map((layerData) => ({
-      id: layerData.id,
-      name: layerData.name,
-      visible: layerData.visible,
-      opacity: layerData.opacity,
-      locked: layerData.locked || false,
-      blendMode: layerData.blendMode || "normal",
-      pixels: layerData.pixels.map((row) => row.map((pixel) => [...pixel])),
-    }));
+      // Deep copy layers from state
+      this.layers = state.layers.map((layerData) => {
+        // Handle both TypedArrays and nested arrays for restoration
+        let pixelsCopy;
+        
+        if (layerData.useTypedArray) {
+          // For TypedArrays, create a clone
+          pixelsCopy = new Uint8Array(layerData.pixels);
+        } else if (Array.isArray(layerData.pixels)) {
+          // For 2D arrays, deep copy
+          if (Array.isArray(layerData.pixels[0])) {
+            pixelsCopy = layerData.pixels.map((row) => 
+              Array.isArray(row) ? row.map((pixel) => 
+                Array.isArray(pixel) ? [...pixel] : [0, 0, 0, 0]
+              ) : []
+            );
+          } else {
+            // It might be a flattened array
+            pixelsCopy = new Uint8Array(layerData.pixels);
+          }
+        } else {
+          // Fallback for any other case
+          pixelsCopy = new Uint8Array(this.width * this.height * 4);
+        }
+        
+        return {
+          id: layerData.id,
+          name: layerData.name,
+          visible: layerData.visible,
+          opacity: layerData.opacity,
+          locked: layerData.locked || false,
+          blendMode: layerData.blendMode || "normal",
+          pixels: pixelsCopy,
+          useTypedArray: layerData.useTypedArray
+        };
+      });
+    }
 
     this.compositeDirty = true;
     this.compositeCache = null;
@@ -118,6 +222,10 @@ class LayerManager {
   // Add to LayerManager - for tools to batch pixel operations and save once
   startBatchOperation() {
     this.setBatchMode(true);
+    // Track changed pixels for patch-based history
+    if (this.usePatchHistory) {
+      this._changedPixels = new Set();
+    }
   }
 
   endBatchOperation() {
@@ -144,6 +252,7 @@ class LayerManager {
       pixels: this.createEmptyPixelArray(),
       locked: false,
       blendMode: "normal", // For future blend mode support
+      useTypedArray: true  // Always use TypedArray for better performance
     };
 
     // Insert at specific position or at the end
@@ -164,14 +273,33 @@ class LayerManager {
   }
 
   createEmptyPixelArray() {
-    const pixels = [];
-    for (let y = 0; y < this.height; y++) {
-      pixels[y] = [];
-      for (let x = 0; x < this.width; x++) {
-        pixels[y][x] = [0, 0, 0, 0]; // Transparent
-      }
-    }
-    return pixels;
+    // Always use TypedArray for better performance
+    return new Uint8Array(this.width * this.height * 4);
+  }
+  
+  // Helper to convert coordinates to pixel index in TypedArray
+  _coordsToIndex(x, y) {
+    return (y * this.width + x) * 4;
+  }
+  
+  // Helper to get a pixel from TypedArray
+  _getPixel(pixels, x, y) {
+    const index = this._coordsToIndex(x, y);
+    return [
+      pixels[index],
+      pixels[index + 1], 
+      pixels[index + 2], 
+      pixels[index + 3]
+    ];
+  }
+  
+  // Helper to set a pixel in TypedArray
+  _setPixel(pixels, x, y, color) {
+    const index = this._coordsToIndex(x, y);
+    pixels[index] = color[0] || 0;
+    pixels[index + 1] = color[1] || 0; 
+    pixels[index + 2] = color[2] || 0;
+    pixels[index + 3] = color[3] || 0;
   }
 
   deleteLayer(index) {
@@ -329,16 +457,38 @@ class LayerManager {
       return false;
     }
 
-    // Update pixel data
-    layer.pixels[y][x] = [...color];
+    // Track changed pixels for patch-based history
+    if (this.usePatchHistory && this._changedPixels && this.batchMode) {
+      const key = `${targetIndex},${x},${y}`;
+      if (!this._changedPixels.has(key)) {
+        this._changedPixels.add(key);
+      }
+    }
+
+    // Update pixel data - handle both TypedArrays and 2D arrays
+    if (layer.useTypedArray || layer.pixels instanceof Uint8Array) {
+      this._setPixel(layer.pixels, x, y, color);
+    } else if (Array.isArray(layer.pixels) && Array.isArray(layer.pixels[y])) {
+      layer.pixels[y][x] = [...color];
+    } else {
+      console.error('Invalid pixel data structure', layer.pixels);
+      return false;
+    }
 
     // OPTIMIZATION: Mark dirty region for selective redraw
     if (window.editor && window.editor.canvasManager) {
       window.editor.canvasManager.markDirtyRegion(x, y, 1, 1);
     }
 
+    // Mark composite as dirty so it re-renders
+    this.compositeDirty = true;
+
     if (this.batchMode) {
       this.pendingUpdates = true;
+      // Force immediate render even in batch mode for visual feedback
+      if (window.editor && window.editor.canvasManager) {
+        window.editor.canvasManager.render();
+      }
     } else {
       this.notifyChange();
     }
@@ -354,7 +504,15 @@ class LayerManager {
       return [0, 0, 0, 0];
     }
 
-    return [...layer.pixels[y][x]];
+    // Handle both TypedArrays and 2D arrays
+    if (layer.useTypedArray || layer.pixels instanceof Uint8Array) {
+      return this._getPixel(layer.pixels, x, y);
+    } else if (Array.isArray(layer.pixels) && layer.pixels[y] && Array.isArray(layer.pixels[y][x])) {
+      return [...layer.pixels[y][x]];
+    } else {
+      console.error('Invalid pixel data structure', layer.pixels);
+      return [0, 0, 0, 0];
+    }
   }
 
   // Get composite pixel at position (all visible layers combined)
@@ -370,7 +528,16 @@ class LayerManager {
       const layer = this.layers[i];
       if (!layer.visible) continue;
 
-      const layerPixel = layer.pixels[y][x];
+      // Handle both TypedArrays and 2D arrays
+      let layerPixel;
+      if (layer.useTypedArray || layer.pixels instanceof Uint8Array) {
+        layerPixel = this._getPixel(layer.pixels, x, y);
+      } else if (Array.isArray(layer.pixels) && layer.pixels[y]) {
+        layerPixel = layer.pixels[y][x] || [0, 0, 0, 0];
+      } else {
+        layerPixel = [0, 0, 0, 0];
+      }
+      
       const [lr, lg, lb, la] = layerPixel;
 
       if (la === 0) continue; // Skip transparent pixels
@@ -415,27 +582,100 @@ class LayerManager {
     });
   }
 
-  // Generate composite ImageData for the entire canvas
+  // Generate composite ImageData for the entire canvas - optimized for TypedArrays
   getCompositeImageData() {
-    const canvas = document.createElement("canvas");
-    canvas.width = this.width;
-    canvas.height = this.height;
-    const ctx = canvas.getContext("2d");
-    const imageData = ctx.createImageData(this.width, this.height);
+    // Use cache if available and not dirty
+    if (this.compositeCache && !this.compositeDirty) {
+      return this.compositeCache;
+    }
+    
+    const imageData = new ImageData(this.width, this.height);
     const data = imageData.data;
-
-    for (let y = 0; y < this.height; y++) {
-      for (let x = 0; x < this.width; x++) {
-        const [r, g, b, a] = this.getCompositePixel(x, y);
-        const index = (y * this.width + x) * 4;
-
-        data[index] = r;
-        data[index + 1] = g;
-        data[index + 2] = b;
-        data[index + 3] = a;
+    
+    // Fast path for when there's only one visible layer with full opacity
+    const visibleLayers = this.layers.filter(layer => layer.visible && layer.opacity > 0);
+    
+    if (visibleLayers.length === 1 && visibleLayers[0].opacity === 1) {
+      const layer = visibleLayers[0];
+      
+      if (layer.useTypedArray) {
+        // Direct copy for TypedArrays - extremely fast
+        data.set(layer.pixels);
+      } else {
+        // Convert 2D array to flat array
+        for (let y = 0; y < this.height; y++) {
+          for (let x = 0; x < this.width; x++) {
+            const index = (y * this.width + x) * 4;
+            const pixel = layer.pixels[y][x];
+            
+            data[index] = pixel[0];     // R
+            data[index + 1] = pixel[1]; // G
+            data[index + 2] = pixel[2]; // B
+            data[index + 3] = pixel[3]; // A
+          }
+        }
+      }
+    } else {
+      // Multiple layers need compositing
+      for (let i = 0; i < data.length; i += 4) {
+        let [r, g, b, a] = [0, 0, 0, 0]; // Start with transparent black
+        
+        // Loop through layers from bottom to top
+        for (let li = 0; li < visibleLayers.length; li++) {
+          const layer = visibleLayers[li];
+          if (!layer.visible || layer.opacity === 0) continue;
+          
+          let sr, sg, sb, sa;
+          
+          if (layer.useTypedArray) {
+            sr = layer.pixels[i];
+            sg = layer.pixels[i + 1];
+            sb = layer.pixels[i + 2];
+            sa = layer.pixels[i + 3];
+          } else {
+            // For 2D arrays, convert index to coordinates
+            const pixelIndex = Math.floor(i / 4);
+            const x = pixelIndex % this.width;
+            const y = Math.floor(pixelIndex / this.width);
+            
+            if (!layer.pixels[y] || !layer.pixels[y][x]) continue;
+            
+            const pixel = layer.pixels[y][x];
+            sr = pixel[0];
+            sg = pixel[1];
+            sb = pixel[2];
+            sa = pixel[3];
+          }
+          
+          // Apply layer opacity
+          sa = sa * layer.opacity / 255;
+          
+          // Skip transparent pixels
+          if (sa === 0) continue;
+          
+          // Alpha compositing formula
+          const da = a / 255; // destination alpha
+          const newAlpha = sa + da * (1 - sa);
+          
+          if (newAlpha > 0) {
+            r = Math.round((sr * sa + r * da * (1 - sa)) / newAlpha);
+            g = Math.round((sg * sa + g * da * (1 - sa)) / newAlpha);
+            b = Math.round((sb * sa + b * da * (1 - sa)) / newAlpha);
+            a = Math.round(newAlpha * 255);
+          }
+        }
+        
+        data[i] = r;
+        data[i + 1] = g;
+        data[i + 2] = b;
+        data[i + 3] = a;
       }
     }
-
+    
+    // Cache the result
+    this.compositeCache = imageData;
+    this.compositeDirty = false;
+    
     return imageData;
   }
 
@@ -548,7 +788,7 @@ class LayerManager {
     }
   }
 
-  // Resize all layers
+  // Resize all layers - optimized for TypedArrays
   resize(newWidth, newHeight, useNearestNeighbor = false) {
     const oldWidth = this.width;
     const oldHeight = this.height;
@@ -557,49 +797,93 @@ class LayerManager {
     this.height = newHeight;
 
     this.layers.forEach((layer) => {
+      // Always create a TypedArray for the new pixels
+      const newPixels = new Uint8Array(newWidth * newHeight * 4);
+      
       if (useNearestNeighbor && oldWidth > 0 && oldHeight > 0) {
         // Nearest neighbor scaling
-        const newPixels = [];
+        if (layer.useTypedArray) {
+          // Fast path for TypedArrays
+          for (let y = 0; y < newHeight; y++) {
+            for (let x = 0; x < newWidth; x++) {
+              // Map new coordinates to old coordinates using nearest neighbor
+              const srcX = Math.floor((x / newWidth) * oldWidth);
+              const srcY = Math.floor((y / newHeight) * oldHeight);
+              
+              // Get indices
+              const newIndex = (y * newWidth + x) * 4;
+              const oldIndex = (srcY * oldWidth + srcX) * 4;
+              
+              // Copy pixel values
+              newPixels[newIndex] = layer.pixels[oldIndex] || 0;         // R
+              newPixels[newIndex + 1] = layer.pixels[oldIndex + 1] || 0; // G
+              newPixels[newIndex + 2] = layer.pixels[oldIndex + 2] || 0; // B
+              newPixels[newIndex + 3] = layer.pixels[oldIndex + 3] || 0; // A
+            }
+          }
+        } else {
+          // Fallback for legacy 2D arrays
+          for (let y = 0; y < newHeight; y++) {
+            for (let x = 0; x < newWidth; x++) {
+              // Map new coordinates to old coordinates using nearest neighbor
+              const srcX = Math.floor((x / newWidth) * oldWidth);
+              const srcY = Math.floor((y / newHeight) * oldHeight);
 
-        for (let y = 0; y < newHeight; y++) {
-          newPixels[y] = [];
-          for (let x = 0; x < newWidth; x++) {
-            // Map new coordinates to old coordinates using nearest neighbor
-            const srcX = Math.floor((x / newWidth) * oldWidth);
-            const srcY = Math.floor((y / newHeight) * oldHeight);
+              // Clamp to bounds
+              const clampedSrcX = Math.min(Math.max(srcX, 0), oldWidth - 1);
+              const clampedSrcY = Math.min(Math.max(srcY, 0), oldHeight - 1);
 
-            // Clamp to bounds
-            const clampedSrcX = Math.min(Math.max(srcX, 0), oldWidth - 1);
-            const clampedSrcY = Math.min(Math.max(srcY, 0), oldHeight - 1);
-
-            // Copy pixel from source
-            if (
-              clampedSrcY < layer.pixels.length &&
-              clampedSrcX < layer.pixels[clampedSrcY].length
-            ) {
-              newPixels[y][x] = [...layer.pixels[clampedSrcY][clampedSrcX]];
-            } else {
-              newPixels[y][x] = [0, 0, 0, 0]; // Transparent fallback
+              // Get new pixel index
+              const newIndex = (y * newWidth + x) * 4;
+              
+              // Copy pixel from source
+              if (layer.pixels[clampedSrcY] && layer.pixels[clampedSrcY][clampedSrcX]) {
+                const pixel = layer.pixels[clampedSrcY][clampedSrcX];
+                newPixels[newIndex] = pixel[0] || 0;
+                newPixels[newIndex + 1] = pixel[1] || 0;
+                newPixels[newIndex + 2] = pixel[2] || 0;
+                newPixels[newIndex + 3] = pixel[3] || 0;
+              }
             }
           }
         }
-
-        layer.pixels = newPixels;
       } else {
-        // Original crop/extend behavior
-        const newPixels = this.createEmptyPixelArray();
-
-        // Copy existing pixels
-        for (let y = 0; y < Math.min(oldHeight, newHeight); y++) {
-          for (let x = 0; x < Math.min(oldWidth, newWidth); x++) {
-            if (y < layer.pixels.length && x < layer.pixels[y].length) {
-              newPixels[y][x] = [...layer.pixels[y][x]];
+        // Simple crop/extend behavior
+        if (layer.useTypedArray) {
+          // Fast path for TypedArrays - copy existing pixels directly
+          for (let y = 0; y < Math.min(oldHeight, newHeight); y++) {
+            for (let x = 0; x < Math.min(oldWidth, newWidth); x++) {
+              const newIndex = (y * newWidth + x) * 4;
+              const oldIndex = (y * oldWidth + x) * 4;
+              
+              // Copy each channel
+              newPixels[newIndex] = layer.pixels[oldIndex] || 0;
+              newPixels[newIndex + 1] = layer.pixels[oldIndex + 1] || 0;
+              newPixels[newIndex + 2] = layer.pixels[oldIndex + 2] || 0;
+              newPixels[newIndex + 3] = layer.pixels[oldIndex + 3] || 0;
+            }
+          }
+        } else {
+          // Fallback for 2D arrays
+          for (let y = 0; y < Math.min(oldHeight, newHeight); y++) {
+            for (let x = 0; x < Math.min(oldWidth, newWidth); x++) {
+              const newIndex = (y * newWidth + x) * 4;
+              
+              if (layer.pixels[y] && layer.pixels[y][x]) {
+                const pixel = layer.pixels[y][x];
+                newPixels[newIndex] = pixel[0] || 0;
+                newPixels[newIndex + 1] = pixel[1] || 0;
+                newPixels[newIndex + 2] = pixel[2] || 0;
+                newPixels[newIndex + 3] = pixel[3] || 0;
+              }
             }
           }
         }
-
-        layer.pixels = newPixels;
       }
+      
+      // Update layer with new pixels and set flag for TypedArray
+      layer.pixels = newPixels;
+      layer.useTypedArray = true;
     });
 
     // Mark composite as dirty
@@ -742,10 +1026,33 @@ class LayerManager {
 
     if (!layer) return null;
 
+    // Create a new sprite with the layer data
     const sprite = new Sprite(this.width, this.height, layer.name);
-    sprite.setPixelArray(
-      layer.pixels.map((row) => row.map((pixel) => [...pixel]))
-    );
+    
+    // Handle both TypedArrays and nested arrays
+    if (layer.useTypedArray) {
+      // Clone the TypedArray
+      const pixelsCopy = new Uint8Array(layer.pixels);
+      sprite.pixels = pixelsCopy;
+      sprite.useTypedArray = true;
+    } else {
+      // Convert nested arrays to flat TypedArray (optimize for newer sprites)
+      const pixelData = new Uint8Array(this.width * this.height * 4);
+      for (let y = 0; y < this.height; y++) {
+        for (let x = 0; x < this.width; x++) {
+          if (layer.pixels[y] && layer.pixels[y][x]) {
+            const pixel = layer.pixels[y][x];
+            const index = (y * this.width + x) * 4;
+            pixelData[index] = pixel[0] || 0;
+            pixelData[index + 1] = pixel[1] || 0;
+            pixelData[index + 2] = pixel[2] || 0;
+            pixelData[index + 3] = pixel[3] || 0;
+          }
+        }
+      }
+      sprite.pixels = pixelData;
+      sprite.useTypedArray = true;
+    }
     return sprite;
   }
 

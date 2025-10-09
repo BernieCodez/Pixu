@@ -322,6 +322,14 @@ class CanvasManager {
     // OPTIMIZATION: Throttle mousemove events using requestAnimationFrame
     this.mouseMoveThrottled = false;
     this.pendingMouseMove = null;
+    
+    // OPTIMIZATION: Use WebGL renderer for large sprites
+    this.webglRenderer = new WebGLRenderer();
+    this.useWebGL = false; // Will be determined based on sprite size
+    
+    // Offscreen canvas for faster rendering
+    this.offscreenCanvas = document.createElement('canvas');
+    this.offscreenCtx = this.offscreenCanvas.getContext('2d');
 
     // Selection state
     this.selection = {
@@ -430,6 +438,7 @@ class CanvasManager {
 
   /**
    * Set current sprite
+   * OPTIMIZATION: Only resize canvas if dimensions actually changed
    */
   setSprite(sprite) {
     this.currentSprite = sprite;
@@ -438,23 +447,62 @@ class CanvasManager {
       this.layerManager = window.editor.layerManager;
     }
 
-    // Reset pan when sprite changes to avoid coordinate issues
-    this.resetPan();
+    // OPTIMIZATION: Calculate new canvas size
+    const newWidth = sprite.width * this.zoomLevel;
+    const newHeight = sprite.height * this.zoomLevel;
 
-    // Always update canvas size to match sprite dimensions
-    this.mainCanvas.width = sprite.width * this.zoomLevel;
-    this.mainCanvas.height = sprite.height * this.zoomLevel;
-    this.overlayCanvas.width = sprite.width * this.zoomLevel;
-    this.overlayCanvas.height = sprite.height * this.zoomLevel;
-    this.mainCanvas.style.width = `${sprite.width * this.zoomLevel}px`;
-    this.mainCanvas.style.height = `${sprite.height * this.zoomLevel}px`;
-    this.overlayCanvas.style.width = `${sprite.width * this.zoomLevel}px`;
-    this.overlayCanvas.style.height = `${sprite.height * this.zoomLevel}px`;
+    // OPTIMIZATION: Only resize/reset if dimensions changed
+    const dimensionsChanged = 
+      this.mainCanvas.width !== newWidth || 
+      this.mainCanvas.height !== newHeight;
+      
+    // Determine if we should use WebGL based on sprite size
+    const pixelCount = sprite.width * sprite.height;
+    this.useWebGL = pixelCount > 10000; // Use WebGL for sprites larger than 100x100
+    
+    if (this.useWebGL) {
+      // Initialize WebGL renderer if it's not already
+      if (!this.webglRenderer.initialized) {
+        const success = this.webglRenderer.initialize(this.mainCanvas);
+        if (!success) {
+          this.useWebGL = false;
+        }
+      }
+    } else if (this.webglRenderer.initialized) {
+      // If switching to a small sprite, revert to 2D context
+      this.mainCtx = this.mainCanvas.getContext('2d', { alpha: true });
+    }
+
+    if (dimensionsChanged) {
+      // Reset pan only when dimensions change to avoid coordinate issues
+      this.resetPan();
+
+      // Update canvas size to match sprite dimensions
+      this.mainCanvas.width = newWidth;
+      this.mainCanvas.height = newHeight;
+      this.overlayCanvas.width = newWidth;
+      this.overlayCanvas.height = newHeight;
+      this.mainCanvas.style.width = `${newWidth}px`;
+      this.mainCanvas.style.height = `${newHeight}px`;
+      this.overlayCanvas.style.width = `${newWidth}px`;
+      this.overlayCanvas.style.height = `${newHeight}px`;
+      
+      // Set offscreen canvas size
+      this.offscreenCanvas.width = newWidth;
+      this.offscreenCanvas.height = newHeight;
+      
+      // Update WebGL renderer size if using WebGL
+      if (this.useWebGL && this.webglRenderer.initialized) {
+        this.webglRenderer.resize(newWidth, newHeight);
+      }
+    }
 
     // OPTIMIZATION: Request full redraw when sprite changes
     this.requestFullRedraw();
-    this.render();
-    this.updateCanvasData();
+    
+    // OPTIMIZATION: Don't call render() here - let the caller decide when to render
+    // This avoids double-rendering when switching sprites
+    // render() will be called by requestAnimationFrame in setCurrentSprite
   }
 
   /**
@@ -560,6 +608,32 @@ class CanvasManager {
       return;
     }
 
+    // Get composite image data from layer manager
+    let imageData = null;
+    if (window.editor && window.editor.layerManager) {
+      // Optimize by using the high-performance TypedArray path
+      imageData = window.editor.layerManager.getCompositeImageData();
+    }
+
+    // OPTIMIZATION: Check if we can use WebGL
+    if (this.useWebGL && this.webglRenderer.initialized && imageData) {
+      // Fast path: WebGL rendering for large sprites
+      this.webglRenderer.draw(imageData, true); // true = show checkerboard
+      
+      // Render grid if enabled (WebGL can't do this easily, so we use the overlay)
+      if (this.showGrid && this.zoomLevel >= 4) {
+        // Clear overlay and draw grid on it
+        this.overlayCtx.clearRect(0, 0, this.overlayCanvas.width, this.overlayCanvas.height);
+        this.renderGridOnOverlay();
+      } else {
+        this.overlayCtx.clearRect(0, 0, this.overlayCanvas.width, this.overlayCanvas.height);
+      }
+      
+      this.clearDirtyRegion();
+      return;
+    }
+
+    // Canvas 2D fallback path
     // OPTIMIZATION: Full redraw when needed, otherwise selective redraw
     if (this.fullRedrawNeeded || !this.dirtyRegion) {
       // Full canvas redraw
@@ -605,6 +679,34 @@ class CanvasManager {
       }
 
       this.clearDirtyRegion();
+    }
+  }
+  
+  // New method to render grid on overlay
+  renderGridOnOverlay() {
+    const ctx = this.overlayCtx;
+    const width = this.mainCanvas.width;
+    const height = this.mainCanvas.height;
+    
+    ctx.strokeStyle = "rgba(128, 128, 128, 0.5)";
+    ctx.lineWidth = 1;
+    
+    // Draw vertical lines
+    for (let x = 0; x <= this.currentSprite.width; x++) {
+      const px = x * this.zoomLevel;
+      ctx.beginPath();
+      ctx.moveTo(px, 0);
+      ctx.lineTo(px, height);
+      ctx.stroke();
+    }
+    
+    // Draw horizontal lines
+    for (let y = 0; y <= this.currentSprite.height; y++) {
+      const py = y * this.zoomLevel;
+      ctx.beginPath();
+      ctx.moveTo(0, py);
+      ctx.lineTo(width, py);
+      ctx.stroke();
     }
   }
 
@@ -2035,9 +2137,6 @@ showShapePreview(pixels, color, opacity = 100) {
   this.overlayCtx.fill();
 
   this.overlayCtx.restore();
-
-  // Re-render any selection handles that should be preserved
-  this._restoreSelectionHandles();
 }
 
 /**
@@ -2114,7 +2213,6 @@ showShapePreviewWithStroke(pixels, color, opacity = 100, strokeWidth = 1) {
   });
 
   this.overlayCtx.restore();
-  this._restoreSelectionHandles();
 }
 
 /**

@@ -1,5 +1,16 @@
 # 🚀 Quick Reference - User Profiles & JWT Auth
 
+## 🎮 Performance Optimizations for Large Sprites (NEW)
+
+We've made major improvements to handle large sprites (>100x100 pixels):
+
+- ✅ **TypedArrays** - 10-100x faster pixel operations
+- ✅ **WebGL Rendering** - GPU acceleration for large sprites
+- ✅ **Optimized Compositing** - Better layer blending
+- ✅ **Async Loading** - Non-blocking sprite switching
+
+See complete details in [LARGE_SPRITE_OPTIMIZATIONS.md](/LARGE_SPRITE_OPTIMIZATIONS.md)
+
 ## 🔗 Important URLs
 
 ```

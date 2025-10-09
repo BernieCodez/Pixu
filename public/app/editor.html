@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="/app/styles/base.css" />
     <link rel="stylesheet" href="/app/styles/canvas-components.css" />
     <link rel="stylesheet" href="/app/styles/ui-components.css" />
+    <link rel="stylesheet" href="/app/styles/performance.css" />
 
     <!-- base.css - Core styling, reset, layout, buttons, and basic UI elements -->
     <!-- canvas-components.css - Canvas-specific components, sidebars, toolbars, and drawing area -->
@@ -22,9 +23,45 @@
     <script src="https://cdn.jsdelivr.net/npm/jsgif@1.0.1/GIFEncoder.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="/app/js/settingsMenu.js"></script>
+    <style>
+      /* Add styles for sprite switching transitions */
+      body.switching-sprite .editor-main {
+        opacity: 0.5;
+        pointer-events: none;
+      }
+      body.switching-sprite .loading-indicator {
+        display: flex;
+      }
+      .loading-indicator {
+        display: none;
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 1000;
+        background: rgba(0, 0, 0, 0.7);
+        color: white;
+        padding: 15px 20px;
+        border-radius: 8px;
+        align-items: center;
+        justify-content: center;
+      }
+      .loading-indicator i {
+        margin-right: 10px;
+        animation: spin 1s infinite linear;
+      }
+      @keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
+    </style>
   </head>
 
   <body>
+    <div class="loading-indicator">
+      <i class="fas fa-spinner"></i>
+      <span>Loading sprite...</span>
+    </div>
     <div class="app-container">
       <!-- Header -->
       <header class="header">
@@ -865,6 +902,7 @@ pixel art medieval castle, 16-bit retro game style</textarea
     <script src="/app/js/hybridStorage.js"></script>
     <script src="/app/js/storage.js"></script>
     <script src="/app/js/storageTest.js"></script>
+    <script src="/app/js/lib/webglRenderer.js"></script>
     <script src="/app/js/sprite.js"></script>
     <script src="/app/js/canvas.js"></script>
     <script src="/app/js/layerManager.js"></script>
@@ -882,6 +920,7 @@ pixel art medieval castle, 16-bit retro game style</textarea
     <script src="/app/js/editor.js"></script>
     <script src="/app/js/aiGenerator.js"></script>
     <script src="/app/js/animation.js"></script>
+    <script src="/app/js/performanceTest.js"></script>
     
     <!-- Ensure hybridStorage is ready before initializing editor -->
     <script>

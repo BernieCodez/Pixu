@@ -66,54 +66,83 @@ if (this.frames && this.frames.length > 0 && this.frames[0].layers && this.frame
   // Helper to initialize a layer from raw data or object
   _initLayer(layer, idx) {
     if (layer && typeof layer === "object" && layer.pixels) {
-      // Layer object
-      const useTypedArray =
-        layer.useTypedArray || this.width * this.height > 50000;
+      // Layer object - always use TypedArray for better performance
       let pixels;
-      if (useTypedArray && layer.pixels instanceof Uint8Array) {
+      
+      if (layer.pixels instanceof Uint8Array) {
+        // Already a TypedArray, just clone it
         pixels = new Uint8Array(layer.pixels);
-      } else if (useTypedArray && Array.isArray(layer.pixels)) {
-        pixels = new Uint8Array(layer.pixels);
+      } else if (Array.isArray(layer.pixels)) {
+        // Convert 2D or flattened array to TypedArray
+        if (Array.isArray(layer.pixels[0])) {
+          // 2D array - convert to TypedArray
+          pixels = new Uint8Array(this.width * this.height * 4);
+          for (let y = 0; y < this.height; y++) {
+            for (let x = 0; x < this.width; x++) {
+              const index = (y * this.width + x) * 4;
+              const pixel = layer.pixels[y]?.[x] || [0, 0, 0, 0];
+              pixels[index] = pixel[0] || 0;     // R
+              pixels[index + 1] = pixel[1] || 0; // G
+              pixels[index + 2] = pixel[2] || 0; // B
+              pixels[index + 3] = pixel[3] || 0; // A
+            }
+          }
+        } else {
+          // Flat array - convert to TypedArray
+          pixels = new Uint8Array(layer.pixels);
+        }
       } else {
-        pixels = Array.isArray(layer.pixels)
-          ? layer.pixels.map((row) => row.map((pixel) => [...pixel]))
-          : this.createEmptyPixelArray();
+        // Create empty TypedArray
+        pixels = new Uint8Array(this.width * this.height * 4);
       }
+      
       return {
         name: layer.name || `Layer ${idx + 1}`,
         visible: layer.visible !== false,
         opacity: typeof layer.opacity === "number" ? layer.opacity : 1,
         pixels,
-        useTypedArray,
+        useTypedArray: true, // Always use TypedArray
       };
     } else {
-      // Raw pixel array
+      // Raw pixel array or empty layer
+      let pixels = new Uint8Array(this.width * this.height * 4);
+      
+      if (Array.isArray(layer)) {
+        // Convert raw array to TypedArray
+        for (let y = 0; y < this.height; y++) {
+          for (let x = 0; x < this.width; x++) {
+            const index = (y * this.width + x) * 4;
+            const pixel = layer[y]?.[x] || [0, 0, 0, 0];
+            pixels[index] = pixel[0] || 0;     // R
+            pixels[index + 1] = pixel[1] || 0; // G
+            pixels[index + 2] = pixel[2] || 0; // B
+            pixels[index + 3] = pixel[3] || 0; // A
+          }
+        }
+      }
+      
       return {
         name: `Layer ${idx + 1}`,
         visible: true,
         opacity: 1,
-        pixels: Array.isArray(layer)
-          ? layer.map((row) => row.map((pixel) => [...pixel]))
-          : this.createEmptyPixelArray(),
-        useTypedArray: false,
+        pixels,
+        useTypedArray: true, // Always use TypedArray
       };
     }
   }
 
   _createDefaultLayer() {
-    const useTypedArray = this.width * this.height > 50000;
-    let pixels;
-    if (useTypedArray) {
-      pixels = new Uint8Array(this.width * this.height * 4);
-    } else {
-      pixels = this.createEmptyPixelArray();
-    }
+    // Always use TypedArray for better performance regardless of size
+    const pixels = new Uint8Array(this.width * this.height * 4);
+    // Fill with transparent pixels (RGBA: 0,0,0,0)
+    pixels.fill(0);
+    
     return {
       name: "Layer 1",
       visible: true,
       opacity: 1,
       pixels,
-      useTypedArray,
+      useTypedArray: true,
     };
   }
 
@@ -127,11 +156,14 @@ if (this.frames && this.frames.length > 0 && this.frames[0].layers && this.frame
       layersData = this.layers.map((layer, idx) => {
         // CRITICAL FIX: Validate layer pixel data before processing
         let pixels;
-        if (!layer.pixels || !Array.isArray(layer.pixels)) {
-          console.warn(`Layer ${idx} has invalid pixel data, creating empty array`);
+        
+        // Check for TypedArray first
+        if (layer.useTypedArray && layer.pixels instanceof Uint8Array) {
+          // Keep as TypedArray - no need to convert
+          pixels = layer.pixels;
+        } else if (!layer.pixels) {
+          console.warn(`Layer ${idx} has no pixel data, creating empty array`);
           pixels = this.createEmptyPixelArray();
-        } else if (layer.useTypedArray && layer.pixels instanceof Uint8Array) {
-          pixels = this.convertTypedArrayTo2D(layer.pixels);
         } else if (Array.isArray(layer.pixels)) {
           // CRITICAL FIX: Deep validation of 2D pixel array
           try {
@@ -164,7 +196,7 @@ if (this.frames && this.frames.length > 0 && this.frames[0].layers && this.frame
           pixels: pixels,
           locked: layer.locked || false,
           blendMode: layer.blendMode || "normal",
-          useTypedArray: !!layer.useTypedArray,
+          useTypedArray: pixels instanceof Uint8Array || !!layer.useTypedArray,
         };
       });
     } else {
@@ -208,18 +240,43 @@ if (this.frames && this.frames.length > 0 && this.frames[0].layers && this.frame
   }
 
   createEmptyPixelArray() {
-    if (this.width * this.height > 50000) {
-      return new Uint8Array(this.width * this.height * 4);
-    }
-
-    const pixels = [];
-    for (let y = 0; y < this.height; y++) {
-      pixels[y] = [];
-      for (let x = 0; x < this.width; x++) {
-        pixels[y][x] = [0, 0, 0, 0];
-      }
-    }
+    // Always use TypedArray for better performance
+    const pixels = new Uint8Array(this.width * this.height * 4);
+    // All values default to 0, so no need to initialize
     return pixels;
+  }
+  
+  // Helper to convert index to x,y coordinates
+  _indexToCoords(index) {
+    const pixelIndex = Math.floor(index / 4);
+    const x = pixelIndex % this.width;
+    const y = Math.floor(pixelIndex / this.width);
+    return [x, y];
+  }
+  
+  // Helper to convert x,y coordinates to TypedArray index
+  _coordsToIndex(x, y) {
+    return (y * this.width + x) * 4;
+  }
+  
+  // Helper to get a pixel from TypedArray
+  getPixel(pixels, x, y) {
+    const index = (y * this.width + x) * 4;
+    return [
+      pixels[index],
+      pixels[index + 1], 
+      pixels[index + 2], 
+      pixels[index + 3]
+    ];
+  }
+  
+  // Helper to set a pixel in TypedArray
+  setPixel(pixels, x, y, color) {
+    const index = (y * this.width + x) * 4;
+    pixels[index] = color[0] || 0;
+    pixels[index + 1] = color[1] || 0; 
+    pixels[index + 2] = color[2] || 0;
+    pixels[index + 3] = color[3] || 0;
   }
 
   // Get pixel at specific coordinates

@@ -546,9 +546,17 @@ class SelectTool {
   _isLayerEmpty(layer) {
     if (!layer || !layer.pixels) return true;
 
-    for (let y = 0; y < layer.pixels.length; y++) {
-      for (let x = 0; x < layer.pixels[y].length; x++) {
-        if (layer.pixels[y][x][3] > 0) {
+    const layerManager = this.editor.layerManager;
+    const layerIndex = layerManager.layers.indexOf(layer);
+    if (layerIndex === -1) return true;
+
+    const width = layerManager.width;
+    const height = layerManager.height;
+
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const pixel = layerManager.getPixel(x, y, layerIndex);
+        if (pixel && pixel[3] > 0) {
           return false;
         }
       }
@@ -598,15 +606,15 @@ class SelectTool {
       // Merge pixels from selection layer to target layer
       for (let y = 0; y < layerManager.height; y++) {
         for (let x = 0; x < layerManager.width; x++) {
-          const selectionPixel = selectionLayer.pixels[y][x];
+          const selectionPixel = layerManager.getPixel(x, y, selectionLayerIndex);
 
           // Only merge non-transparent pixels
           if (selectionPixel[3] > 0) {
-            const targetPixel = targetLayer.pixels[y][x];
+            const targetPixel = layerManager.getPixel(x, y, targetIndex);
 
             // If selection pixel is fully opaque, just copy it
             if (selectionPixel[3] === 255) {
-              targetLayer.pixels[y][x] = [...selectionPixel];
+              layerManager.setPixel(x, y, selectionPixel, targetIndex);
             } else {
               // Alpha blend the pixels
               const srcAlpha = selectionPixel[3] / 255;
@@ -614,7 +622,7 @@ class SelectTool {
               const outAlpha = srcAlpha + dstAlpha * (1 - srcAlpha);
 
               if (outAlpha > 0) {
-                targetLayer.pixels[y][x] = [
+                const blendedPixel = [
                   Math.round(
                     (selectionPixel[0] * srcAlpha +
                       targetPixel[0] * dstAlpha * (1 - srcAlpha)) /
@@ -632,6 +640,7 @@ class SelectTool {
                   ),
                   Math.round(outAlpha * 255),
                 ];
+                layerManager.setPixel(x, y, blendedPixel, targetIndex);
               }
             }
           }
@@ -690,18 +699,12 @@ class SelectTool {
         const row = [];
         clipboard.pixels[y] = row;
         
-        if (targetLayer.pixels[srcY]) {
-          for (let x = 0; x < width; x++) {
-            const srcX = bounds.left + x;
-            const pixel = targetLayer.pixels[srcY][srcX];
-            // Use slice() for better performance than spread operator
-            row[x] = pixel ? pixel.slice() : transparentPixel.slice();
-          }
-        } else {
-          // Fill with transparent pixels if row doesn't exist
-          for (let x = 0; x < width; x++) {
-            row[x] = transparentPixel.slice();
-          }
+        for (let x = 0; x < width; x++) {
+          const srcX = bounds.left + x;
+          // Use layerManager.getPixel for TypedArray compatibility
+          const pixel = layerManager.getPixel(srcX, srcY, targetIndex);
+          // Use slice() for better performance than spread operator
+          row[x] = pixel ? pixel.slice() : transparentPixel.slice();
         }
       }
     } else {
@@ -711,12 +714,8 @@ class SelectTool {
         for (let x = 0; x < width; x++) {
           const srcX = bounds.left + x;
           const srcY = bounds.top + y;
-          // Use pixel from specified layer
-          if (targetLayer.pixels[srcY] && targetLayer.pixels[srcY][srcX]) {
-            clipboard.pixels[y][x] = [...targetLayer.pixels[srcY][srcX]];
-          } else {
-            clipboard.pixels[y][x] = [0, 0, 0, 0];
-          }
+          // Use layerManager.getPixel for TypedArray compatibility
+          clipboard.pixels[y][x] = layerManager.getPixel(srcX, srcY, targetIndex);
         }
       }
     }
@@ -748,28 +747,10 @@ class SelectTool {
     const startX = Math.max(0, bounds.left);
     const endX = Math.min(layerManager.width - 1, bounds.right);
 
-    // OPTIMIZATION: For large selections, use a more efficient approach
-    const selectionArea = (endY - startY + 1) * (endX - startX + 1);
-    
-    if (selectionArea > 1000) {
-      // For large selections, batch the operations
-      for (let y = startY; y <= endY; y++) {
-        const row = targetLayer.pixels[y];
-        if (row) {
-          // Fill entire row segment at once
-          for (let x = startX; x <= endX; x++) {
-            row[x] = transparentColor.slice(); // Use slice() instead of spread for better performance
-          }
-        }
-      }
-    } else {
-      // For small selections, use the original method
-      for (let y = startY; y <= endY; y++) {
-        for (let x = startX; x <= endX; x++) {
-          if (targetLayer.pixels[y] && targetLayer.pixels[y][x]) {
-            targetLayer.pixels[y][x] = [...transparentColor];
-          }
-        }
+    // Fill selection area with transparent pixels
+    for (let y = startY; y <= endY; y++) {
+      for (let x = startX; x <= endX; x++) {
+        layerManager.setPixel(x, y, transparentColor, targetIndex);
       }
     }
 

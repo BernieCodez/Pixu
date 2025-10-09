@@ -1,0 +1,46 @@
+/* Spinner for large sprite loading */
+@keyframes spinner {
+  to {transform: rotate(360deg);}
+}
+
+.switching-sprite .editor-main {
+  opacity: 0.5;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+.loading-indicator {
+  display: none;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  padding: 15px 20px;
+  border-radius: 8px;
+  align-items: center;
+  justify-content: center;
+}
+
+.loading-indicator i {
+  margin-right: 10px;
+  animation: spinner 1s linear infinite;
+}
+
+body.switching-sprite .loading-indicator {
+  display: flex;
+}
+
+/* Performance optimizations */
+.canvas-container {
+  will-change: transform;
+  transform: translateZ(0);
+}
+
+canvas {
+  image-rendering: pixelated;
+  image-rendering: -moz-crisp-edges;
+  image-rendering: crisp-edges;
+}

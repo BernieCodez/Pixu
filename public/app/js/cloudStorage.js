@@ -362,10 +362,10 @@ class CloudStorageManager {
         const dataURL = await this.layerToDataURL(layer, frame.width, frame.height);
         
         layers.push({
-          id: layer.id,
-          name: layer.name,
-          visible: layer.visible,
-          opacity: layer.opacity,
+          id: layer.id || Date.now() + Math.random(),
+          name: layer.name || 'Layer',
+          visible: layer.visible !== false,
+          opacity: typeof layer.opacity === 'number' ? layer.opacity : 1,
           locked: layer.locked || false,
           blendMode: layer.blendMode || 'normal',
           dataURL // Much more efficient than pixel arrays
@@ -379,24 +379,24 @@ class CloudStorageManager {
       }
       
       frames.push({
-        id: frame.id,
-        name: frame.name,
-        width: frame.width,
-        height: frame.height,
-        activeLayerIndex: frame.activeLayerIndex,
+        id: frame.id || Date.now() + Math.random(),
+        name: frame.name || 'Frame',
+        width: frame.width || sprite.width,
+        height: frame.height || sprite.height,
+        activeLayerIndex: frame.activeLayerIndex || 0,
         layers
       });
     }
     
     return {
-      id: sprite.id,
-      name: sprite.name,
-      width: sprite.width,
-      height: sprite.height,
+      id: sprite.id || Date.now() + Math.random(),
+      name: sprite.name || 'Untitled',
+      width: sprite.width || 16,
+      height: sprite.height || 16,
       frames,
-      isAnimated: sprite.frames.length > 1,
-      createdAt: sprite.createdAt,
-      modifiedAt: sprite.modifiedAt
+      isAnimated: sprite.frames && sprite.frames.length > 1,
+      createdAt: sprite.createdAt || new Date().toISOString(),
+      modifiedAt: sprite.modifiedAt || new Date().toISOString()
     };
   }
 

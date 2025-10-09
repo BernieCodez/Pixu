@@ -53,30 +53,9 @@ class AnimationManager {
       return;
     }
 
-    // CRITICAL FIX: Validate frame structure before loading
-    if (
-      !frame.layers ||
-      !Array.isArray(frame.layers) ||
-      frame.layers.length === 0
-    ) {
+    // OPTIMIZATION: Quick validation - trust stored data
+    if (!frame.layers || !Array.isArray(frame.layers) || frame.layers.length === 0) {
       console.error("Frame has no valid layers, cannot load");
-      return;
-    }
-
-    // CRITICAL FIX: Validate each layer has pixel data
-    const validLayers = frame.layers.filter((layer) => {
-      return (
-        layer &&
-        layer.pixels &&
-        Array.isArray(layer.pixels) &&
-        layer.pixels.length > 0 &&
-        layer.pixels[0] &&
-        Array.isArray(layer.pixels[0])
-      );
-    });
-
-    if (validLayers.length === 0) {
-      console.error("Frame has no layers with valid pixel data");
       return;
     }
 
@@ -84,7 +63,7 @@ class AnimationManager {
     this.editor._loadingFrame = true;
 
     try {
-      // Resize layer manager if needed
+      // OPTIMIZATION: Only resize if dimensions actually changed
       if (
         this.editor.layerManager.width !== frame.width ||
         this.editor.layerManager.height !== frame.height
@@ -92,23 +71,50 @@ class AnimationManager {
         this.editor.layerManager.resize(frame.width, frame.height);
       }
 
-      // Load layers with validation
-      this.editor.layerManager.layers = validLayers.map(
-        (frameLayer, index) => ({
+      // OPTIMIZATION: Reference pixels directly instead of deep copy
+      // Deep copying is VERY slow for large sprites (512x512 = 262,144 pixels)
+      // Instead, we reference the frame's pixel data directly
+      // The frame owns the data, layer manager just views it
+      this.editor.layerManager.layers = frame.layers.map((frameLayer, index) => {
+        // Handle both TypedArrays and nested arrays
+        let pixels = frameLayer.pixels;
+        let useTypedArray = frameLayer.useTypedArray || false;
+        
+        // Convert legacy 2D arrays to TypedArrays for better performance
+        if (!useTypedArray && Array.isArray(pixels) && Array.isArray(pixels[0])) {
+          const width = frame.width || this.editor.layerManager.width;
+          const height = frame.height || this.editor.layerManager.height;
+          const typedPixels = new Uint8Array(width * height * 4);
+          
+          for (let y = 0; y < height && y < pixels.length; y++) {
+            for (let x = 0; x < width && pixels[y] && x < pixels[y].length; x++) {
+              const index = (y * width + x) * 4;
+              const pixel = pixels[y][x] || [0, 0, 0, 0];
+              typedPixels[index] = pixel[0] || 0;
+              typedPixels[index + 1] = pixel[1] || 0;
+              typedPixels[index + 2] = pixel[2] || 0;
+              typedPixels[index + 3] = pixel[3] || 0;
+            }
+          }
+          
+          pixels = typedPixels;
+          useTypedArray = true;
+          // Update the frame layer too so we don't convert again
+          frameLayer.pixels = typedPixels;
+          frameLayer.useTypedArray = true;
+        }
+        
+        return {
           id: frameLayer.id || Date.now() + Math.random() + index,
           name: frameLayer.name || `Layer ${index + 1}`,
           visible: frameLayer.visible !== false,
-          opacity:
-            typeof frameLayer.opacity === "number" ? frameLayer.opacity : 1,
-          pixels: this.validateAndDeepCopyPixels(
-            frameLayer.pixels,
-            frame.width,
-            frame.height
-          ),
+          opacity: typeof frameLayer.opacity === "number" ? frameLayer.opacity : 1,
+          pixels: pixels, // OPTIMIZATION: Direct reference, no copy
           locked: frameLayer.locked || false,
           blendMode: frameLayer.blendMode || "normal",
-        })
-      );
+          useTypedArray: useTypedArray
+        };
+      });
 
       // Set active layer
       this.editor.layerManager.activeLayerIndex = Math.min(
@@ -120,16 +126,8 @@ class AnimationManager {
       this.editor.layerManager.compositeDirty = true;
       this.editor.layerManager.compositeCache = null;
 
-      // Notify change without saving
-      this.editor.layerManager._preventSaveLoop = true;
-      if (this.editor.layerManager.onChange) {
-        this.editor.layerManager.onChange(this.editor.layerManager);
-      }
-      this.editor.layerManager._preventSaveLoop = false;
-
-      console.log(
-        `Loaded frame with ${this.editor.layerManager.layers.length} layers`
-      );
+      // OPTIMIZATION: Skip change notification - not needed during frame load
+      // The render will happen from setCurrentSprite anyway
     } catch (error) {
       console.error("Error loading frame into layer manager:", error);
     } finally {
@@ -203,47 +201,71 @@ class AnimationManager {
       currentFrame.height = this.editor.layerManager.height;
       currentFrame.activeLayerIndex = this.editor.layerManager.activeLayerIndex;
 
-      // Deep copy layers with validation
+      // Deep copy layers with validation - handle TypedArrays
       currentFrame.layers = this.editor.layerManager.layers.map(
         (layer, index) => {
-          if (
-            !layer.pixels ||
-            !Array.isArray(layer.pixels) ||
-            layer.pixels.length === 0
-          ) {
+          // Check for valid pixels
+          if (!layer.pixels || (Array.isArray(layer.pixels) && layer.pixels.length === 0)) {
             console.warn(`Layer ${index} has no valid pixels during save`);
             return {
               id: layer.id || Date.now() + Math.random(),
               name: layer.name || `Layer ${index + 1}`,
               visible: layer.visible !== false,
               opacity: layer.opacity || 1,
-              pixels: this.createEmptyPixelArray(
-                this.editor.layerManager.width,
-                this.editor.layerManager.height
-              ),
+              pixels: new Uint8Array(this.editor.layerManager.width * this.editor.layerManager.height * 4),
               locked: layer.locked || false,
               blendMode: layer.blendMode || "normal",
+              useTypedArray: true
             };
           }
 
+          // Handle both TypedArrays and nested arrays
+          let pixelsCopy;
+          
+          if (layer.useTypedArray && layer.pixels instanceof Uint8Array) {
+            // For TypedArrays, create a clone
+            pixelsCopy = new Uint8Array(layer.pixels);
+          } else if (Array.isArray(layer.pixels)) {
+            // For 2D arrays, deep copy
+            if (Array.isArray(layer.pixels[0])) {
+              // Convert 2D to TypedArray for better performance
+              const width = this.editor.layerManager.width;
+              const height = this.editor.layerManager.height;
+              pixelsCopy = new Uint8Array(width * height * 4);
+              
+              for (let y = 0; y < height && y < layer.pixels.length; y++) {
+                const row = layer.pixels[y];
+                if (Array.isArray(row)) {
+                  for (let x = 0; x < width && x < row.length; x++) {
+                    const pixel = row[x];
+                    if (Array.isArray(pixel) && pixel.length === 4) {
+                      const index = (y * width + x) * 4;
+                      pixelsCopy[index] = pixel[0] || 0;
+                      pixelsCopy[index + 1] = pixel[1] || 0;
+                      pixelsCopy[index + 2] = pixel[2] || 0;
+                      pixelsCopy[index + 3] = pixel[3] || 0;
+                    }
+                  }
+                }
+              }
+            } else {
+              // Already a flattened array
+              pixelsCopy = new Uint8Array(layer.pixels);
+            }
+          } else {
+            // Fallback
+            pixelsCopy = new Uint8Array(this.editor.layerManager.width * this.editor.layerManager.height * 4);
+          }
+          
           return {
             id: layer.id || Date.now() + Math.random(),
             name: layer.name || `Layer ${index + 1}`,
             visible: layer.visible !== false,
             opacity: layer.opacity || 1,
-            pixels: layer.pixels.map((row) =>
-              Array.isArray(row)
-                ? row.map((pixel) =>
-                    Array.isArray(pixel) && pixel.length === 4
-                      ? [...pixel]
-                      : [0, 0, 0, 0]
-                  )
-                : new Array(this.editor.layerManager.width)
-                    .fill()
-                    .map(() => [0, 0, 0, 0])
-            ),
+            pixels: pixelsCopy,
             locked: layer.locked || false,
             blendMode: layer.blendMode || "normal",
+            useTypedArray: true
           };
         }
       );
@@ -301,15 +323,38 @@ class AnimationManager {
     if (!sprite || !frame || !this.editor.layerManager) return;
 
     // Update the current frame with layer manager data
-    frame.layers = this.editor.layerManager.layers.map((layer) => ({
-      id: layer.id,
-      name: layer.name,
-      visible: layer.visible,
-      opacity: layer.opacity,
-      pixels: layer.pixels.map((row) => row.map((pixel) => [...pixel])),
-      locked: layer.locked,
-      blendMode: layer.blendMode,
-    }));
+    frame.layers = this.editor.layerManager.layers.map((layer) => {
+      // Handle both TypedArrays and nested arrays
+      let pixelsCopy;
+      
+      if (layer.useTypedArray && layer.pixels instanceof Uint8Array) {
+        // For TypedArrays, create a clone
+        pixelsCopy = new Uint8Array(layer.pixels);
+      } else if (Array.isArray(layer.pixels)) {
+        // For 2D arrays, deep copy
+        pixelsCopy = layer.pixels.map((row) => 
+          Array.isArray(row) ? row.map((pixel) => 
+            Array.isArray(pixel) ? [...pixel] : [0, 0, 0, 0]
+          ) : []
+        );
+      } else {
+        // Fallback - create empty TypedArray
+        const width = this.editor.layerManager.width;
+        const height = this.editor.layerManager.height;
+        pixelsCopy = new Uint8Array(width * height * 4);
+      }
+      
+      return {
+        id: layer.id,
+        name: layer.name,
+        visible: layer.visible,
+        opacity: layer.opacity,
+        pixels: pixelsCopy,
+        locked: layer.locked,
+        blendMode: layer.blendMode,
+        useTypedArray: layer.useTypedArray || false
+      };
+    });
 
     frame.activeLayerIndex = this.editor.layerManager.activeLayerIndex;
 
@@ -430,15 +475,36 @@ class AnimationManager {
       width: currentFrame.width,
       height: currentFrame.height,
       activeLayerIndex: currentFrame.activeLayerIndex,
-      layers: currentFrame.layers.map((layer) => ({
-        id: Date.now() + Math.random(),
-        name: layer.name,
-        visible: layer.visible,
-        opacity: layer.opacity,
-        pixels: layer.pixels.map((row) => row.map((pixel) => [...pixel])),
-        locked: layer.locked,
-        blendMode: layer.blendMode,
-      })),
+      layers: currentFrame.layers.map((layer) => {
+        // Handle both TypedArrays and nested arrays
+        let pixelsCopy;
+        
+        if (layer.useTypedArray && layer.pixels instanceof Uint8Array) {
+          // For TypedArrays, create a clone
+          pixelsCopy = new Uint8Array(layer.pixels);
+        } else if (Array.isArray(layer.pixels)) {
+          // For 2D arrays, deep copy
+          pixelsCopy = layer.pixels.map((row) => 
+            Array.isArray(row) ? row.map((pixel) => 
+              Array.isArray(pixel) ? [...pixel] : [0, 0, 0, 0]
+            ) : []
+          );
+        } else {
+          // Fallback
+          pixelsCopy = new Uint8Array(currentFrame.width * currentFrame.height * 4);
+        }
+        
+        return {
+          id: Date.now() + Math.random(),
+          name: layer.name,
+          visible: layer.visible,
+          opacity: layer.opacity,
+          pixels: pixelsCopy,
+          locked: layer.locked,
+          blendMode: layer.blendMode,
+          useTypedArray: layer.useTypedArray || false
+        };
+      }),
     };
 
     // Insert after current frame
